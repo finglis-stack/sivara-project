@@ -1,4 +1,6 @@
+// @ts-ignore: Deno types
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+// @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
@@ -6,13 +8,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// @ts-ignore: Deno types
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    // @ts-ignore: Deno types
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    // @ts-ignore: Deno types
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -20,7 +25,6 @@ serve(async (req) => {
 
     console.log(`Processing queue with batch size: ${batchSize}`)
 
-    // Récupérer les URLs en attente
     const { data: queueItems, error: queueError } = await supabase
       .from('crawl_queue')
       .select('*')
@@ -42,7 +46,6 @@ serve(async (req) => {
 
     for (const item of queueItems) {
       try {
-        // Marquer comme en cours de traitement
         await supabase
           .from('crawl_queue')
           .update({ 
@@ -52,7 +55,6 @@ serve(async (req) => {
           })
           .eq('id', item.id)
 
-        // Appeler la fonction de crawl
         const crawlResponse = await fetch(`${supabaseUrl}/functions/v1/crawl-page`, {
           method: 'POST',
           headers: {
@@ -63,7 +65,6 @@ serve(async (req) => {
         })
 
         if (crawlResponse.ok) {
-          // Supprimer de la queue si succès
           await supabase
             .from('crawl_queue')
             .delete()
@@ -77,7 +78,6 @@ serve(async (req) => {
       } catch (error) {
         console.error(`Error processing ${item.url}:`, error)
         
-        // Marquer comme échoué si trop de tentatives
         if (item.attempts >= 3) {
           await supabase
             .from('crawl_queue')
@@ -87,7 +87,6 @@ serve(async (req) => {
             })
             .eq('id', item.id)
         } else {
-          // Remettre en attente pour réessayer
           await supabase
             .from('crawl_queue')
             .update({ status: 'pending' })
@@ -97,7 +96,6 @@ serve(async (req) => {
         results.push({ url: item.url, status: 'error', error: error.message })
       }
 
-      // Petit délai entre chaque crawl pour être respectueux
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
 

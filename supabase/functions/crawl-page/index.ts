@@ -1,4 +1,6 @@
+// @ts-ignore: Deno types
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+// @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
@@ -6,13 +8,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// @ts-ignore: Deno types
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    // @ts-ignore: Deno types
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    // @ts-ignore: Deno types
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -27,7 +32,6 @@ serve(async (req) => {
 
     console.log(`Starting crawl for: ${url}`)
 
-    // Récupérer le contenu de la page
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'DyadSearchBot/1.0 (Educational Project)',
@@ -40,27 +44,23 @@ serve(async (req) => {
 
     const html = await response.text()
     
-    // Parser le HTML pour extraire les informations
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
     const title = titleMatch ? titleMatch[1].trim() : 'Sans titre'
 
     const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
     const description = descMatch ? descMatch[1].trim() : ''
 
-    // Extraire le contenu textuel (enlever les balises HTML)
     let content = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 5000) // Limiter à 5000 caractères
+      .substring(0, 5000)
 
-    // Extraire le domaine
     const urlObj = new URL(url)
     const domain = urlObj.hostname
 
-    // Sauvegarder dans la base de données
     const { data, error } = await supabase
       .from('crawled_pages')
       .upsert({
@@ -81,7 +81,6 @@ serve(async (req) => {
       throw error
     }
 
-    // Extraire les liens pour un crawling futur (si maxDepth > 0)
     if (maxDepth > 0) {
       const linkRegex = /<a[^>]*href=["']([^"']+)["']/gi
       const links: string[] = []
@@ -90,7 +89,6 @@ serve(async (req) => {
       while ((match = linkRegex.exec(html)) !== null) {
         try {
           const linkUrl = new URL(match[1], url)
-          // Ne garder que les liens du même domaine
           if (linkUrl.hostname === domain && linkUrl.protocol.startsWith('http')) {
             links.push(linkUrl.href)
           }
@@ -99,7 +97,6 @@ serve(async (req) => {
         }
       }
 
-      // Ajouter les liens à la queue (limiter à 10 pour éviter la surcharge)
       const uniqueLinks = [...new Set(links)].slice(0, 10)
       
       for (const link of uniqueLinks) {
@@ -118,7 +115,6 @@ serve(async (req) => {
       console.log(`Added ${uniqueLinks.length} links to queue`)
     }
 
-    // Mettre à jour les statistiques
     const { data: stats } = await supabase
       .from('crawl_stats')
       .select('*')

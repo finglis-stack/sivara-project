@@ -78,6 +78,8 @@ const Index = () => {
       setIsSearching(true);
       setHasSearched(true);
 
+      console.log('Searching for:', query);
+
       const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search', {
         method: 'POST',
         headers: {
@@ -87,17 +89,29 @@ const Index = () => {
         body: JSON.stringify({ query, page: 1, limit: 50 }),
       });
 
+      const data = await response.json();
+      
+      console.log('Search response:', data);
+
       if (!response.ok) {
-        throw new Error('Erreur lors de la recherche');
+        console.error('Search error:', data);
+        showError(data.details || 'Erreur lors de la recherche');
+        setResults([]);
+        setTotalResults(0);
+        return;
       }
 
-      const data = await response.json();
       setResults(data.results || []);
       setTotalResults(data.total || 0);
+      
+      if (!data.results || data.results.length === 0) {
+        console.log('No results found');
+      }
     } catch (error) {
       console.error('Search error:', error);
-      showError('Erreur lors de la recherche');
+      showError('Erreur de connexion au serveur de recherche');
       setResults([]);
+      setTotalResults(0);
     } finally {
       setIsSearching(false);
     }
