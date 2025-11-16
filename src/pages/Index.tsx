@@ -15,6 +15,13 @@ interface SearchResultType {
   content: string;
   domain: string;
   crawled_at: string;
+  rank: number;
+}
+
+interface GroupedResult {
+  mainResult: SearchResultType;
+  relatedResults: SearchResultType[];
+  isMainDomain: boolean;
 }
 
 const Index = () => {
@@ -22,6 +29,49 @@ const Index = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
+
+  const groupResultsByDomain = (results: SearchResultType[]): GroupedResult[] => {
+    if (results.length === 0) return [];
+
+    const grouped: { [key: string]: SearchResultType[] } = {};
+    const mainDomain = results[0]?.domain;
+
+    // Grouper par domaine
+    results.forEach(result => {
+      const baseDomain = extractBaseDomain(result.domain);
+      if (!grouped[baseDomain]) {
+        grouped[baseDomain] = [];
+      }
+      grouped[baseDomain].push(result);
+    });
+
+    // Convertir en format GroupedResult
+    const groupedResults: GroupedResult[] = [];
+    
+    Object.entries(grouped).forEach(([domain, domainResults]) => {
+      const [mainResult, ...relatedResults] = domainResults;
+      groupedResults.push({
+        mainResult,
+        relatedResults,
+        isMainDomain: extractBaseDomain(mainDomain) === domain
+      });
+    });
+
+    // Trier : domaine principal en premier, puis par rank
+    return groupedResults.sort((a, b) => {
+      if (a.isMainDomain && !b.isMainDomain) return -1;
+      if (!a.isMainDomain && b.isMainDomain) return 1;
+      return b.mainResult.rank - a.mainResult.rank;
+    });
+  };
+
+  const extractBaseDomain = (domain: string): string => {
+    const parts = domain.split('.');
+    if (parts.length > 2) {
+      return parts.slice(-2).join('.');
+    }
+    return domain;
+  };
 
   const handleSearch = async (query: string) => {
     try {
@@ -34,7 +84,7 @@ const Index = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
         },
-        body: JSON.stringify({ query, page: 1, limit: 20 }),
+        body: JSON.stringify({ query, page: 1, limit: 50 }),
       });
 
       if (!response.ok) {
@@ -52,6 +102,8 @@ const Index = () => {
       setIsSearching(false);
     }
   };
+
+  const groupedResults = groupResultsByDomain(results);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
@@ -81,21 +133,23 @@ const Index = () => {
                     <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                     <p className="mt-4 text-gray-600">Recherche en cours...</p>
                   </div>
-                ) : results.length > 0 ? (
+                ) : groupedResults.length > 0 ? (
                   <>
                     <p className="text-sm text-gray-600 mb-4">
                       Environ {totalResults} résultat{totalResults > 1 ? 's' : ''}
                     </p>
-                    <div className="space-y-4">
-                      {results.map((result) => (
+                    <div className="space-y-6">
+                      {groupedResults.map((group, index) => (
                         <SearchResult
-                          key={result.id}
-                          url={result.url}
-                          title={result.title}
-                          description={result.description}
-                          content={result.content}
-                          domain={result.domain}
-                          crawledAt={result.crawled_at}
+                          key={group.mainResult.id}
+                          url={group.mainResult.url}
+                          title={group.mainResult.title}
+                          description={group.mainResult.description}
+                          content={group.mainResult.content}
+                          domain={group.mainResult.domain}
+                          crawledAt={group.mainResult.crawled_at}
+                          isMainDomain={group.isMainDomain}
+                          relatedResults={group.relatedResults}
                         />
                       ))}
                     </div>
