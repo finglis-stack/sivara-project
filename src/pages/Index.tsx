@@ -109,11 +109,15 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Dyad Search Engine
-          </h1>
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <img 
+              src="/logo.png" 
+              alt="Sivara Logo" 
+              className="h-16 w-auto"
+            />
+          </div>
           <p className="text-xl text-gray-600">
-            Moteur de recherche expérimental avec web scraping
+            Moteur de recherche intelligent avec web scraping
           </p>
         </div>
 
