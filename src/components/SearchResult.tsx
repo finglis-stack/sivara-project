@@ -45,7 +45,7 @@ const SearchResult = ({
 
   return (
     <div className="space-y-2">
-      <div className={`group hover:bg-purple-50/30 rounded-2xl p-6 transition-all duration-300 ${isMainDomain ? 'bg-pink-50/30' : ''}`}>
+      <div className={`group hover:bg-gray-50 rounded-2xl p-6 transition-all duration-300 ${isMainDomain ? 'bg-gray-50/50' : ''}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
@@ -62,7 +62,7 @@ const SearchResult = ({
                 {isMainDomain && (
                   <>
                     <span>•</span>
-                    <span className="text-purple-500 font-semibold">Résultat principal</span>
+                    <span className="text-gray-700 font-semibold">Résultat principal</span>
                   </>
                 )}
               </div>
@@ -73,7 +73,7 @@ const SearchResult = ({
                 href={url} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-2 group-hover:gap-3 transition-all duration-300"
+                className="text-gray-700 hover:text-gray-900 hover:underline flex items-center gap-2 group-hover:gap-3 transition-all duration-300"
               >
                 {title}
                 <ExternalLink size={18} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -101,7 +101,7 @@ const SearchResult = ({
             variant="ghost"
             size="sm"
             onClick={() => setShowRelated(!showRelated)}
-            className="text-purple-500 hover:text-purple-700 hover:bg-purple-50 rounded-full"
+            className="text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full"
           >
             {showRelated ? (
               <>
@@ -119,13 +119,13 @@ const SearchResult = ({
           {showRelated && (
             <div className="mt-3 space-y-2">
               {relatedResults.map((result) => (
-                <div key={result.id} className="hover:bg-purple-50/30 rounded-xl p-4 transition-all duration-300">
+                <div key={result.id} className="hover:bg-gray-50 rounded-xl p-4 transition-all duration-300">
                   <h3 className="text-lg mb-1">
                     <a 
                       href={result.url} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-2"
+                      className="text-gray-700 hover:text-gray-900 hover:underline flex items-center gap-2"
                     >
                       {result.title}
                       <ExternalLink size={14} className="flex-shrink-0" />

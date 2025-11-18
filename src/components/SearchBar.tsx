@@ -21,9 +21,9 @@ const SearchBar = ({ onSearch, isLoading = false }: SearchBarProps) => {
   return (
     <form onSubmit={handleSubmit} className="w-full">
       <div className="relative group">
-        <div className="absolute -inset-1 bg-gradient-to-r from-pink-200 via-purple-200 to-indigo-200 rounded-full blur opacity-30 group-hover:opacity-50 transition duration-300"></div>
-        <div className="relative flex items-center bg-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100">
-          <Search className="absolute left-6 text-gray-400 group-hover:text-purple-400 transition-colors duration-300" size={24} />
+        <div className="absolute -inset-1 bg-gray-200 rounded-full blur opacity-20 group-hover:opacity-30 transition duration-300"></div>
+        <div className="relative flex items-center bg-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-200">
+          <Search className="absolute left-6 text-gray-400 group-hover:text-gray-600 transition-colors duration-300" size={24} />
           <Input
             type="text"
             placeholder="Rechercher sur Sivara..."
@@ -36,7 +36,7 @@ const SearchBar = ({ onSearch, isLoading = false }: SearchBarProps) => {
             type="submit" 
             size="lg" 
             disabled={isLoading || !query.trim()}
-            className="mr-2 px-8 py-6 rounded-full bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 hover:from-pink-400 hover:via-purple-400 hover:to-indigo-400 transition-all duration-300 hover:scale-105 shadow-md text-white"
+            className="mr-2 px-8 py-6 rounded-full bg-gray-700 hover:bg-gray-800 transition-all duration-300 hover:scale-105 shadow-md text-white"
           >
             {isLoading ? (
               <div className="flex items-center gap-2">
