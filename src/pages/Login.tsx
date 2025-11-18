@@ -17,12 +17,25 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) {
       navigate('/');
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (blockedUntil) {
+      const interval = setInterval(() => {
+        if (Date.now() >= blockedUntil) {
+          setBlockedUntil(null);
+          setIsChecking(false);
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [blockedUntil]);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,28 +45,35 @@ const Login = () => {
       return;
     }
 
+    if (blockedUntil && Date.now() < blockedUntil) {
+      const remainingSeconds = Math.ceil((blockedUntil - Date.now()) / 1000);
+      showError(`Veuillez attendre ${remainingSeconds} seconde${remainingSeconds > 1 ? 's' : ''}`);
+      return;
+    }
+
     try {
       setIsChecking(true);
 
-      // Simuler une vérification (4 secondes)
-      await new Promise(resolve => setTimeout(resolve, 4000));
+      // Vérification instantanée en essayant de se connecter avec un mot de passe aléatoire
+      const testResult = await supabase.auth.signInWithPassword({
+        email: email,
+        password: crypto.randomUUID(),
+      });
 
-      // Vérifier si l'email existe dans la base de données
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .limit(1);
-
-      if (error) {
-        console.error('Error checking email:', error);
+      if (testResult.error) {
+        if (testResult.error.message.includes('Invalid login credentials')) {
+          // Email existe, passer à l'étape mot de passe
+          setStep('password');
+          setIsChecking(false);
+        } else {
+          // Email n'existe pas, bloquer pendant 4 secondes
+          showError('Aucun compte trouvé avec cet email');
+          setBlockedUntil(Date.now() + 4000);
+        }
       }
-
-      // Passer à l'étape du mot de passe
-      setStep('password');
     } catch (error: any) {
       console.error('Email check error:', error);
       showError('Erreur lors de la vérification');
-    } finally {
       setIsChecking(false);
     }
   };
@@ -80,7 +100,7 @@ const Login = () => {
       navigate('/');
     } catch (error: any) {
       console.error('Login error:', error);
-      showError(error.message || 'Email ou mot de passe incorrect');
+      showError(error.message || 'Mot de passe incorrect');
     } finally {
       setIsLoading(false);
     }
@@ -90,6 +110,13 @@ const Login = () => {
     setStep('email');
     setPassword('');
   };
+
+  const getRemainingTime = () => {
+    if (!blockedUntil) return 0;
+    return Math.ceil((blockedUntil - Date.now()) / 1000);
+  };
+
+  const isBlocked = blockedUntil && Date.now() < blockedUntil;
 
   return (
     <div className="min-h-screen relative flex items-center justify-center px-4">
@@ -136,20 +163,29 @@ const Login = () => {
                       className="h-12 pl-10 text-base"
                       required
                       autoFocus
-                      disabled={isChecking}
+                      disabled={isChecking || isBlocked}
                     />
                   </div>
+                  {isBlocked && (
+                    <p className="text-xs text-red-600 animate-pulse">
+                      Veuillez attendre {getRemainingTime()} seconde{getRemainingTime() > 1 ? 's' : ''} avant de réessayer
+                    </p>
+                  )}
                 </div>
 
                 <Button
                   type="submit"
                   className="w-full h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
-                  disabled={isChecking}
+                  disabled={isChecking || isBlocked}
                 >
                   {isChecking ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Vérification en cours...
+                      Vérification...
+                    </>
+                  ) : isBlocked ? (
+                    <>
+                      Bloqué ({getRemainingTime()}s)
                     </>
                   ) : (
                     <>
