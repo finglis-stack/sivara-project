@@ -11,7 +11,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import { showSuccess } from '@/utils/toast';
+import { showSuccess, showError } from '@/utils/toast';
 import { useEffect, useState } from 'react';
 
 interface Profile {
@@ -61,20 +61,30 @@ const UserMenu = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleSignOut = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  const handleSignOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      console.log('Attempting to sign out...');
       
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Sign out error:', error);
+        showError('Erreur lors de la déconnexion');
+        return;
+      }
+      
+      console.log('Sign out successful');
       showSuccess('Déconnexion réussie');
+      
+      // Forcer la mise à jour de l'état
       setUser(null);
       setProfile(null);
+      
+      // Rediriger vers la page d'accueil
       navigate('/');
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('Unexpected error during sign out:', error);
+      showError('Erreur inattendue lors de la déconnexion');
     }
   };
 
@@ -125,7 +135,14 @@ const UserMenu = () => {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+        <DropdownMenuItem 
+          onClick={handleSignOut} 
+          className="cursor-pointer"
+          onSelect={(e) => {
+            e.preventDefault();
+            handleSignOut();
+          }}
+        >
           <LogOut className="mr-2 h-4 w-4" />
           <span>Se déconnecter</span>
         </DropdownMenuItem>
