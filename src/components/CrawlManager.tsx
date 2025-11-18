@@ -20,6 +20,8 @@ const CrawlManager = () => {
     try {
       setIsAdding(true);
       
+      console.log('Crawling URL:', url);
+      
       const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/crawl-page', {
         method: 'POST',
         headers: {
@@ -29,16 +31,19 @@ const CrawlManager = () => {
         body: JSON.stringify({ url, maxDepth: 1 }),
       });
 
+      const data = await response.json();
+      
+      console.log('Crawl response:', response.status, data);
+
       if (!response.ok) {
-        throw new Error('Erreur lors du crawling');
+        throw new Error(data.error || `Erreur HTTP ${response.status}`);
       }
 
-      const data = await response.json();
-      showSuccess(`Page crawlée avec succès: ${data.title}`);
+      showSuccess('Page crawlée et cryptée avec succès ! 🔒');
       setUrl('');
     } catch (error) {
       console.error('Error adding URL:', error);
-      showError('Erreur lors de l\'ajout de l\'URL');
+      showError(`Erreur: ${error.message}`);
     } finally {
       setIsAdding(false);
     }
@@ -47,6 +52,8 @@ const CrawlManager = () => {
   const handleProcessQueue = async () => {
     try {
       setIsProcessing(true);
+      
+      console.log('Processing queue...');
       
       const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/process-queue', {
         method: 'POST',
@@ -57,15 +64,18 @@ const CrawlManager = () => {
         body: JSON.stringify({ batchSize: 5 }),
       });
 
+      const data = await response.json();
+      
+      console.log('Queue response:', response.status, data);
+
       if (!response.ok) {
-        throw new Error('Erreur lors du traitement de la queue');
+        throw new Error(data.error || `Erreur HTTP ${response.status}`);
       }
 
-      const data = await response.json();
-      showSuccess(`${data.processed} pages traitées`);
+      showSuccess(`${data.processed} pages traitées avec cryptage militaire 🔒`);
     } catch (error) {
       console.error('Error processing queue:', error);
-      showError('Erreur lors du traitement de la queue');
+      showError(`Erreur: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -74,9 +84,9 @@ const CrawlManager = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Gestion du Crawling</CardTitle>
+        <CardTitle>Gestion du Crawling Sécurisé</CardTitle>
         <CardDescription>
-          Ajoutez des URLs à crawler et gérez la file d'attente
+          Ajoutez des URLs à crawler - Toutes les données sont cryptées avec AES-256-GCM 🔒
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -90,6 +100,11 @@ const CrawlManager = () => {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={isAdding}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isAdding && url.trim()) {
+                  handleAddUrl();
+                }
+              }}
             />
             <Button 
               onClick={handleAddUrl} 
@@ -99,7 +114,7 @@ const CrawlManager = () => {
               {isAdding ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Crawling...
+                  Cryptage...
                 </>
               ) : (
                 <>
@@ -109,6 +124,9 @@ const CrawlManager = () => {
               )}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Les données seront automatiquement cryptées avant stockage
+          </p>
         </div>
 
         <div className="pt-4 border-t">
@@ -121,7 +139,7 @@ const CrawlManager = () => {
             {isProcessing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Traitement en cours...
+                Traitement sécurisé en cours...
               </>
             ) : (
               <>
