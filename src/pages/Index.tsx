@@ -125,14 +125,13 @@ const Index = () => {
           <div className="flex items-center justify-between mb-8">
             <button 
               onClick={() => setShowManage(false)}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
               <img 
                 src="/logo.png" 
                 alt="Sivara Logo" 
                 className="h-8 w-auto"
               />
-              <span className="font-semibold text-xl">Sivara</span>
             </button>
           </div>
           
@@ -183,12 +182,12 @@ const Index = () => {
                   <img 
                     src="/logo.png" 
                     alt="Sivara Logo" 
-                    className="h-20 w-auto"
+                    className="h-24 w-auto"
                   />
-                  <h1 className="text-8xl font-bold bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent">
-                    Sivara
-                  </h1>
                 </div>
+                <h1 className="text-8xl font-bold mb-4 bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent">
+                  Sivara
+                </h1>
                 <p className="text-xl text-gray-500 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
                   Moteur de recherche intelligent avec web scraping
                 </p>
@@ -210,15 +209,12 @@ const Index = () => {
           // Page de résultats
           <div className="container mx-auto px-4 py-8">
             <div className="max-w-4xl mx-auto mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-              <div className="flex items-center gap-4 mb-6">
+              <div className="flex items-center gap-3 mb-6">
                 <img 
                   src="/logo.png" 
                   alt="Sivara Logo" 
-                  className="h-12 w-auto"
+                  className="h-10 w-auto"
                 />
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent">
-                  Sivara
-                </h1>
               </div>
               <SearchBar onSearch={handleSearch} isLoading={isSearching} />
             </div>
