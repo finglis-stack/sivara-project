@@ -43,10 +43,16 @@ const UserMenu = () => {
 
     fetchUserAndProfile();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session);
+      
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        navigate('/');
+      } else if (event === 'SIGNED_IN' && session) {
+        setUser(session.user);
+        
         const { data: profileData } = await supabase
           .from('profiles')
           .select('first_name, last_name')
@@ -54,26 +60,27 @@ const UserMenu = () => {
           .single();
 
         setProfile(profileData);
-      } else {
-        setProfile(null);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const handleSignOut = async () => {
-    if (isSigningOut) return;
+    if (isSigningOut) {
+      console.log('Already signing out, ignoring...');
+      return;
+    }
     
     try {
       setIsSigningOut(true);
-      console.log('Attempting to sign out...');
+      console.log('Starting sign out process...');
       
       const { error } = await supabase.auth.signOut();
       
       if (error) {
         console.error('Sign out error:', error);
-        showError('Erreur lors de la déconnexion');
+        showError(`Erreur: ${error.message}`);
         setIsSigningOut(false);
         return;
       }
@@ -81,13 +88,7 @@ const UserMenu = () => {
       console.log('Sign out successful');
       showSuccess('Déconnexion réussie');
       
-      // Forcer la mise à jour de l'état
-      setUser(null);
-      setProfile(null);
-      
-      // Rediriger vers la page d'accueil
-      navigate('/');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Unexpected error during sign out:', error);
       showError('Erreur inattendue lors de la déconnexion');
       setIsSigningOut(false);
@@ -142,12 +143,10 @@ const UserMenu = () => {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem 
-          onClick={(e) => {
+          onSelect={(e) => {
             e.preventDefault();
-            e.stopPropagation();
             handleSignOut();
           }}
-          className="cursor-pointer"
           disabled={isSigningOut}
         >
           <LogOut className="mr-2 h-4 w-4" />
