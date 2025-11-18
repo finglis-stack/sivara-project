@@ -4,6 +4,7 @@ import SearchBar from '@/components/SearchBar';
 import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
+import UserMenu from '@/components/UserMenu';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError } from '@/utils/toast';
 import { Settings } from 'lucide-react';
@@ -129,6 +130,7 @@ const Index = () => {
             >
               Sivara
             </button>
+            <UserMenu />
           </div>
           
           <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -151,13 +153,16 @@ const Index = () => {
             <h1 className="text-2xl font-bold text-gray-700">
               Sivara
             </h1>
-            <button
-              onClick={() => setShowManage(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 text-gray-700"
-            >
-              <Settings size={18} />
-              <span className="text-sm font-medium">Gestion</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowManage(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 text-gray-700"
+              >
+                <Settings size={18} />
+                <span className="text-sm font-medium">Gestion</span>
+              </button>
+              <UserMenu />
+            </div>
           </div>
         </header>
       )}
@@ -167,14 +172,17 @@ const Index = () => {
           // Landing page
           <div className="container mx-auto px-4">
             <div className="min-h-screen flex flex-col items-center justify-center relative">
-              {/* Bouton gestion en haut à droite */}
-              <button
-                onClick={() => setShowManage(true)}
-                className="absolute top-8 right-8 flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 text-gray-700"
-              >
-                <Settings size={18} />
-                <span className="text-sm font-medium">Gestion</span>
-              </button>
+              {/* Boutons en haut à droite */}
+              <div className="absolute top-8 right-8 flex items-center gap-3">
+                <button
+                  onClick={() => setShowManage(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 text-gray-700"
+                >
+                  <Settings size={18} />
+                  <span className="text-sm font-medium">Gestion</span>
+                </button>
+                <UserMenu />
+              </div>
 
               <div className="text-center mb-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
                 <h1 className="text-8xl font-bold mb-4 text-gray-700 animate-in zoom-in duration-1000">
