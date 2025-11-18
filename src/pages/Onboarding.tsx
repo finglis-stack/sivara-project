@@ -104,26 +104,35 @@ const Onboarding = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-2xl">
+    <div className="min-h-screen relative flex items-center justify-center px-4 py-8">
+      {/* Image de fond */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: 'url(/auth-background.jpg)' }}
+      >
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+      </div>
+
+      {/* Contenu */}
+      <div className="relative z-10 w-full max-w-2xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-gray-900 mb-3">Sivara</h1>
-          <p className="text-lg text-gray-600">Créez votre compte en quelques étapes</p>
+          <h1 className="text-5xl font-bold text-white mb-3 drop-shadow-lg">Sivara</h1>
+          <p className="text-lg text-white/90 drop-shadow">Créez votre compte en quelques étapes</p>
         </div>
 
         {/* Progress indicator */}
         <div className="mb-8">
           <div className="flex items-center justify-center gap-2">
-            <div className={`h-2 w-24 rounded-full transition-all duration-300 ${step >= 1 ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
-            <div className={`h-2 w-24 rounded-full transition-all duration-300 ${step >= 2 ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
+            <div className={`h-2 w-24 rounded-full transition-all duration-300 ${step >= 1 ? 'bg-white' : 'bg-white/30'}`}></div>
+            <div className={`h-2 w-24 rounded-full transition-all duration-300 ${step >= 2 ? 'bg-white' : 'bg-white/30'}`}></div>
           </div>
-          <div className="text-center mt-3 text-sm text-gray-600">
+          <div className="text-center mt-3 text-sm text-white/90 drop-shadow">
             Étape {step} sur 2
           </div>
         </div>
 
-        <Card className="border-0 shadow-2xl">
+        <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur">
           <CardHeader className="space-y-1 pb-6">
             <CardTitle className="text-2xl font-bold">
               {step === 1 ? 'Informations personnelles' : 'Créez vos identifiants'}

@@ -50,15 +50,24 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen relative flex items-center justify-center px-4">
+      {/* Image de fond */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: 'url(/auth-background.jpg)' }}
+      >
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+      </div>
+
+      {/* Contenu */}
+      <div className="relative z-10 w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-gray-900 mb-3">Sivara</h1>
-          <p className="text-lg text-gray-600">Bienvenue ! Connectez-vous à votre compte</p>
+          <h1 className="text-5xl font-bold text-white mb-3 drop-shadow-lg">Sivara</h1>
+          <p className="text-lg text-white/90 drop-shadow">Bienvenue ! Connectez-vous à votre compte</p>
         </div>
 
-        <Card className="border-0 shadow-2xl">
+        <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur">
           <CardHeader className="space-y-1 pb-6">
             <CardTitle className="text-2xl font-bold">Connexion</CardTitle>
             <CardDescription className="text-base">
@@ -137,7 +146,7 @@ const Login = () => {
         </Card>
 
         <div className="text-center mt-6">
-          <a href="/" className="text-sm text-gray-500 hover:text-gray-700 font-medium">
+          <a href="/" className="text-sm text-white/90 hover:text-white font-medium drop-shadow">
             ← Retour à l'accueil
           </a>
         </div>
