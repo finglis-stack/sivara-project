@@ -6,14 +6,17 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
-import { Loader2, Mail, Lock } from 'lucide-react';
+import { Loader2, Mail, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [step, setStep] = useState<'email' | 'password'>('email');
+  const [isChecking, setIsChecking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [loginData, setLoginData] = useState({ email: '', password: '' });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -21,11 +24,45 @@ const Login = () => {
     }
   }, [user, navigate]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!loginData.email || !loginData.password) {
-      showError('Veuillez remplir tous les champs');
+    if (!email) {
+      showError('Veuillez entrer votre adresse email');
+      return;
+    }
+
+    try {
+      setIsChecking(true);
+
+      // Simuler une vérification (4 secondes)
+      await new Promise(resolve => setTimeout(resolve, 4000));
+
+      // Vérifier si l'email existe dans la base de données
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1);
+
+      if (error) {
+        console.error('Error checking email:', error);
+      }
+
+      // Passer à l'étape du mot de passe
+      setStep('password');
+    } catch (error: any) {
+      console.error('Email check error:', error);
+      showError('Erreur lors de la vérification');
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!password) {
+      showError('Veuillez entrer votre mot de passe');
       return;
     }
 
@@ -33,8 +70,8 @@ const Login = () => {
       setIsLoading(true);
 
       const { error } = await supabase.auth.signInWithPassword({
-        email: loginData.email,
-        password: loginData.password,
+        email: email,
+        password: password,
       });
 
       if (error) throw error;
@@ -43,10 +80,15 @@ const Login = () => {
       navigate('/');
     } catch (error: any) {
       console.error('Login error:', error);
-      showError(error.message || 'Erreur lors de la connexion');
+      showError(error.message || 'Email ou mot de passe incorrect');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleBack = () => {
+    setStep('email');
+    setPassword('');
   };
 
   return (
@@ -67,72 +109,130 @@ const Login = () => {
           <p className="text-lg text-white/90 drop-shadow">Bienvenue ! Connectez-vous à votre compte</p>
         </div>
 
-        <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur">
+        <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur overflow-hidden">
           <CardHeader className="space-y-1 pb-6">
             <CardTitle className="text-2xl font-bold">Connexion</CardTitle>
             <CardDescription className="text-base">
-              Entrez vos identifiants pour accéder à votre compte
+              {step === 'email' 
+                ? 'Entrez votre adresse email pour commencer'
+                : 'Entrez votre mot de passe pour continuer'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-semibold">
-                  Adresse email
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="jean.dupont@example.com"
-                    value={loginData.email}
-                    onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                    className="h-12 pl-10 text-base"
-                    required
-                  />
+            {step === 'email' ? (
+              <form onSubmit={handleEmailSubmit} className="space-y-5 animate-in fade-in slide-in-from-left-4 duration-500">
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-semibold">
+                    Adresse email
+                  </Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="jean.dupont@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-12 pl-10 text-base"
+                      required
+                      autoFocus
+                      disabled={isChecking}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-semibold">
-                  Mot de passe
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Votre mot de passe"
-                    value={loginData.password}
-                    onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                    className="h-12 pl-10 text-base"
-                    required
-                  />
+                <Button
+                  type="submit"
+                  className="w-full h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
+                  disabled={isChecking}
+                >
+                  {isChecking ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Vérification en cours...
+                    </>
+                  ) : (
+                    <>
+                      Continuer
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </>
+                  )}
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handlePasswordSubmit} className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-gray-500">
+                    Adresse email
+                  </Label>
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
+                    <span className="text-sm font-medium text-gray-700">{email}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleBack}
+                      className="h-8 text-xs"
+                    >
+                      Modifier
+                    </Button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-end">
-                <a href="#" className="text-sm text-gray-600 hover:text-gray-900 font-medium">
-                  Mot de passe oublié ?
-                </a>
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm font-semibold">
+                    Mot de passe
+                  </Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Votre mot de passe"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="h-12 pl-10 text-base"
+                      required
+                      autoFocus
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
 
-              <Button
-                type="submit"
-                className="w-full h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Connexion en cours...
-                  </>
-                ) : (
-                  'Se connecter'
-                )}
-              </Button>
-            </form>
+                <div className="flex items-center justify-end">
+                  <a href="#" className="text-sm text-gray-600 hover:text-gray-900 font-medium">
+                    Mot de passe oublié ?
+                  </a>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleBack}
+                    className="h-12 text-base font-semibold"
+                    disabled={isLoading}
+                  >
+                    <ArrowLeft className="mr-2 h-5 w-5" />
+                    Retour
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1 h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Connexion...
+                      </>
+                    ) : (
+                      'Se connecter'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            )}
 
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
