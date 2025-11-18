@@ -14,17 +14,48 @@ import { useNavigate } from 'react-router-dom';
 import { showSuccess } from '@/utils/toast';
 import { useEffect, useState } from 'react';
 
+interface Profile {
+  first_name: string;
+  last_name: string;
+}
+
 const UserMenu = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const fetchUserAndProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
-    });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', session.user.id)
+          .single();
+
+        setProfile(profileData);
+      }
+    };
+
+    fetchUserAndProfile();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
+
+      if (session?.user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', session.user.id)
+          .single();
+
+        setProfile(profileData);
+      } else {
+        setProfile(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -48,8 +79,18 @@ const UserMenu = () => {
     );
   }
 
-  const getInitials = (email: string) => {
-    return email.substring(0, 2).toUpperCase();
+  const getInitials = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
+    }
+    return user.email?.substring(0, 2).toUpperCase() || 'U';
+  };
+
+  const getDisplayName = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name} ${profile.last_name}`;
+    }
+    return user.email;
   };
 
   return (
@@ -58,7 +99,7 @@ const UserMenu = () => {
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
           <Avatar className="h-10 w-10">
             <AvatarFallback className="bg-gray-700 text-white">
-              {getInitials(user.email || 'U')}
+              {getInitials()}
             </AvatarFallback>
           </Avatar>
         </Button>
@@ -66,7 +107,7 @@ const UserMenu = () => {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">Mon compte</p>
+            <p className="text-sm font-medium leading-none">{getDisplayName()}</p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
             </p>

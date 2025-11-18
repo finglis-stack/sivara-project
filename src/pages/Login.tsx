@@ -8,9 +8,20 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        navigate('/');
+        // Vérifier si le profil existe
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile) {
+          navigate('/');
+        } else {
+          navigate('/onboarding');
+        }
       }
     });
 
