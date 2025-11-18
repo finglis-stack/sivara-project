@@ -2,12 +2,45 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-// @ts-ignore: Deno types
-import { CryptoService } from '../_shared/crypto.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// @ts-ignore: Deno types
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+class CryptoService {
+  private key: CryptoKey | null = null;
+
+  async initialize(secretKey: string) {
+    const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
+    this.key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  async decrypt(encryptedText: string): Promise<string> {
+    if (!this.key) throw new Error('Crypto not initialized');
+    
+    const combined = Uint8Array.from(atob(encryptedText), c => c.charCodeAt(0));
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      this.key,
+      data
+    );
+    
+    return decoder.decode(decrypted);
+  }
 }
 
 // @ts-ignore: Deno types
@@ -29,8 +62,8 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    const crypto = new CryptoService()
-    await crypto.initialize(encryptionKey)
+    const cryptoService = new CryptoService()
+    await cryptoService.initialize(encryptionKey)
 
     const { query, page = 1, limit = 10 } = await req.json()
 
@@ -63,11 +96,11 @@ serve(async (req) => {
     // Décrypter et rechercher
     for (const page of encryptedPages || []) {
       try {
-        const decryptedTitle = await crypto.decrypt(page.title)
-        const decryptedDescription = await crypto.decrypt(page.description)
-        const decryptedContent = await crypto.decrypt(page.content)
-        const decryptedUrl = await crypto.decrypt(page.url)
-        const decryptedDomain = await crypto.decrypt(page.domain)
+        const decryptedTitle = await cryptoService.decrypt(page.title)
+        const decryptedDescription = await cryptoService.decrypt(page.description)
+        const decryptedContent = await cryptoService.decrypt(page.content)
+        const decryptedUrl = await cryptoService.decrypt(page.url)
+        const decryptedDomain = await cryptoService.decrypt(page.domain)
 
         const searchText = `${decryptedTitle} ${decryptedDescription} ${decryptedContent}`.toLowerCase()
         

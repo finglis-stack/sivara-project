@@ -2,12 +2,55 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-// @ts-ignore: Deno types
-import { CryptoService } from '../_shared/crypto.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// @ts-ignore: Deno types
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+class CryptoService {
+  private key: CryptoKey | null = null;
+
+  async initialize(secretKey: string) {
+    const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
+    this.key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  async encrypt(text: string): Promise<string> {
+    if (!this.key) throw new Error('Crypto not initialized');
+    
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const data = encoder.encode(text);
+    
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      this.key,
+      data
+    );
+    
+    const combined = new Uint8Array(iv.length + encrypted.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(encrypted), iv.length);
+    
+    return btoa(String.fromCharCode(...combined));
+  }
+
+  async hash(text: string): Promise<string> {
+    const data = encoder.encode(text.toLowerCase());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
 }
 
 function decodeHtmlEntities(text: string): string {
@@ -66,8 +109,8 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    const crypto = new CryptoService()
-    await crypto.initialize(encryptionKey)
+    const cryptoService = new CryptoService()
+    await cryptoService.initialize(encryptionKey)
 
     const { url, maxDepth = 1 } = await req.json()
 
@@ -94,8 +137,8 @@ serve(async (req) => {
     }
 
     const buffer = await response.arrayBuffer()
-    const decoder = new TextDecoder('utf-8')
-    const html = decoder.decode(buffer)
+    const textDecoder = new TextDecoder('utf-8')
+    const html = textDecoder.decode(buffer)
     
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
     let title = titleMatch ? titleMatch[1].trim() : 'Sans titre'
@@ -121,14 +164,14 @@ serve(async (req) => {
     console.log(`[ENCRYPTION] Encrypting data with AES-256-GCM...`)
     
     // Cryptage militaire de toutes les données sensibles
-    const encryptedTitle = await crypto.encrypt(title)
-    const encryptedDescription = await crypto.encrypt(description)
-    const encryptedContent = await crypto.encrypt(content)
-    const encryptedUrl = await crypto.encrypt(url)
-    const encryptedDomain = await crypto.encrypt(domain)
+    const encryptedTitle = await cryptoService.encrypt(title)
+    const encryptedDescription = await cryptoService.encrypt(description)
+    const encryptedContent = await cryptoService.encrypt(content)
+    const encryptedUrl = await cryptoService.encrypt(url)
+    const encryptedDomain = await cryptoService.encrypt(domain)
     
     // Création de hash pour la recherche (sans révéler le contenu)
-    const searchHash = await crypto.hash(title + ' ' + description + ' ' + content)
+    const searchHash = await cryptoService.hash(title + ' ' + description + ' ' + content)
     
     console.log(`[ENCRYPTION] Data encrypted successfully`)
 
@@ -174,7 +217,7 @@ serve(async (req) => {
       const uniqueLinks = [...new Set(links)].slice(0, 10)
       
       for (const link of uniqueLinks) {
-        const encryptedLink = await crypto.encrypt(link)
+        const encryptedLink = await cryptoService.encrypt(link)
         await supabase
           .from('crawl_queue')
           .upsert({
