@@ -19,27 +19,35 @@ const SearchBar = ({ onSearch, isLoading = false }: SearchBarProps) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-3xl mx-auto">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+    <form onSubmit={handleSubmit} className="w-full">
+      <div className="relative group">
+        <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-full blur opacity-25 group-hover:opacity-40 transition duration-300"></div>
+        <div className="relative flex items-center bg-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-300">
+          <Search className="absolute left-6 text-gray-400 group-hover:text-blue-600 transition-colors duration-300" size={24} />
           <Input
             type="text"
-            placeholder="Rechercher dans les pages indexées..."
+            placeholder="Rechercher sur Sivara..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="pl-10 pr-4 py-6 text-lg"
+            className="flex-1 pl-16 pr-6 py-7 text-lg border-0 rounded-full focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
             disabled={isLoading}
           />
+          <Button 
+            type="submit" 
+            size="lg" 
+            disabled={isLoading || !query.trim()}
+            className="mr-2 px-8 py-6 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 hover:scale-105 shadow-lg"
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <span>Recherche...</span>
+              </div>
+            ) : (
+              'Rechercher'
+            )}
+          </Button>
         </div>
-        <Button 
-          type="submit" 
-          size="lg" 
-          disabled={isLoading || !query.trim()}
-          className="px-8"
-        >
-          {isLoading ? 'Recherche...' : 'Rechercher'}
-        </Button>
       </div>
     </form>
   );

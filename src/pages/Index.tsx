@@ -6,6 +6,7 @@ import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError } from '@/utils/toast';
+import { Settings } from 'lucide-react';
 
 interface SearchResultType {
   id: string;
@@ -29,6 +30,7 @@ const Index = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
+  const [showManage, setShowManage] = useState(false);
 
   const groupResultsByDomain = (results: SearchResultType[]): GroupedResult[] => {
     if (results.length === 0) return [];
@@ -36,7 +38,6 @@ const Index = () => {
     const grouped: { [key: string]: SearchResultType[] } = {};
     const mainDomain = results[0]?.domain;
 
-    // Grouper par domaine
     results.forEach(result => {
       const baseDomain = extractBaseDomain(result.domain);
       if (!grouped[baseDomain]) {
@@ -45,7 +46,6 @@ const Index = () => {
       grouped[baseDomain].push(result);
     });
 
-    // Convertir en format GroupedResult
     const groupedResults: GroupedResult[] = [];
     
     Object.entries(grouped).forEach(([domain, domainResults]) => {
@@ -57,7 +57,6 @@ const Index = () => {
       });
     });
 
-    // Trier : domaine principal en premier, puis par rank
     return groupedResults.sort((a, b) => {
       if (a.isMainDomain && !b.isMainDomain) return -1;
       if (!a.isMainDomain && b.isMainDomain) return 1;
@@ -119,47 +118,111 @@ const Index = () => {
 
   const groupedResults = groupResultsByDomain(results);
 
+  if (showManage) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-between mb-8">
+            <button 
+              onClick={() => setShowManage(false)}
+              className="flex items-center gap-2 text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              <img 
+                src="/logo.png" 
+                alt="Sivara Logo" 
+                className="h-8 w-auto"
+              />
+              <span className="font-semibold text-xl">Sivara</span>
+            </button>
+          </div>
+          
+          <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h1 className="text-3xl font-bold text-gray-900 mb-6">Gestion du Crawler</h1>
+            <StatsDisplay />
+            <CrawlManager />
+          </div>
+        </div>
+        <MadeWithDyad />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-4 mb-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Header avec logo */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left duration-500">
             <img 
               src="/logo.png" 
               alt="Sivara Logo" 
-              className="h-16 w-auto"
+              className="h-8 w-auto"
             />
+            <span className="font-semibold text-xl text-gray-900">Sivara</span>
           </div>
-          <p className="text-xl text-gray-600">
-            Moteur de recherche intelligent avec web scraping
-          </p>
+          
+          <button
+            onClick={() => setShowManage(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 hover:scale-105"
+          >
+            <Settings size={18} />
+            <span className="text-sm font-medium">Gestion</span>
+          </button>
         </div>
+      </header>
 
-        <Tabs defaultValue="search" className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8">
-            <TabsTrigger value="search">Recherche</TabsTrigger>
-            <TabsTrigger value="manage">Gestion</TabsTrigger>
-          </TabsList>
+      <div className="pt-20">
+        {!hasSearched ? (
+          // Landing page
+          <div className="container mx-auto px-4">
+            <div className="min-h-[80vh] flex flex-col items-center justify-center">
+              <div className="text-center mb-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                <h1 className="text-7xl font-bold mb-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent animate-in zoom-in duration-1000">
+                  Sivara
+                </h1>
+                <p className="text-2xl text-gray-600 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+                  Moteur de recherche intelligent avec web scraping
+                </p>
+              </div>
 
-          <TabsContent value="search" className="space-y-8">
-            <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+              <div className="w-full max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+                <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+              </div>
 
-            {hasSearched && (
-              <div className="max-w-4xl mx-auto">
-                {isSearching ? (
-                  <div className="text-center py-12">
-                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                    <p className="mt-4 text-gray-600">Recherche en cours...</p>
-                  </div>
-                ) : groupedResults.length > 0 ? (
-                  <>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Environ {totalResults} résultat{totalResults > 1 ? 's' : ''}
-                    </p>
-                    <div className="space-y-6">
-                      {groupedResults.map((group, index) => (
+              {/* Animations décoratives */}
+              <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+                <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+                <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Page de résultats
+          <div className="container mx-auto px-4 py-8">
+            <div className="max-w-4xl mx-auto mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+              <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+            </div>
+
+            <div className="max-w-5xl mx-auto">
+              {isSearching ? (
+                <div className="text-center py-20 animate-in fade-in duration-500">
+                  <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
+                  <p className="mt-6 text-xl text-gray-600">Recherche en cours...</p>
+                </div>
+              ) : groupedResults.length > 0 ? (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <p className="text-sm text-gray-600 mb-6 px-2">
+                    Environ {totalResults} résultat{totalResults > 1 ? 's' : ''}
+                  </p>
+                  <div className="space-y-4">
+                    {groupedResults.map((group, index) => (
+                      <div 
+                        key={group.mainResult.id}
+                        className="animate-in fade-in slide-in-from-bottom-2 duration-500"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
                         <SearchResult
-                          key={group.mainResult.id}
                           url={group.mainResult.url}
                           title={group.mainResult.title}
                           description={group.mainResult.description}
@@ -169,28 +232,26 @@ const Index = () => {
                           isMainDomain={group.isMainDomain}
                           relatedResults={group.relatedResults}
                         />
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-12">
-                    <p className="text-xl text-gray-600">
-                      Aucun résultat trouvé. Essayez une autre recherche ou ajoutez plus de pages à crawler.
-                    </p>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="manage" className="space-y-8">
-            <div className="max-w-4xl mx-auto space-y-6">
-              <StatsDisplay />
-              <CrawlManager />
+                </div>
+              ) : (
+                <div className="text-center py-20 animate-in fade-in duration-500">
+                  <div className="text-6xl mb-4">🔍</div>
+                  <p className="text-2xl text-gray-600 mb-2">
+                    Aucun résultat trouvé
+                  </p>
+                  <p className="text-gray-500">
+                    Essayez une autre recherche ou ajoutez plus de pages à crawler
+                  </p>
+                </div>
+              )}
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </div>
+      
       <MadeWithDyad />
     </div>
   );

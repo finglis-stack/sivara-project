@@ -1,5 +1,4 @@
 import { ExternalLink, Globe, ChevronDown, ChevronUp } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
@@ -46,41 +45,20 @@ const SearchResult = ({
 
   return (
     <div className="space-y-2">
-      <Card className={`hover:shadow-lg transition-shadow ${isMainDomain ? 'border-2 border-blue-500' : ''}`}>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <CardTitle className="text-xl mb-1">
-                <a 
-                  href={url} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-2"
-                >
-                  <img 
-                    src={faviconUrl} 
-                    alt={`${domain} favicon`}
-                    className="w-5 h-5 flex-shrink-0"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      const parent = e.currentTarget.parentElement;
-                      if (parent) {
-                        const fallbackIcon = document.createElement('div');
-                        fallbackIcon.className = 'w-5 h-5 flex-shrink-0';
-                        fallbackIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
-                        parent.insertBefore(fallbackIcon, parent.firstChild);
-                      }
-                    }}
-                  />
-                  {title}
-                  <ExternalLink size={16} className="flex-shrink-0" />
-                </a>
-              </CardTitle>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Globe size={14} />
-                <span className="truncate">{domain}</span>
-                <span>•</span>
-                <span>{formatDate(crawledAt)}</span>
+      <div className={`group hover:bg-white/50 rounded-2xl p-6 transition-all duration-300 ${isMainDomain ? 'bg-blue-50/50' : ''}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-2">
+              <img 
+                src={faviconUrl} 
+                alt={`${domain} favicon`}
+                className="w-6 h-6 flex-shrink-0 rounded"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="truncate font-medium">{domain}</span>
                 {isMainDomain && (
                   <>
                     <span>•</span>
@@ -89,19 +67,33 @@ const SearchResult = ({
                 )}
               </div>
             </div>
+            
+            <h2 className="text-2xl mb-2">
+              <a 
+                href={url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-700 hover:text-blue-900 hover:underline flex items-center gap-2 group-hover:gap-3 transition-all duration-300"
+              >
+                {title}
+                <ExternalLink size={18} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              </a>
+            </h2>
+            
+            {description && (
+              <p className="text-base text-gray-700 mb-2 leading-relaxed">
+                {description}
+              </p>
+            )}
+            
+            <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
+              {content}
+            </p>
+            
+            <p className="text-xs text-gray-500 mt-3">{formatDate(crawledAt)}</p>
           </div>
-        </CardHeader>
-        <CardContent>
-          {description && (
-            <CardDescription className="text-base mb-2">
-              {description}
-            </CardDescription>
-          )}
-          <p className="text-sm text-gray-600 line-clamp-3">
-            {content}
-          </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {relatedResults.length > 0 && (
         <div className="ml-8">
@@ -109,7 +101,7 @@ const SearchResult = ({
             variant="ghost"
             size="sm"
             onClick={() => setShowRelated(!showRelated)}
-            className="text-blue-600 hover:text-blue-800"
+            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-full"
           >
             {showRelated ? (
               <>
@@ -125,30 +117,26 @@ const SearchResult = ({
           </Button>
 
           {showRelated && (
-            <div className="mt-2 space-y-2">
+            <div className="mt-3 space-y-2">
               {relatedResults.map((result) => (
-                <Card key={result.id} className="hover:shadow-md transition-shadow bg-gray-50">
-                  <CardHeader className="pb-2 pt-3">
-                    <CardTitle className="text-base">
-                      <a 
-                        href={result.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-2"
-                      >
-                        {result.title}
-                        <ExternalLink size={14} className="flex-shrink-0" />
-                      </a>
-                    </CardTitle>
-                    <p className="text-xs text-gray-500">{formatDate(result.crawled_at)}</p>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    {result.description && (
-                      <p className="text-sm text-gray-600 mb-1">{result.description}</p>
-                    )}
-                    <p className="text-xs text-gray-500 line-clamp-2">{result.content}</p>
-                  </CardContent>
-                </Card>
+                <div key={result.id} className="hover:bg-white/50 rounded-xl p-4 transition-all duration-300">
+                  <h3 className="text-lg mb-1">
+                    <a 
+                      href={result.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-700 hover:text-blue-900 hover:underline flex items-center gap-2"
+                    >
+                      {result.title}
+                      <ExternalLink size={14} className="flex-shrink-0" />
+                    </a>
+                  </h3>
+                  {result.description && (
+                    <p className="text-sm text-gray-600 mb-1">{result.description}</p>
+                  )}
+                  <p className="text-xs text-gray-500 line-clamp-2">{result.content}</p>
+                  <p className="text-xs text-gray-400 mt-2">{formatDate(result.crawled_at)}</p>
+                </div>
               ))}
             </div>
           )}
