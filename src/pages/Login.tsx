@@ -50,60 +50,45 @@ const Login = () => {
       return;
     }
 
+    setIsChecking(true);
+
     try {
-      setIsChecking(true);
+      console.log('Vérification de l\'email:', email);
 
-      // Vérifier si l'email existe dans la table profiles
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .limit(1000);
-
-      if (profileError) {
-        console.error('Error checking profiles:', profileError);
-        showError('Erreur lors de la vérification');
-        setIsChecking(false);
-        return;
-      }
-
-      // Récupérer tous les utilisateurs auth pour vérifier l'email
-      // Comme on ne peut pas faire de requête directe sur auth.users, 
-      // on va essayer une connexion avec un mot de passe invalide
+      // Essayer de se connecter avec un mot de passe invalide pour vérifier si l'email existe
       const testResult = await supabase.auth.signInWithPassword({
         email: email,
-        password: '___INVALID_PASSWORD_TEST___' + crypto.randomUUID(),
+        password: '___TEST_INVALID_PASSWORD___' + Date.now(),
       });
 
-      console.log('Test result:', testResult.error?.message);
+      console.log('Résultat du test:', testResult);
+      console.log('Message d\'erreur:', testResult.error?.message);
 
-      // Si l'erreur est "Invalid login credentials", l'email existe
-      // Si l'erreur est "Email not confirmed" ou similaire, l'email existe aussi
-      // Si l'erreur est différente (comme "User not found"), l'email n'existe pas
-      
       if (testResult.error) {
         const errorMessage = testResult.error.message.toLowerCase();
+        console.log('Message d\'erreur en minuscules:', errorMessage);
         
-        // Ces messages indiquent que l'email existe
+        // Si l'erreur contient "invalid login credentials", l'email existe
         if (errorMessage.includes('invalid login credentials') || 
-            errorMessage.includes('email not confirmed') ||
-            errorMessage.includes('password')) {
-          // Email existe, passer à l'étape mot de passe
+            errorMessage.includes('invalid') ||
+            errorMessage.includes('credentials')) {
+          console.log('✅ Email trouvé - passage à l\'étape mot de passe');
           setStep('password');
-          setIsChecking(false);
         } else {
-          // Email n'existe pas, bloquer pendant 4 secondes
+          // Email n'existe pas
+          console.log('❌ Email non trouvé - blocage de 4 secondes');
           showError('Aucun compte trouvé avec cet email');
           setBlockedUntil(Date.now() + 4000);
-          setIsChecking(false);
         }
       } else {
-        // Connexion réussie (ne devrait pas arriver avec un mot de passe invalide)
+        // Ne devrait pas arriver, mais au cas où
+        console.log('⚠️ Pas d\'erreur (inattendu) - passage à l\'étape mot de passe');
         setStep('password');
-        setIsChecking(false);
       }
     } catch (error: any) {
-      console.error('Email check error:', error);
+      console.error('Erreur lors de la vérification:', error);
       showError('Erreur lors de la vérification');
+    } finally {
       setIsChecking(false);
     }
   };
