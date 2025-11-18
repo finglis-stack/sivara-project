@@ -23,6 +23,7 @@ const UserMenu = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     const fetchUserAndProfile = async () => {
@@ -62,7 +63,10 @@ const UserMenu = () => {
   }, []);
 
   const handleSignOut = async () => {
+    if (isSigningOut) return;
+    
     try {
+      setIsSigningOut(true);
       console.log('Attempting to sign out...');
       
       const { error } = await supabase.auth.signOut();
@@ -70,6 +74,7 @@ const UserMenu = () => {
       if (error) {
         console.error('Sign out error:', error);
         showError('Erreur lors de la déconnexion');
+        setIsSigningOut(false);
         return;
       }
       
@@ -85,6 +90,7 @@ const UserMenu = () => {
     } catch (error) {
       console.error('Unexpected error during sign out:', error);
       showError('Erreur inattendue lors de la déconnexion');
+      setIsSigningOut(false);
     }
   };
 
@@ -136,15 +142,16 @@ const UserMenu = () => {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem 
-          onClick={handleSignOut} 
-          className="cursor-pointer"
-          onSelect={(e) => {
+          onClick={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             handleSignOut();
           }}
+          className="cursor-pointer"
+          disabled={isSigningOut}
         >
           <LogOut className="mr-2 h-4 w-4" />
-          <span>Se déconnecter</span>
+          <span>{isSigningOut ? 'Déconnexion...' : 'Se déconnecter'}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
