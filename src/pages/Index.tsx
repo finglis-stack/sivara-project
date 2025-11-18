@@ -125,13 +125,9 @@ const Index = () => {
           <div className="flex items-center justify-between mb-8">
             <button 
               onClick={() => setShowManage(false)}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              className="text-2xl font-bold bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent hover:opacity-80 transition-opacity"
             >
-              <img 
-                src="/logo.png" 
-                alt="Sivara Logo" 
-                className="h-8 w-auto"
-              />
+              Sivara
             </button>
           </div>
           
@@ -148,10 +144,13 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header avec bouton gestion */}
+      {/* Header avec logo texte */}
       {hasSearched && (
         <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100">
-          <div className="container mx-auto px-4 py-3 flex items-center justify-end">
+          <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent">
+              Sivara
+            </h1>
             <button
               onClick={() => setShowManage(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-all duration-300"
@@ -178,14 +177,7 @@ const Index = () => {
               </button>
 
               <div className="text-center mb-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <div className="flex items-center justify-center gap-4 mb-6 animate-in zoom-in duration-1000">
-                  <img 
-                    src="/logo.png" 
-                    alt="Sivara Logo" 
-                    className="h-24 w-auto"
-                  />
-                </div>
-                <h1 className="text-8xl font-bold mb-4 bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent">
+                <h1 className="text-8xl font-bold mb-4 bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent animate-in zoom-in duration-1000">
                   Sivara
                 </h1>
                 <p className="text-xl text-gray-500 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
@@ -209,13 +201,6 @@ const Index = () => {
           // Page de résultats
           <div className="container mx-auto px-4 py-8">
             <div className="max-w-4xl mx-auto mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-              <div className="flex items-center gap-3 mb-6">
-                <img 
-                  src="/logo.png" 
-                  alt="Sivara Logo" 
-                  className="h-10 w-auto"
-                />
-              </div>
               <SearchBar onSearch={handleSearch} isLoading={isSearching} />
             </div>
 
