@@ -8,6 +8,46 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Fonction pour décoder les entités HTML
+function decodeHtmlEntities(text: string): string {
+  const entities: { [key: string]: string } = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&apos;': "'",
+    '&nbsp;': ' ',
+    '&eacute;': 'é',
+    '&egrave;': 'è',
+    '&ecirc;': 'ê',
+    '&agrave;': 'à',
+    '&acirc;': 'â',
+    '&ocirc;': 'ô',
+    '&ucirc;': 'û',
+    '&ccedil;': 'ç',
+    '&iuml;': 'ï',
+    '&euml;': 'ë',
+  };
+  
+  let decoded = text;
+  for (const [entity, char] of Object.entries(entities)) {
+    decoded = decoded.replace(new RegExp(entity, 'g'), char);
+  }
+  
+  // Décoder les entités numériques (&#233; -> é)
+  decoded = decoded.replace(/&#(\d+);/g, (match, dec) => {
+    return String.fromCharCode(dec);
+  });
+  
+  // Décoder les entités hexadécimales (&#x00E9; -> é)
+  decoded = decoded.replace(/&#x([0-9A-Fa-f]+);/g, (match, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+  
+  return decoded;
+}
+
 // @ts-ignore: Deno types
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -34,7 +74,10 @@ serve(async (req) => {
 
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'DyadSearchBot/1.0 (Educational Project)',
+        'User-Agent': 'SivaraBot/1.0 (Educational Search Engine)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+        'Accept-Charset': 'utf-8',
       },
     })
 
@@ -42,14 +85,22 @@ serve(async (req) => {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
-    const html = await response.text()
+    // Lire le contenu en tant que ArrayBuffer puis le décoder en UTF-8
+    const buffer = await response.arrayBuffer()
+    const decoder = new TextDecoder('utf-8')
+    const html = decoder.decode(buffer)
     
+    // Extraire le titre
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-    const title = titleMatch ? titleMatch[1].trim() : 'Sans titre'
+    let title = titleMatch ? titleMatch[1].trim() : 'Sans titre'
+    title = decodeHtmlEntities(title)
 
+    // Extraire la description
     const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
-    const description = descMatch ? descMatch[1].trim() : ''
+    let description = descMatch ? descMatch[1].trim() : ''
+    description = decodeHtmlEntities(description)
 
+    // Extraire le contenu
     let content = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -57,6 +108,8 @@ serve(async (req) => {
       .replace(/\s+/g, ' ')
       .trim()
       .substring(0, 5000)
+    
+    content = decodeHtmlEntities(content)
 
     const urlObj = new URL(url)
     const domain = urlObj.hostname
