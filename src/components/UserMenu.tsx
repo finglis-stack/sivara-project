@@ -61,10 +61,21 @@ const UserMenu = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    showSuccess('Déconnexion réussie');
-    navigate('/');
+  const handleSignOut = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      showSuccess('Déconnexion réussie');
+      setUser(null);
+      setProfile(null);
+      navigate('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   if (!user) {
