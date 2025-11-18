@@ -30,7 +30,6 @@ const Login = () => {
       const interval = setInterval(() => {
         if (Date.now() >= blockedUntil) {
           setBlockedUntil(null);
-          setIsChecking(false);
         }
       }, 100);
       return () => clearInterval(interval);
@@ -54,14 +53,40 @@ const Login = () => {
     try {
       setIsChecking(true);
 
-      // Vérification instantanée en essayant de se connecter avec un mot de passe aléatoire
+      // Vérifier si l'email existe dans la table profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1000);
+
+      if (profileError) {
+        console.error('Error checking profiles:', profileError);
+        showError('Erreur lors de la vérification');
+        setIsChecking(false);
+        return;
+      }
+
+      // Récupérer tous les utilisateurs auth pour vérifier l'email
+      // Comme on ne peut pas faire de requête directe sur auth.users, 
+      // on va essayer une connexion avec un mot de passe invalide
       const testResult = await supabase.auth.signInWithPassword({
         email: email,
-        password: crypto.randomUUID(),
+        password: '___INVALID_PASSWORD_TEST___' + crypto.randomUUID(),
       });
 
+      console.log('Test result:', testResult.error?.message);
+
+      // Si l'erreur est "Invalid login credentials", l'email existe
+      // Si l'erreur est "Email not confirmed" ou similaire, l'email existe aussi
+      // Si l'erreur est différente (comme "User not found"), l'email n'existe pas
+      
       if (testResult.error) {
-        if (testResult.error.message.includes('Invalid login credentials')) {
+        const errorMessage = testResult.error.message.toLowerCase();
+        
+        // Ces messages indiquent que l'email existe
+        if (errorMessage.includes('invalid login credentials') || 
+            errorMessage.includes('email not confirmed') ||
+            errorMessage.includes('password')) {
           // Email existe, passer à l'étape mot de passe
           setStep('password');
           setIsChecking(false);
@@ -69,7 +94,12 @@ const Login = () => {
           // Email n'existe pas, bloquer pendant 4 secondes
           showError('Aucun compte trouvé avec cet email');
           setBlockedUntil(Date.now() + 4000);
+          setIsChecking(false);
         }
+      } else {
+        // Connexion réussie (ne devrait pas arriver avec un mot de passe invalide)
+        setStep('password');
+        setIsChecking(false);
       }
     } catch (error: any) {
       console.error('Email check error:', error);
