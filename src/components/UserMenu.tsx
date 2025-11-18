@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { showSuccess, showError } from '@/utils/toast';
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Profile {
   first_name: string;
@@ -21,76 +22,43 @@ interface Profile {
 
 const UserMenu = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
+  const { user, signOut: authSignOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
-    const fetchUserAndProfile = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
+    const fetchProfile = async () => {
+      if (user) {
         const { data: profileData } = await supabase
           .from('profiles')
           .select('first_name, last_name')
-          .eq('id', session.user.id)
+          .eq('id', user.id)
           .single();
 
         setProfile(profileData);
+      } else {
+        setProfile(null);
       }
     };
 
-    fetchUserAndProfile();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session);
-      
-      if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setProfile(null);
-        navigate('/');
-      } else if (event === 'SIGNED_IN' && session) {
-        setUser(session.user);
-        
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('first_name, last_name')
-          .eq('id', session.user.id)
-          .single();
-
-        setProfile(profileData);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    fetchProfile();
+  }, [user]);
 
   const handleSignOut = async () => {
-    if (isSigningOut) {
-      console.log('Already signing out, ignoring...');
-      return;
-    }
+    if (isSigningOut) return;
     
     try {
       setIsSigningOut(true);
-      console.log('Starting sign out process...');
+      console.log('Starting sign out...');
       
-      const { error } = await supabase.auth.signOut();
+      await authSignOut();
       
-      if (error) {
-        console.error('Sign out error:', error);
-        showError(`Erreur: ${error.message}`);
-        setIsSigningOut(false);
-        return;
-      }
-      
-      console.log('Sign out successful');
       showSuccess('Déconnexion réussie');
-      
+      navigate('/');
     } catch (error: any) {
-      console.error('Unexpected error during sign out:', error);
-      showError('Erreur inattendue lors de la déconnexion');
+      console.error('Sign out error:', error);
+      showError('Erreur lors de la déconnexion');
+    } finally {
       setIsSigningOut(false);
     }
   };
