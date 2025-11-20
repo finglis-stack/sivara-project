@@ -55,7 +55,6 @@ class CryptoService {
 }
 
 function cleanJsonString(str: string): string {
-  // Enlever les balises markdown ```json et ``` si présentes
   return str.replace(/^```json\s*/, '').replace(/\s*```$/, '');
 }
 
@@ -74,6 +73,9 @@ serve(async (req) => {
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!
     // @ts-ignore: Deno types
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!
+    // @ts-ignore: Deno types
+    // Utilise GEMINI_MODEL si défini, sinon fallback sur gemini-1.5-pro
+    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-1.5-pro';
     
     if (!encryptionKey) throw new Error('ENCRYPTION_KEY not configured')
     if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured')
@@ -91,12 +93,12 @@ serve(async (req) => {
       )
     }
 
-    console.log(`[AI CRAWL] Starting Gemini-powered crawl for: ${url}`)
+    console.log(`[AI CRAWL] Starting AI-powered crawl for: ${url} using model: ${geminiModel}`)
 
     // 1. Fetcher le contenu brut
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'SivaraBot/2.0 (AI Powered Indexer)',
+        'User-Agent': 'SivaraBot/3.0 (AI Powered Indexer)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
     })
@@ -109,34 +111,34 @@ serve(async (req) => {
     const textDecoder = new TextDecoder('utf-8')
     const rawHtml = textDecoder.decode(buffer)
 
-    // 2. Nettoyage pré-IA pour économiser des tokens
+    // 2. Nettoyage pré-IA
     const cleanedText = rawHtml
       .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
       .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 30000); // Limite large pour Gemini Pro
+      .substring(0, 40000); // Augmentation de la limite de tokens pour les modèles Pro
 
     // 3. Analyse via Gemini
-    console.log(`[GEMINI] Sending content to Gemini 1.5 Pro for analysis...`)
+    console.log(`[GEMINI] Sending content to ${geminiModel} for analysis...`)
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const model = genAI.getGenerativeModel({ model: geminiModel });
 
     const prompt = `
-    Tu es un expert en indexation web et analyse sémantique. Analyse le contenu textuel suivant provenant de l'URL: ${url}
+    Tu es un expert en indexation web sémantique avancée. Analyse le contenu textuel suivant provenant de l'URL: ${url}
     
     Tâche :
-    1. Identifie le titre principal (le sujet réel de la page).
-    2. Rédige une description concise et accrocheuse (meta description améliorée).
-    3. Reformule le contenu principal en un texte structuré, informatif et dense en informations clés (environ 300-500 mots). Ignore le bruit (menus, footers, pubs).
-    4. Extrais les liens secondaires pertinents (uniquement ceux qui semblent être des articles ou des pages de contenu intéressantes du même domaine).
+    1. TITRE : Identifie le titre principal (le sujet réel de la page).
+    2. DESCRIPTION : Rédige une description concise, accrocheuse et optimisée SEO.
+    3. CONTENU : Reformule le contenu principal en un texte structuré, très dense en informations factuelles (environ 400-600 mots). Supprime tout bruit (menus, footers, pubs, navigation). Synthétise les idées clés.
+    4. LIENS : Extrais les liens secondaires pertinents qui semblent être des articles ou des pages de contenu de qualité sur le même domaine.
 
     Format de réponse attendu (JSON pur uniquement) :
     {
       "title": "Titre optimisé",
       "description": "Description optimisée",
-      "rephrased_content": "Contenu reformulé...",
+      "rephrased_content": "Contenu reformulé riche...",
       "main_topic": "Sujet principal",
       "secondary_links": ["url1", "url2", ...]
     }
@@ -153,7 +155,6 @@ serve(async (req) => {
       aiData = JSON.parse(cleanJsonString(aiResponseText));
     } catch (e) {
       console.error("Erreur parsing JSON Gemini:", e);
-      // Fallback si le JSON est malformé
       aiData = {
         title: "Erreur analyse IA",
         description: "Le contenu n'a pas pu être analysé correctement.",
@@ -172,11 +173,10 @@ serve(async (req) => {
     // 4. Cryptage des données générées par l'IA
     const encryptedTitle = await cryptoService.encrypt(aiData.title)
     const encryptedDescription = await cryptoService.encrypt(aiData.description)
-    const encryptedContent = await cryptoService.encrypt(aiData.rephrased_content) // On stocke la version reformulée par l'IA
+    const encryptedContent = await cryptoService.encrypt(aiData.rephrased_content)
     const encryptedUrl = await cryptoService.encrypt(url)
     const encryptedDomain = await cryptoService.encrypt(domain)
     
-    // Hash basé sur le contenu IA pour la recherche
     const searchHash = await cryptoService.hash(aiData.title + ' ' + aiData.description + ' ' + aiData.rephrased_content)
 
     // 5. Sauvegarde
@@ -197,20 +197,19 @@ serve(async (req) => {
 
     if (error) throw error
 
-    // 6. Gestion des liens secondaires extraits par l'IA
+    // 6. Gestion des liens secondaires
     if (maxDepth > 0 && aiData.secondary_links && Array.isArray(aiData.secondary_links)) {
       const validLinks = aiData.secondary_links
         .filter(link => {
           try {
-            // Vérifier que le lien est valide et appartient au domaine (ou sous-domaine)
-            const linkUrl = new URL(link, url); // Résoudre les liens relatifs
+            const linkUrl = new URL(link, url);
             return linkUrl.hostname.includes(domain.replace('www.', '')) || domain.includes(linkUrl.hostname.replace('www.', ''));
           } catch {
             return false;
           }
         })
-        .map(link => new URL(link, url).href) // Normaliser
-        .slice(0, 5); // Limiter pour ne pas surcharger
+        .map(link => new URL(link, url).href)
+        .slice(0, 5);
 
       console.log(`[QUEUE] Adding ${validLinks.length} AI-selected links to queue`)
 
@@ -249,8 +248,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Page analyzed by Gemini Pro 1.5, rephrased, and encrypted securely',
+        message: `Page analyzed by ${geminiModel}, rephrased, and encrypted securely`,
         ai_title: aiData.title,
+        model_used: geminiModel,
         encryption: 'AES-256-GCM'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
