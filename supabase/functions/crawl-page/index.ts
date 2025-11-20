@@ -2,6 +2,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+// @ts-ignore: Deno types
+import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.1.3'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +12,6 @@ const corsHeaders = {
 
 // @ts-ignore: Deno types
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 class CryptoService {
   private key: CryptoKey | null = null;
@@ -53,41 +54,9 @@ class CryptoService {
   }
 }
 
-function decodeHtmlEntities(text: string): string {
-  const entities: { [key: string]: string } = {
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&quot;': '"',
-    '&#39;': "'",
-    '&apos;': "'",
-    '&nbsp;': ' ',
-    '&eacute;': 'é',
-    '&egrave;': 'è',
-    '&ecirc;': 'ê',
-    '&agrave;': 'à',
-    '&acirc;': 'â',
-    '&ocirc;': 'ô',
-    '&ucirc;': 'û',
-    '&ccedil;': 'ç',
-    '&iuml;': 'ï',
-    '&euml;': 'ë',
-  };
-  
-  let decoded = text;
-  for (const [entity, char] of Object.entries(entities)) {
-    decoded = decoded.replace(new RegExp(entity, 'g'), char);
-  }
-  
-  decoded = decoded.replace(/&#(\d+);/g, (match, dec) => {
-    return String.fromCharCode(dec);
-  });
-  
-  decoded = decoded.replace(/&#x([0-9A-Fa-f]+);/g, (match, hex) => {
-    return String.fromCharCode(parseInt(hex, 16));
-  });
-  
-  return decoded;
+function cleanJsonString(str: string): string {
+  // Enlever les balises markdown ```json et ``` si présentes
+  return str.replace(/^```json\s*/, '').replace(/\s*```$/, '');
 }
 
 // @ts-ignore: Deno types
@@ -103,10 +72,11 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     // @ts-ignore: Deno types
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!
+    // @ts-ignore: Deno types
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!
     
-    if (!encryptionKey) {
-      throw new Error('ENCRYPTION_KEY not configured')
-    }
+    if (!encryptionKey) throw new Error('ENCRYPTION_KEY not configured')
+    if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured')
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const cryptoService = new CryptoService()
@@ -121,14 +91,13 @@ serve(async (req) => {
       )
     }
 
-    console.log(`[SECURE CRAWL] Starting encrypted crawl for: ${url}`)
+    console.log(`[AI CRAWL] Starting Gemini-powered crawl for: ${url}`)
 
+    // 1. Fetcher le contenu brut
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'SivaraBot/1.0 (Government Security Demo)',
+        'User-Agent': 'SivaraBot/2.0 (AI Powered Indexer)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
-        'Accept-Charset': 'utf-8',
       },
     })
 
@@ -138,44 +107,80 @@ serve(async (req) => {
 
     const buffer = await response.arrayBuffer()
     const textDecoder = new TextDecoder('utf-8')
-    const html = textDecoder.decode(buffer)
-    
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-    let title = titleMatch ? titleMatch[1].trim() : 'Sans titre'
-    title = decodeHtmlEntities(title)
+    const rawHtml = textDecoder.decode(buffer)
 
-    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
-    let description = descMatch ? descMatch[1].trim() : ''
-    description = decodeHtmlEntities(description)
-
-    let content = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    // 2. Nettoyage pré-IA pour économiser des tokens
+    const cleanedText = rawHtml
+      .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
+      .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 5000)
+      .substring(0, 30000); // Limite large pour Gemini Pro
+
+    // 3. Analyse via Gemini
+    console.log(`[GEMINI] Sending content to Gemini 1.5 Pro for analysis...`)
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+    const prompt = `
+    Tu es un expert en indexation web et analyse sémantique. Analyse le contenu textuel suivant provenant de l'URL: ${url}
     
-    content = decodeHtmlEntities(content)
+    Tâche :
+    1. Identifie le titre principal (le sujet réel de la page).
+    2. Rédige une description concise et accrocheuse (meta description améliorée).
+    3. Reformule le contenu principal en un texte structuré, informatif et dense en informations clés (environ 300-500 mots). Ignore le bruit (menus, footers, pubs).
+    4. Extrais les liens secondaires pertinents (uniquement ceux qui semblent être des articles ou des pages de contenu intéressantes du même domaine).
+
+    Format de réponse attendu (JSON pur uniquement) :
+    {
+      "title": "Titre optimisé",
+      "description": "Description optimisée",
+      "rephrased_content": "Contenu reformulé...",
+      "main_topic": "Sujet principal",
+      "secondary_links": ["url1", "url2", ...]
+    }
+
+    Contenu à analyser :
+    ${cleanedText}
+    `;
+
+    const result = await model.generateContent(prompt);
+    const aiResponseText = result.response.text();
+    
+    let aiData;
+    try {
+      aiData = JSON.parse(cleanJsonString(aiResponseText));
+    } catch (e) {
+      console.error("Erreur parsing JSON Gemini:", e);
+      // Fallback si le JSON est malformé
+      aiData = {
+        title: "Erreur analyse IA",
+        description: "Le contenu n'a pas pu être analysé correctement.",
+        rephrased_content: cleanedText.substring(0, 1000),
+        secondary_links: []
+      };
+    }
+
+    console.log(`[GEMINI] Analysis complete. Title: ${aiData.title}`)
 
     const urlObj = new URL(url)
     const domain = urlObj.hostname
 
-    console.log(`[ENCRYPTION] Encrypting data with AES-256-GCM...`)
+    console.log(`[ENCRYPTION] Encrypting AI-generated data...`)
     
-    // Cryptage militaire de toutes les données sensibles
-    const encryptedTitle = await cryptoService.encrypt(title)
-    const encryptedDescription = await cryptoService.encrypt(description)
-    const encryptedContent = await cryptoService.encrypt(content)
+    // 4. Cryptage des données générées par l'IA
+    const encryptedTitle = await cryptoService.encrypt(aiData.title)
+    const encryptedDescription = await cryptoService.encrypt(aiData.description)
+    const encryptedContent = await cryptoService.encrypt(aiData.rephrased_content) // On stocke la version reformulée par l'IA
     const encryptedUrl = await cryptoService.encrypt(url)
     const encryptedDomain = await cryptoService.encrypt(domain)
     
-    // Création de hash pour la recherche (sans révéler le contenu)
-    const searchHash = await cryptoService.hash(title + ' ' + description + ' ' + content)
-    
-    console.log(`[ENCRYPTION] Data encrypted successfully`)
+    // Hash basé sur le contenu IA pour la recherche
+    const searchHash = await cryptoService.hash(aiData.title + ' ' + aiData.description + ' ' + aiData.rephrased_content)
 
-    const { data, error } = await supabase
+    // 5. Sauvegarde
+    const { error } = await supabase
       .from('crawled_pages')
       .upsert({
         url: encryptedUrl,
@@ -189,34 +194,27 @@ serve(async (req) => {
       }, {
         onConflict: 'url'
       })
-      .select()
 
-    if (error) {
-      console.error('[DATABASE ERROR]', error)
-      throw error
-    }
+    if (error) throw error
 
-    console.log(`[SUCCESS] Encrypted data stored securely`)
-
-    if (maxDepth > 0) {
-      const linkRegex = /<a[^>]*href=["']([^"']+)["']/gi
-      const links: string[] = []
-      let match
-
-      while ((match = linkRegex.exec(html)) !== null) {
-        try {
-          const linkUrl = new URL(match[1], url)
-          if (linkUrl.hostname === domain && linkUrl.protocol.startsWith('http')) {
-            links.push(linkUrl.href)
+    // 6. Gestion des liens secondaires extraits par l'IA
+    if (maxDepth > 0 && aiData.secondary_links && Array.isArray(aiData.secondary_links)) {
+      const validLinks = aiData.secondary_links
+        .filter(link => {
+          try {
+            // Vérifier que le lien est valide et appartient au domaine (ou sous-domaine)
+            const linkUrl = new URL(link, url); // Résoudre les liens relatifs
+            return linkUrl.hostname.includes(domain.replace('www.', '')) || domain.includes(linkUrl.hostname.replace('www.', ''));
+          } catch {
+            return false;
           }
-        } catch (e) {
-          // Ignorer les URLs invalides
-        }
-      }
+        })
+        .map(link => new URL(link, url).href) // Normaliser
+        .slice(0, 5); // Limiter pour ne pas surcharger
 
-      const uniqueLinks = [...new Set(links)].slice(0, 10)
-      
-      for (const link of uniqueLinks) {
+      console.log(`[QUEUE] Adding ${validLinks.length} AI-selected links to queue`)
+
+      for (const link of validLinks) {
         const encryptedLink = await cryptoService.encrypt(link)
         await supabase
           .from('crawl_queue')
@@ -229,10 +227,9 @@ serve(async (req) => {
             ignoreDuplicates: true
           })
       }
-
-      console.log(`[QUEUE] Added ${uniqueLinks.length} encrypted links to queue`)
     }
 
+    // Mettre à jour les stats
     const { data: stats } = await supabase
       .from('crawl_stats')
       .select('*')
@@ -252,10 +249,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Data encrypted and stored with military-grade security',
-        encryption: 'AES-256-GCM',
-        url: '[ENCRYPTED]',
-        title: '[ENCRYPTED]',
+        message: 'Page analyzed by Gemini Pro 1.5, rephrased, and encrypted securely',
+        ai_title: aiData.title,
+        encryption: 'AES-256-GCM'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
