@@ -50,25 +50,20 @@ serve(async (req) => {
   }
 
   try {
-    // @ts-ignore: Deno types
+    // @ts-ignore
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    // @ts-ignore: Deno types
+    // @ts-ignore
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    // @ts-ignore: Deno types
+    // @ts-ignore
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!
     
-    if (!encryptionKey) {
-      throw new Error('ENCRYPTION_KEY not configured')
-    }
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
 
     const { batchSize = 5 } = await req.json()
 
-    console.log(`[SECURE QUEUE] Processing encrypted queue with batch size: ${batchSize}`)
-
+    // On prend les items pending
     const { data: queueItems, error: queueError } = await supabase
       .from('crawl_queue')
       .select('*')
@@ -101,24 +96,28 @@ serve(async (req) => {
 
         // Décrypter l'URL
         const decryptedUrl = await cryptoService.decrypt(item.url)
-        console.log(`[DECRYPTION] Processing encrypted URL`)
-
+        
+        // On appelle le crawler en lui passant l'ID de la queue pour le logging
         const crawlResponse = await fetch(`${supabaseUrl}/functions/v1/crawl-page`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseServiceKey}`,
           },
-          body: JSON.stringify({ url: decryptedUrl, maxDepth: 0 }),
+          body: JSON.stringify({ 
+            url: decryptedUrl, 
+            maxDepth: 0,
+            queueId: item.id // IMPORTANT: On passe l'ID pour les logs
+          }),
         })
 
         if (crawlResponse.ok) {
           await supabase
             .from('crawl_queue')
-            .delete()
+            .update({ status: 'completed' }) // On marque comme completed au lieu de supprimer pour garder l'historique des logs
             .eq('id', item.id)
 
-          results.push({ url: '[ENCRYPTED]', status: 'success' })
+          results.push({ id: item.id, status: 'success' })
         } else {
           throw new Error(`Crawl failed with status: ${crawlResponse.status}`)
         }
@@ -126,39 +125,24 @@ serve(async (req) => {
       } catch (error) {
         console.error(`[ERROR] Processing encrypted item:`, error)
         
-        if (item.attempts >= 3) {
-          await supabase
-            .from('crawl_queue')
-            .update({ 
-              status: 'failed',
-              error_message: error.message
-            })
-            .eq('id', item.id)
-        } else {
-          await supabase
-            .from('crawl_queue')
-            .update({ status: 'pending' })
-            .eq('id', item.id)
-        }
+        await supabase
+          .from('crawl_queue')
+          .update({ 
+            status: 'failed',
+            error_message: error.message
+          })
+          .eq('id', item.id)
 
-        results.push({ url: '[ENCRYPTED]', status: 'error', error: error.message })
+        results.push({ id: item.id, status: 'error', error: error.message })
       }
-
-      await new Promise(resolve => setTimeout(resolve, 1000))
     }
 
     return new Response(
-      JSON.stringify({
-        message: 'Encrypted queue processed',
-        processed: results.length,
-        results,
-        security: 'Military-grade encryption',
-      }),
+      JSON.stringify({ processed: results.length, results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error('[QUEUE ERROR]', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

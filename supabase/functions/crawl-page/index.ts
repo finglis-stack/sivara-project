@@ -64,37 +64,54 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Initialisation Supabase au scope global pour le logging
+  // @ts-ignore
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  // @ts-ignore
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  
+  // Helper pour logger en DB
+  const logToDb = async (queueId: string | null, message: string, step: string, status: string = 'info') => {
+    console.log(`[${step}] ${message}`);
+    if (queueId) {
+      await supabase.from('crawl_logs').insert({
+        queue_id: queueId,
+        message,
+        step,
+        status
+      });
+    }
+  };
+
+  let queueId = null;
+
   try {
-    // @ts-ignore: Deno types
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    // @ts-ignore: Deno types
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    // @ts-ignore: Deno types
+    // @ts-ignore
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!
-    // @ts-ignore: Deno types
+    // @ts-ignore
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!
-    // @ts-ignore: Deno types
-    // Mise à jour par défaut vers Gemini 3 Pro Preview
+    // @ts-ignore
     const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3-pro-preview';
     
     if (!encryptionKey) throw new Error('ENCRYPTION_KEY not configured')
     if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured')
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
 
-    const { url, maxDepth = 1 } = await req.json()
+    const body = await req.json();
+    const url = body.url;
+    const maxDepth = body.maxDepth || 1;
+    queueId = body.queueId || null;
 
-    if (!url) {
-      return new Response(
-        JSON.stringify({ error: 'URL is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    if (!url) throw new Error('URL is required')
 
-    console.log(`[AI CRAWL] Starting AI-powered crawl for: ${url} using model: ${geminiModel}`)
+    await logToDb(queueId, `Starting crawl for: ${url}`, 'INIT', 'info');
+    await logToDb(queueId, `Using AI Model: ${geminiModel}`, 'INIT', 'info');
 
+    // 1. Fetcher le contenu brut
+    await logToDb(queueId, 'Fetching URL content...', 'SCRAPING', 'info');
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'SivaraBot/3.0 (AI Powered Indexer)',
@@ -110,24 +127,23 @@ serve(async (req) => {
     const textDecoder = new TextDecoder('utf-8')
     const rawHtml = textDecoder.decode(buffer)
 
+    await logToDb(queueId, `Content fetched (${rawHtml.length} bytes). Cleaning HTML...`, 'SCRAPING', 'success');
+
+    // 2. Nettoyage
     const cleanedText = rawHtml
       .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
       .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 50000); // Gemini 3 a une fenêtre contextuelle énorme, on peut augmenter la limite
+      .substring(0, 50000);
 
-    console.log(`[GEMINI] Sending content to ${geminiModel} (via v1beta) for analysis...`)
+    // 3. Analyse IA
+    await logToDb(queueId, `Sending ${cleanedText.length} chars to ${geminiModel}...`, 'AI_ANALYSIS', 'info');
     
-    // Instanciation du client Gemini avec le nouveau SDK
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    
-    // Pour les modèles preview/récents, le SDK tape généralement sur la bonne API, 
-    // mais le nom du modèle doit être exact.
     const model = genAI.getGenerativeModel({ 
       model: geminiModel,
-      // Configuration de sécurité pour éviter les blocages inutiles sur du contenu web standard
       safetySettings: [
         { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
         { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
@@ -142,8 +158,8 @@ serve(async (req) => {
     Tâche :
     1. TITRE : Identifie le titre principal (le sujet réel de la page).
     2. DESCRIPTION : Rédige une description concise, accrocheuse et optimisée SEO.
-    3. CONTENU : Reformule le contenu principal en un texte structuré, très dense en informations factuelles (environ 400-600 mots). Supprime tout bruit (menus, footers, pubs, navigation). Synthétise les idées clés.
-    4. LIENS : Extrais les liens secondaires pertinents qui semblent être des articles ou des pages de contenu de qualité sur le même domaine.
+    3. CONTENU : Reformule le contenu principal en un texte structuré, très dense en informations factuelles (environ 400-600 mots). Supprime tout bruit.
+    4. LIENS : Extrais les liens secondaires pertinents.
 
     Format de réponse attendu (JSON pur uniquement) :
     {
@@ -164,8 +180,9 @@ serve(async (req) => {
     let aiData;
     try {
       aiData = JSON.parse(cleanJsonString(aiResponseText));
+      await logToDb(queueId, `AI Analysis successful. Title: ${aiData.title}`, 'AI_ANALYSIS', 'success');
     } catch (e) {
-      console.error("Erreur parsing JSON Gemini:", e);
+      await logToDb(queueId, `JSON Parse Error: ${e.message}`, 'AI_ANALYSIS', 'error');
       aiData = {
         title: "Erreur analyse IA",
         description: "Le contenu n'a pas pu être analysé correctement.",
@@ -174,12 +191,11 @@ serve(async (req) => {
       };
     }
 
-    console.log(`[GEMINI] Analysis complete. Title: ${aiData.title}`)
+    // 4. Cryptage
+    await logToDb(queueId, 'Encrypting data with AES-256-GCM...', 'ENCRYPTION', 'info');
 
     const urlObj = new URL(url)
     const domain = urlObj.hostname
-
-    console.log(`[ENCRYPTION] Encrypting AI-generated data...`)
     
     const encryptedTitle = await cryptoService.encrypt(aiData.title)
     const encryptedDescription = await cryptoService.encrypt(aiData.description)
@@ -188,6 +204,9 @@ serve(async (req) => {
     const encryptedDomain = await cryptoService.encrypt(domain)
     
     const searchHash = await cryptoService.hash(aiData.title + ' ' + aiData.description + ' ' + aiData.rephrased_content)
+
+    // 5. Sauvegarde
+    await logToDb(queueId, 'Saving to encrypted database...', 'SAVING', 'info');
 
     const { error } = await supabase
       .from('crawled_pages')
@@ -206,65 +225,50 @@ serve(async (req) => {
 
     if (error) throw error
 
+    // 6. Liens secondaires
     if (maxDepth > 0 && aiData.secondary_links && Array.isArray(aiData.secondary_links)) {
       const validLinks = aiData.secondary_links
         .filter(link => {
           try {
             const linkUrl = new URL(link, url);
             return linkUrl.hostname.includes(domain.replace('www.', '')) || domain.includes(linkUrl.hostname.replace('www.', ''));
-          } catch {
-            return false;
-          }
+          } catch { return false; }
         })
         .map(link => new URL(link, url).href)
         .slice(0, 5);
 
-      console.log(`[QUEUE] Adding ${validLinks.length} AI-selected links to queue`)
+      await logToDb(queueId, `Found ${validLinks.length} related links`, 'DISCOVERY', 'info');
 
       for (const link of validLinks) {
         const encryptedLink = await cryptoService.encrypt(link)
-        await supabase
-          .from('crawl_queue')
-          .upsert({
+        await supabase.from('crawl_queue').upsert({
             url: encryptedLink,
             priority: maxDepth - 1,
             status: 'pending'
-          }, {
-            onConflict: 'url',
-            ignoreDuplicates: true
-          })
+          }, { onConflict: 'url', ignoreDuplicates: true })
       }
     }
 
-    const { data: stats } = await supabase
-      .from('crawl_stats')
-      .select('*')
-      .single()
+    await logToDb(queueId, 'Crawl completed successfully', 'COMPLETE', 'success');
 
+    // Update stats...
+    const { data: stats } = await supabase.from('crawl_stats').select('*').single()
     if (stats) {
-      await supabase
-        .from('crawl_stats')
-        .update({
+      await supabase.from('crawl_stats').update({
           total_pages: stats.total_pages + 1,
           last_crawl_at: new Date().toISOString(),
           pages_crawled_today: stats.pages_crawled_today + 1,
-        })
-        .eq('id', stats.id)
+        }).eq('id', stats.id)
     }
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        message: `Page analyzed by ${geminiModel}, rephrased, and encrypted securely`,
-        ai_title: aiData.title,
-        model_used: geminiModel,
-        encryption: 'AES-256-GCM'
-      }),
+      JSON.stringify({ success: true }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('[CRAWL ERROR]', error)
+    await logToDb(queueId, `Fatal Error: ${error.message}`, 'ERROR', 'error');
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

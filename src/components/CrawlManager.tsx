@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Plus, Play, Loader2 } from 'lucide-react';
+import { Plus, Play, Loader2, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { showSuccess, showError } from '@/utils/toast';
+import { useNavigate } from 'react-router-dom';
 
 const CrawlManager = () => {
   const [url, setUrl] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const navigate = useNavigate();
 
   const handleAddUrl = async () => {
     if (!url.trim()) {
@@ -20,26 +21,34 @@ const CrawlManager = () => {
     try {
       setIsAdding(true);
       
-      console.log('Crawling URL:', url);
-      
-      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/crawl-page', {
+      // Appel à la fonction add-to-queue qui chiffre et insère (très rapide)
+      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/add-to-queue', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
         },
-        body: JSON.stringify({ url, maxDepth: 1 }),
+        body: JSON.stringify({ url, priority: 1 }),
       });
 
       const data = await response.json();
-      
-      console.log('Crawl response:', response.status, data);
 
       if (!response.ok) {
         throw new Error(data.error || `Erreur HTTP ${response.status}`);
       }
 
-      showSuccess('Page crawlée et cryptée avec succès ! 🔒');
+      showSuccess('URL ajoutée à la file d\'attente sécurisée !');
+      
+      // Déclenchement asynchrone du processeur (Fire & Forget)
+      fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/process-queue', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
+        },
+        body: JSON.stringify({ batchSize: 5 }),
+      }).catch(err => console.error("Trigger process failed", err));
+
       setUrl('');
     } catch (error) {
       console.error('Error adding URL:', error);
@@ -49,44 +58,12 @@ const CrawlManager = () => {
     }
   };
 
-  const handleProcessQueue = async () => {
-    try {
-      setIsProcessing(true);
-      
-      console.log('Processing queue...');
-      
-      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/process-queue', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
-        },
-        body: JSON.stringify({ batchSize: 5 }),
-      });
-
-      const data = await response.json();
-      
-      console.log('Queue response:', response.status, data);
-
-      if (!response.ok) {
-        throw new Error(data.error || `Erreur HTTP ${response.status}`);
-      }
-
-      showSuccess(`${data.processed} pages traitées avec cryptage militaire 🔒`);
-    } catch (error) {
-      console.error('Error processing queue:', error);
-      showError(`Erreur: ${error.message}`);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>Gestion du Crawling Sécurisé</CardTitle>
         <CardDescription>
-          Ajoutez des URLs à crawler - Toutes les données sont cryptées avec AES-256-GCM 🔒
+          Ajoutez des URLs à crawler. Le traitement est asynchrone et sécurisé.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -114,39 +91,29 @@ const CrawlManager = () => {
               {isAdding ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Cryptage...
+                  Ajout...
                 </>
               ) : (
                 <>
                   <Plus className="mr-2 h-4 w-4" />
-                  Crawler
+                  Ajouter à la file
                 </>
               )}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Les données seront automatiquement cryptées avant stockage
+            Les URLs sont chiffrées avant d'être stockées.
           </p>
         </div>
 
-        <div className="pt-4 border-t">
+        <div className="pt-4 border-t flex gap-3">
           <Button 
-            onClick={handleProcessQueue} 
-            disabled={isProcessing}
-            variant="secondary"
+            onClick={() => navigate('/monitor')}
+            variant="outline"
             className="w-full"
           >
-            {isProcessing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Traitement sécurisé en cours...
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" />
-                Traiter la file d'attente
-              </>
-            )}
+            <Activity className="mr-2 h-4 w-4" />
+            Ouvrir le Monitoring Live
           </Button>
         </div>
       </CardContent>
