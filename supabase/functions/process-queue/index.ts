@@ -61,15 +61,15 @@ serve(async (req) => {
     const cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
 
-    const { batchSize = 5 } = await req.json()
+    const { batchSize = 3 } = await req.json() // Défaut à 3 comme demandé
 
-    // On prend les items pending
+    // 1. Récupérer les items (FIFO : older added_at first)
     const { data: queueItems, error: queueError } = await supabase
       .from('crawl_queue')
       .select('*')
       .eq('status', 'pending')
-      .order('priority', { ascending: false })
-      .order('added_at', { ascending: true })
+      .order('priority', { ascending: false }) // Priorité haute d'abord
+      .order('added_at', { ascending: true })  // Premier arrivé, premier servi
       .limit(batchSize)
 
     if (queueError) throw queueError
@@ -81,23 +81,28 @@ serve(async (req) => {
       )
     }
 
-    const results = []
+    console.log(`[PROCESS] Processing batch of ${queueItems.length} items concurrently...`)
 
-    for (const item of queueItems) {
+    // 2. Marquer tout le lot comme "processing" immédiatement pour éviter les doublons
+    const ids = queueItems.map((i: any) => i.id)
+    await supabase
+      .from('crawl_queue')
+      .update({ 
+        status: 'processing',
+        last_attempt_at: new Date().toISOString(),
+        attempts: 0 // On peut incrémenter, mais ici on reset ou +1 selon logique
+      })
+      .in('id', ids)
+
+    // 3. Traiter en parallèle (Promise.all)
+    const results = await Promise.all(queueItems.map(async (item: any) => {
       try {
-        await supabase
-          .from('crawl_queue')
-          .update({ 
-            status: 'processing',
-            last_attempt_at: new Date().toISOString(),
-            attempts: item.attempts + 1
-          })
-          .eq('id', item.id)
-
         // Décrypter l'URL
         const decryptedUrl = await cryptoService.decrypt(item.url)
         
-        // On appelle le crawler en lui passant l'ID de la queue pour le logging
+        console.log(`[PROCESS] Calling crawl-page for item ${item.id}`)
+
+        // Appel du crawler
         const crawlResponse = await fetch(`${supabaseUrl}/functions/v1/crawl-page`, {
           method: 'POST',
           headers: {
@@ -106,25 +111,26 @@ serve(async (req) => {
           },
           body: JSON.stringify({ 
             url: decryptedUrl, 
-            maxDepth: 0,
-            queueId: item.id // IMPORTANT: On passe l'ID pour les logs
+            maxDepth: 0, // On laisse le crawl-page gérer la profondeur si besoin
+            queueId: item.id 
           }),
         })
 
         if (crawlResponse.ok) {
+          // Marquer comme terminé
           await supabase
             .from('crawl_queue')
-            .update({ status: 'completed' }) // On marque comme completed au lieu de supprimer pour garder l'historique des logs
+            .update({ status: 'completed' })
             .eq('id', item.id)
-
-          results.push({ id: item.id, status: 'success' })
+          
+          return { id: item.id, status: 'success' }
         } else {
-          throw new Error(`Crawl failed with status: ${crawlResponse.status}`)
+          throw new Error(`Crawl status: ${crawlResponse.status}`)
         }
-
       } catch (error) {
-        console.error(`[ERROR] Processing encrypted item:`, error)
+        console.error(`[ERROR] Item ${item.id}:`, error)
         
+        // Marquer comme échoué
         await supabase
           .from('crawl_queue')
           .update({ 
@@ -132,10 +138,10 @@ serve(async (req) => {
             error_message: error.message
           })
           .eq('id', item.id)
-
-        results.push({ id: item.id, status: 'error', error: error.message })
+          
+        return { id: item.id, status: 'error', error: error.message }
       }
-    }
+    }))
 
     return new Response(
       JSON.stringify({ processed: results.length, results }),
