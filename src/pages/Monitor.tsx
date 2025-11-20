@@ -3,10 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Terminal, CheckCircle, XCircle, Clock, ArrowLeft, Play, Pause, Activity } from 'lucide-react';
+import { Loader2, Terminal, CheckCircle, XCircle, Clock, ArrowLeft, Activity, Server } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { showSuccess } from '@/utils/toast';
 
 interface QueueItem {
   id: string;
@@ -29,8 +28,6 @@ const Monitor = () => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogItem[]>([]);
-  const [isAutoProcessing, setIsAutoProcessing] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch initial queue
@@ -40,7 +37,7 @@ const Monitor = () => {
         .from('crawl_queue')
         .select('*')
         .order('added_at', { ascending: false })
-        .limit(50); // Increased limit to see backlog
+        .limit(50);
       if (data) setQueue(data);
     };
 
@@ -62,44 +59,6 @@ const Monitor = () => {
       supabase.removeChannel(channel);
     };
   }, []);
-
-  // "Cron" Client-Side : Vérifie et lance le traitement toutes les 3 secondes
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    if (isAutoProcessing) {
-      interval = setInterval(async () => {
-        // Ne pas lancer si déjà en cours ou si pas de items pending
-        const hasPending = queue.some(item => item.status === 'pending');
-        
-        if (!isProcessing && hasPending) {
-          setIsProcessing(true);
-          console.log("Auto-processing triggered...");
-          
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            // On appelle la fonction sans attendre le retour pour ne pas bloquer l'UI
-            // Mais on met isProcessing à true pour éviter de spammer la requête
-            await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/process-queue', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session?.access_token || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs'}`,
-              },
-              body: JSON.stringify({ batchSize: 3 }), // Roule 3 à la fois
-            });
-          } catch (err) {
-            console.error("Auto-process error", err);
-          } finally {
-            // On relâche le verrou après un court délai pour permettre le prochain tick
-            setTimeout(() => setIsProcessing(false), 1000);
-          }
-        }
-      }, 3000); // 3 secondes
-    }
-
-    return () => clearInterval(interval);
-  }, [isAutoProcessing, isProcessing, queue]);
 
   // Fetch logs for selected item
   useEffect(() => {
@@ -161,6 +120,7 @@ const Monitor = () => {
   };
 
   const pendingCount = queue.filter(i => i.status === 'pending').length;
+  const processingCount = queue.filter(i => i.status === 'processing').length;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
@@ -172,32 +132,23 @@ const Monitor = () => {
               Retour
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">Monitoring Temps Réel</h1>
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                <span>{pendingCount} en attente</span>
-                {isProcessing && <span className="text-blue-400 animate-pulse">• Traitement en cours...</span>}
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                Monitoring Serveur
+                <Badge variant="secondary" className="bg-gray-800 text-gray-300 font-normal text-xs ml-2">
+                  <Server className="w-3 h-3 mr-1" />
+                  pg_cron actif
+                </Badge>
+              </h1>
+              <div className="flex items-center gap-3 text-sm text-gray-400 mt-1">
+                <span className={pendingCount > 0 ? "text-yellow-500" : ""}>{pendingCount} en attente</span>
+                <span>•</span>
+                <span className={processingCount > 0 ? "text-blue-400 font-bold animate-pulse" : ""}>
+                  {processingCount} en cours de traitement
+                </span>
               </div>
             </div>
           </div>
           <div className="flex gap-3">
-             <Button 
-              variant={isAutoProcessing ? "default" : "secondary"}
-              size="sm"
-              onClick={() => setIsAutoProcessing(!isAutoProcessing)}
-              className={`${isAutoProcessing ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-700'}`}
-            >
-              {isAutoProcessing ? (
-                <>
-                  <Pause className="mr-2 h-4 w-4" />
-                  Auto-Process On
-                </>
-              ) : (
-                <>
-                  <Play className="mr-2 h-4 w-4" />
-                  Auto-Process Off
-                </>
-              )}
-            </Button>
             <Badge variant="outline" className="bg-green-900/20 text-green-400 border-green-900">
               Gemini 3.0 Pro
             </Badge>
