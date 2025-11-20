@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 // @ts-ignore: Deno types
-import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.1.3'
+import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.12.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -74,8 +74,8 @@ serve(async (req) => {
     // @ts-ignore: Deno types
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!
     // @ts-ignore: Deno types
-    // Utilise GEMINI_MODEL si défini, sinon fallback sur gemini-1.5-pro
-    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-1.5-pro';
+    // Mise à jour par défaut vers Gemini 3 Pro Preview
+    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3-pro-preview';
     
     if (!encryptionKey) throw new Error('ENCRYPTION_KEY not configured')
     if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured')
@@ -95,7 +95,6 @@ serve(async (req) => {
 
     console.log(`[AI CRAWL] Starting AI-powered crawl for: ${url} using model: ${geminiModel}`)
 
-    // 1. Fetcher le contenu brut
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'SivaraBot/3.0 (AI Powered Indexer)',
@@ -111,19 +110,31 @@ serve(async (req) => {
     const textDecoder = new TextDecoder('utf-8')
     const rawHtml = textDecoder.decode(buffer)
 
-    // 2. Nettoyage pré-IA
     const cleanedText = rawHtml
       .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
       .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 40000); // Augmentation de la limite de tokens pour les modèles Pro
+      .substring(0, 50000); // Gemini 3 a une fenêtre contextuelle énorme, on peut augmenter la limite
 
-    // 3. Analyse via Gemini
-    console.log(`[GEMINI] Sending content to ${geminiModel} for analysis...`)
+    console.log(`[GEMINI] Sending content to ${geminiModel} (via v1beta) for analysis...`)
+    
+    // Instanciation du client Gemini avec le nouveau SDK
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: geminiModel });
+    
+    // Pour les modèles preview/récents, le SDK tape généralement sur la bonne API, 
+    // mais le nom du modèle doit être exact.
+    const model = genAI.getGenerativeModel({ 
+      model: geminiModel,
+      // Configuration de sécurité pour éviter les blocages inutiles sur du contenu web standard
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+      ]
+    });
 
     const prompt = `
     Tu es un expert en indexation web sémantique avancée. Analyse le contenu textuel suivant provenant de l'URL: ${url}
@@ -170,7 +181,6 @@ serve(async (req) => {
 
     console.log(`[ENCRYPTION] Encrypting AI-generated data...`)
     
-    // 4. Cryptage des données générées par l'IA
     const encryptedTitle = await cryptoService.encrypt(aiData.title)
     const encryptedDescription = await cryptoService.encrypt(aiData.description)
     const encryptedContent = await cryptoService.encrypt(aiData.rephrased_content)
@@ -179,7 +189,6 @@ serve(async (req) => {
     
     const searchHash = await cryptoService.hash(aiData.title + ' ' + aiData.description + ' ' + aiData.rephrased_content)
 
-    // 5. Sauvegarde
     const { error } = await supabase
       .from('crawled_pages')
       .upsert({
@@ -197,7 +206,6 @@ serve(async (req) => {
 
     if (error) throw error
 
-    // 6. Gestion des liens secondaires
     if (maxDepth > 0 && aiData.secondary_links && Array.isArray(aiData.secondary_links)) {
       const validLinks = aiData.secondary_links
         .filter(link => {
@@ -228,7 +236,6 @@ serve(async (req) => {
       }
     }
 
-    // Mettre à jour les stats
     const { data: stats } = await supabase
       .from('crawl_stats')
       .select('*')
