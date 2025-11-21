@@ -44,6 +44,7 @@ const DocEditor = () => {
   const [content, setContent] = useState('');
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const contentRef = useRef<HTMLDivElement>(null);
+  const isUpdatingFromRemoteRef = useRef(false);
 
   useEffect(() => {
     if (!user || !id) {
@@ -65,11 +66,15 @@ const DocEditor = () => {
         const updated = payload.new as Document;
         // Ne pas écraser si l'utilisateur est en train de taper
         if (!saveTimeoutRef.current) {
+          isUpdatingFromRemoteRef.current = true;
           setTitle(updated.title);
           setContent(updated.content);
           if (contentRef.current) {
             contentRef.current.innerHTML = updated.content;
           }
+          setTimeout(() => {
+            isUpdatingFromRemoteRef.current = false;
+          }, 100);
         }
       })
       .subscribe();
@@ -109,7 +114,7 @@ const DocEditor = () => {
     }
   };
 
-  const saveDocument = async (newTitle?: string, newContent?: string) => {
+  const saveDocument = async (newTitle: string, newContent: string) => {
     if (!id) return;
 
     try {
@@ -118,8 +123,8 @@ const DocEditor = () => {
       const { error } = await supabase
         .from('documents')
         .update({
-          title: newTitle ?? title,
-          content: newContent ?? content,
+          title: newTitle,
+          content: newContent,
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
@@ -147,7 +152,7 @@ const DocEditor = () => {
   };
 
   const handleContentChange = () => {
-    if (!contentRef.current) return;
+    if (!contentRef.current || isUpdatingFromRemoteRef.current) return;
 
     const newContent = contentRef.current.innerHTML;
     setContent(newContent);
@@ -231,6 +236,7 @@ const DocEditor = () => {
 
   const applyFormat = (command: string, value?: string) => {
     window.document.execCommand(command, false, value);
+    contentRef.current?.focus();
     handleContentChange();
   };
 
@@ -271,6 +277,11 @@ const DocEditor = () => {
                 <span className="text-sm text-gray-500 flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Enregistrement...
+                </span>
+              )}
+              {!isSaving && content && (
+                <span className="text-sm text-gray-500">
+                  Enregistré
                 </span>
               )}
             </div>
@@ -340,6 +351,7 @@ const DocEditor = () => {
               <select
                 onChange={(e) => applyFormat('formatBlock', e.target.value)}
                 className="px-3 py-1 border border-gray-200 rounded text-sm bg-white"
+                defaultValue="p"
               >
                 <option value="p">Normal</option>
                 <option value="h1">Titre 1</option>
@@ -402,7 +414,10 @@ const DocEditor = () => {
             ref={contentRef}
             contentEditable
             onInput={handleContentChange}
-            className="min-h-[calc(100vh-300px)] outline-none prose prose-lg max-w-none"
+            onBlur={handleContentChange}
+            onKeyUp={handleContentChange}
+            suppressContentEditableWarning
+            className="min-h-[calc(100vh-300px)] outline-none prose prose-lg max-w-none focus:outline-none"
             style={{
               fontFamily: 'Georgia, serif',
               fontSize: '16px',
