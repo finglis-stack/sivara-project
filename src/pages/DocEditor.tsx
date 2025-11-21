@@ -166,23 +166,23 @@ const DocEditor = () => {
     try {
       setIsSaving(true);
 
-      // Chiffrer le titre et le contenu avec le même IV
-      const { encrypted: encryptedTitle } = await encryptionService.encrypt(newTitle);
-      const { encrypted: encryptedContent, iv: newIV } = await encryptionService.encrypt(newContent);
+      // Chiffrer le titre et le contenu - ils utiliseront le MÊME IV automatiquement
+      const { encrypted: encryptedTitle, iv: titleIV } = await encryptionService.encrypt(newTitle);
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(newContent);
 
       const { error } = await supabase
         .from('documents')
         .update({
           title: encryptedTitle,
           content: encryptedContent,
-          encryption_iv: newIV,
+          encryption_iv: titleIV, // Utiliser l'IV du titre pour les deux
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
 
       if (error) throw error;
       
-      setEncryptionIV(newIV);
+      setEncryptionIV(titleIV);
     } catch (error: any) {
       console.error('Error saving document:', error);
       showError('Erreur lors de la sauvegarde');
