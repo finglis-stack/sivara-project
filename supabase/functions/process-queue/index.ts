@@ -131,27 +131,28 @@ serve(async (req) => {
         })
 
         if (crawlResponse.ok) {
+          // Check if it was skipped
+          const resJson = await crawlResponse.json().catch(() => ({}));
+          
           await supabase
             .from('crawl_queue')
             .update({ status: 'completed' })
             .eq('id', item.id)
           
-          return { id: item.id, status: 'success' }
+          return { id: item.id, status: 'success', skipped: resJson.skipped }
         } else {
           throw new Error(`Crawl status: ${crawlResponse.status}`)
         }
       } catch (error) {
         console.error(`[ERROR] Item ${item.id}:`, error)
         
-        await supabase
-          .from('crawl_queue')
-          .update({ 
-            status: 'failed',
-            error_message: error.message
-          })
-          .eq('id', item.id)
+        // SUPPRESSION AUTOMATIQUE SI ERREUR (ex: 500, 404, etc.)
+        // On supprime les logs associés d'abord pour éviter les soucis de clé étrangère
+        await supabase.from('crawl_logs').delete().eq('queue_id', item.id)
+        // On supprime l'élément de la file
+        await supabase.from('crawl_queue').delete().eq('id', item.id)
           
-        return { id: item.id, status: 'error', error: error.message }
+        return { id: item.id, status: 'deleted_on_error', error: error.message }
       }
     }))
 
