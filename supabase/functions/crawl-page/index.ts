@@ -71,15 +71,29 @@ function cleanJsonString(str: string): string {
   return clean;
 }
 
-function extractLinks(html: string, baseUrl: string): { url: string, text: string }[] {
+function extractLinks(content: string, baseUrl: string, isMarkdown: boolean): { url: string, text: string }[] {
   const links: { url: string, text: string }[] = [];
-  const regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
+  let regex;
+
+  if (isMarkdown) {
+    // Regex pour Markdown [text](url)
+    regex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
+  } else {
+    // Regex pour HTML <a href="...">
+    regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
+  }
+
   let match;
-  
-  while ((match = regex.exec(html)) !== null) {
+  while ((match = regex.exec(content)) !== null) {
     try {
-      const href = match[1];
-      const text = match[2].replace(/<[^>]+>/g, '').trim();
+      let href, text;
+      if (isMarkdown) {
+        text = match[1];
+        href = match[2];
+      } else {
+        href = match[1];
+        text = match[2].replace(/<[^>]+>/g, '').trim();
+      }
       
       if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || !text) continue;
       if (text.length < 3) continue;
@@ -87,6 +101,7 @@ function extractLinks(html: string, baseUrl: string): { url: string, text: strin
       const absoluteUrl = new URL(href, baseUrl);
       
       const h = absoluteUrl.hostname;
+      // Filtre anti-réseaux sociaux basique
       if (h.includes('facebook.') || h.includes('twitter.') || h.includes('x.com') || 
           h.includes('instagram.') || h.includes('linkedin.') || h.includes('pinterest.') ||
           h.includes('google.') || h.includes('youtube.') || h.includes('tiktok.')) {
@@ -152,60 +167,87 @@ serve(async (req) => {
 
     await logToDb(queueId, `Processing: ${url}`, 'INIT', 'info');
 
-    // Simulation d'un navigateur moderne pour éviter les 403
-    const response = await fetch(url, {
-      redirect: 'follow',
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Sec-Ch-Ua': '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-        'Cache-Control': 'max-age=0'
-      },
-    })
+    let rawContent = '';
+    let isMarkdown = false;
+    let fetchStatus = 200;
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} - Access Denied/Protected`)
+    // --- STRATÉGIE DE FETCH ---
+    try {
+      // 1. Tentative directe avec headers Chrome
+      await logToDb(queueId, 'Trying direct access...', 'FETCH_DIRECT', 'info');
+      const response = await fetch(url, {
+        redirect: 'follow',
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Referer': 'https://www.google.com/',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"Windows"'
+        },
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      rawContent = await response.text();
+      fetchStatus = response.status;
+    } catch (directError) {
+      // 2. FALLBACK "MAGOUILLE" : Proxy Jina AI
+      console.error('Direct fetch failed:', directError);
+      await logToDb(queueId, `Direct failed (${directError.message}). Switching to Proxy Mode.`, 'FETCH_PROXY', 'warning');
+      
+      try {
+        const jinaUrl = `https://r.jina.ai/${url}`;
+        const proxyResponse = await fetch(jinaUrl, {
+           headers: {
+             'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+           }
+        });
+        
+        if (!proxyResponse.ok) throw new Error(`Proxy HTTP ${proxyResponse.status}`);
+        
+        rawContent = await proxyResponse.text();
+        isMarkdown = true; // Jina renvoie du Markdown
+        fetchStatus = proxyResponse.status;
+        await logToDb(queueId, 'Proxy access successful!', 'FETCH_PROXY', 'success');
+      } catch (proxyError) {
+        throw new Error(`All fetch methods failed. Last error: ${proxyError.message}`);
+      }
+    }
+    // ---------------------------
+
+    const candidateLinks = extractLinks(rawContent, url, isMarkdown);
+    
+    // Nettoyage selon le format
+    let cleanedText = '';
+    if (isMarkdown) {
+      // Pour le Markdown, on garde le début brut, c'est déjà propre
+      cleanedText = rawContent.substring(0, 3000);
+    } else {
+      // Pour le HTML, on nettoie
+      cleanedText = rawContent
+        .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
+        .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 3000);
     }
 
-    const buffer = await response.arrayBuffer()
-    const textDecoder = new TextDecoder('utf-8')
-    const rawHtml = textDecoder.decode(buffer)
-
-    const candidateLinks = extractLinks(rawHtml, url);
-    
-    const cleanedText = rawHtml
-      .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
-      .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 3000);
-
-    await logToDb(queueId, `AI Analysis...`, 'AI_ANALYSIS', 'info');
+    await logToDb(queueId, `AI Analysis (${isMarkdown ? 'Markdown' : 'HTML'})...`, 'AI_ANALYSIS', 'info');
     
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    
     const model = genAI.getGenerativeModel({ 
       model: geminiModel,
       generationConfig: { responseMimeType: "application/json" }
     });
 
     const prompt = `
-    Analyse cette page. Retourne JSON.
+    Analyse ce contenu (${isMarkdown ? 'Markdown' : 'HTML'}). Retourne JSON.
     URL: ${url}
     
-    Links to analyze: ${JSON.stringify(candidateLinks)}
-    
-    Page Start: ${cleanedText}
+    Content Start: ${cleanedText}
 
     JSON Expected:
     {
@@ -217,11 +259,8 @@ serve(async (req) => {
       ]
     }
     
-    Priorities:
-    10: Important content/product
-    8: External sources/partners
-    5: General info
-    0: Useless/Social/Login
+    Note for discovered_urls: Use this list of links found in the source: 
+    ${JSON.stringify(candidateLinks)}
     `;
 
     const result = await model.generateContent(prompt);
@@ -239,7 +278,7 @@ serve(async (req) => {
       };
     }
 
-    await logToDb(queueId, 'Saving...', 'ENCRYPTION', 'info');
+    await logToDb(queueId, 'Encryption & Save...', 'SAVE', 'info');
 
     const urlObj = new URL(url)
     const domain = urlObj.hostname
@@ -260,7 +299,7 @@ serve(async (req) => {
         description: encryptedDescription,
         content: encryptedContent,
         domain: encryptedDomain,
-        http_status: response.status,
+        http_status: fetchStatus,
         status: 'success',
         search_hash: searchHash,
         updated_at: new Date().toISOString()
@@ -270,6 +309,7 @@ serve(async (req) => {
 
     if (error) throw error
 
+    // Sauvegarde des nouveaux liens trouvés
     if (aiData.discovered_urls && Array.isArray(aiData.discovered_urls)) {
       const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 6);
       
@@ -291,11 +331,10 @@ serve(async (req) => {
 
     await logToDb(queueId, 'Done', 'COMPLETE', 'success');
 
-    // FIX: Utilisation de await au lieu de .catch() sur l'objet RPC
     try {
       await supabase.rpc('increment_crawl_stats')
     } catch (rpcError) {
-      console.error('Failed to update stats', rpcError)
+      console.error('Stats update failed', rpcError)
     }
 
     return new Response(
