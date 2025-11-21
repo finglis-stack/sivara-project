@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
@@ -23,13 +24,33 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+            {/* Routes Publiques */}
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/monitor" element={<Monitor />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/docs" element={<Docs />} />
-            <Route path="/docs/:id" element={<DocEditor />} />
+            
+            {/* Routes Protégées */}
+            <Route path="/monitor" element={
+              <ProtectedRoute>
+                <Monitor />
+              </ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            } />
+            <Route path="/docs" element={
+              <ProtectedRoute>
+                <Docs />
+              </ProtectedRoute>
+            } />
+            <Route path="/docs/:id" element={
+              <ProtectedRoute>
+                <DocEditor />
+              </ProtectedRoute>
+            } />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
