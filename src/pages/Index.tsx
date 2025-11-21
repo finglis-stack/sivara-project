@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import SearchBar from '@/components/SearchBar';
 import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
 import UserMenu from '@/components/UserMenu';
 import { showError } from '@/utils/toast';
-import { Settings } from 'lucide-react';
+import { Settings, Sparkles, ArrowRight, Globe, Zap, Shield } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface SearchResultType {
   id: string;
@@ -90,8 +90,6 @@ const Index = () => {
 
       const data = await response.json();
       
-      console.log('Search response:', data);
-
       if (!response.ok) {
         console.error('Search error:', data);
         showError(data.details || 'Erreur lors de la recherche');
@@ -102,10 +100,6 @@ const Index = () => {
 
       setResults(data.results || []);
       setTotalResults(data.total || 0);
-      
-      if (!data.results || data.results.length === 0) {
-        console.log('No results found');
-      }
     } catch (error) {
       console.error('Search error:', error);
       showError('Erreur de connexion au serveur de recherche');
@@ -118,14 +112,15 @@ const Index = () => {
 
   const groupedResults = groupResultsByDomain(results);
 
+  // Vue de gestion (Crawl Manager)
   if (showManage) {
     return (
-      <div className="min-h-screen bg-white">
-        <div className="container mx-auto px-4 py-8">
+      <div className="min-h-screen bg-white font-sans">
+        <div className="container mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-8">
             <button 
               onClick={() => setShowManage(false)}
-              className="text-2xl font-bold text-gray-700 hover:text-gray-900 transition-colors"
+              className="text-2xl font-bold text-gray-900 hover:text-gray-700 transition-colors tracking-tight"
             >
               Sivara
             </button>
@@ -133,7 +128,7 @@ const Index = () => {
           </div>
           
           <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h1 className="text-3xl font-bold text-gray-900 mb-6">Gestion du Crawler</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-6 tracking-tight">Centre de contrôle</h1>
             <StatsDisplay />
             <CrawlManager />
           </div>
@@ -143,21 +138,28 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header avec logo texte */}
+    <div className="min-h-screen bg-white font-sans selection:bg-black selection:text-white">
+      {/* Header conditionnel : Transparent sur l'accueil, Blanc sur les résultats */}
       {hasSearched && (
-        <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200">
-          <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-700">
+        <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+          <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+            <button 
+              onClick={() => {
+                setHasSearched(false);
+                setResults([]);
+                setTotalResults(0);
+              }}
+              className="text-xl font-bold text-gray-900 tracking-tight hover:opacity-70 transition-opacity"
+            >
               Sivara
-            </h1>
-            <div className="flex items-center gap-3">
+            </button>
+            <div className="flex items-center gap-4">
               <button
                 onClick={() => setShowManage(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 text-gray-700"
+                className="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-all duration-300"
+                title="Gérer l'indexation"
               >
-                <Settings size={18} />
-                <span className="text-sm font-medium">Gestion</span>
+                <Settings size={20} strokeWidth={1.5} />
               </button>
               <UserMenu />
             </div>
@@ -165,47 +167,96 @@ const Index = () => {
         </header>
       )}
 
-      <div className={hasSearched ? "pt-20" : ""}>
+      <div className={hasSearched ? "pt-24" : ""}>
         {!hasSearched ? (
-          // Landing page
-          <div className="container mx-auto px-4">
-            <div className="min-h-screen flex flex-col items-center justify-center relative">
-              {/* Boutons en haut à droite */}
-              <div className="absolute top-8 right-8 flex items-center gap-3">
-                <button
-                  onClick={() => setShowManage(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 text-gray-700"
-                >
-                  <Settings size={18} />
-                  <span className="text-sm font-medium">Gestion</span>
-                </button>
-                <UserMenu />
+          // === LANDING PAGE ===
+          <div className="relative min-h-screen w-full overflow-hidden flex flex-col">
+             {/* Navbar Transparente Landing */}
+            <nav className="absolute top-0 w-full z-50 border-b border-white/10 bg-black/10 backdrop-blur-sm">
+              <div className="container mx-auto px-6 h-20 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {/* Logo blanc */}
+                  <div className="h-9 w-9 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 shadow-inner">
+                    <span className="text-white font-bold text-lg">S</span>
+                  </div>
+                  <span className="font-medium text-lg tracking-wide text-white drop-shadow-md">Sivara</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setShowManage(true)}
+                    className="text-white/80 hover:text-white transition-colors text-sm font-medium hidden sm:block"
+                  >
+                    Contribution
+                  </button>
+                  <UserMenu />
+                </div>
               </div>
+            </nav>
 
-              <div className="text-center mb-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <h1 className="text-8xl font-bold mb-4 text-gray-700 animate-in zoom-in duration-1000">
-                  Sivara
+            {/* Background Hero */}
+            <div 
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105 animate-in fade-in duration-1000"
+              style={{ 
+                backgroundImage: 'url(/search-hero.jpg)',
+                backgroundPosition: 'center center'
+              }}
+            >
+              {/* Overlay sombre élégant */}
+              <div className="absolute inset-0 bg-black/40"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+            </div>
+
+            {/* Contenu Principal Centré */}
+            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-5xl mx-auto mt-10">
+              <div className="w-full max-w-3xl space-y-8 text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-medium shadow-lg mb-4">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>L'information, pure et simple</span>
+                </div>
+
+                <h1 className="text-5xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-2xl leading-[1.1]">
+                  Explorez le web <br/>
+                  <span className="font-light text-white/90">autrement.</span>
                 </h1>
-                <p className="text-xl text-gray-500 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-                  Moteur de recherche intelligent avec web scraping
+                
+                <p className="text-lg md:text-xl text-white/80 font-light max-w-xl mx-auto leading-relaxed drop-shadow-md mb-8">
+                  Un moteur de recherche respectueux, rapide et précis. 
+                  Trouvez ce qui compte vraiment, sans le bruit.
                 </p>
-              </div>
 
-              <div className="w-full max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-                <SearchBar onSearch={handleSearch} isLoading={isSearching} />
-              </div>
+                {/* Barre de recherche */}
+                <div className="w-full transform transition-all duration-300 hover:scale-[1.02]">
+                  <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+                </div>
 
-              {/* Animations décoratives neutres */}
-              <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-                <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-gray-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-                <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-gray-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
-                <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-gray-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+                {/* Suggestions / Tags rapides */}
+                <div className="flex flex-wrap justify-center gap-3 pt-4 opacity-80">
+                  {['Technologie', 'Science', 'Design', 'Actualités'].map((tag) => (
+                    <button 
+                      key={tag}
+                      onClick={() => handleSearch(tag)}
+                      className="px-4 py-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-white/90 text-sm transition-all backdrop-blur-sm"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Landing minimaliste */}
+            <div className="relative z-10 w-full py-6 border-t border-white/10 bg-black/20 backdrop-blur-sm">
+              <div className="container mx-auto px-6 flex justify-center gap-8 text-xs text-white/60 font-medium uppercase tracking-widest">
+                <span className="flex items-center gap-2"><Shield className="w-3 h-3" /> Privé</span>
+                <span className="flex items-center gap-2"><Zap className="w-3 h-3" /> Rapide</span>
+                <span className="flex items-center gap-2"><Globe className="w-3 h-3" /> Universel</span>
               </div>
             </div>
           </div>
         ) : (
-          // Page de résultats
-          <div className="container mx-auto px-4 py-8">
+          // === RESULTATS ===
+          <div className="container mx-auto px-4 pb-12">
             <div className="max-w-4xl mx-auto mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
               <SearchBar onSearch={handleSearch} isLoading={isSearching} />
             </div>
@@ -213,15 +264,15 @@ const Index = () => {
             <div className="max-w-5xl mx-auto">
               {isSearching ? (
                 <div className="text-center py-20 animate-in fade-in duration-500">
-                  <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-gray-400"></div>
-                  <p className="mt-6 text-xl text-gray-600">Recherche en cours...</p>
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+                  <p className="mt-6 text-lg text-gray-500 font-light">Exploration en cours...</p>
                 </div>
               ) : groupedResults.length > 0 ? (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <p className="text-sm text-gray-600 mb-6 px-2">
-                    Environ {totalResults} résultat{totalResults > 1 ? 's' : ''}
+                  <p className="text-sm text-gray-400 mb-6 px-2 font-medium tracking-wide uppercase">
+                    {totalResults} résultat{totalResults > 1 ? 's' : ''} trouvé{totalResults > 1 ? 's' : ''}
                   </p>
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {groupedResults.map((group, index) => (
                       <div 
                         key={group.mainResult.id}
@@ -244,12 +295,14 @@ const Index = () => {
                 </div>
               ) : (
                 <div className="text-center py-20 animate-in fade-in duration-500">
-                  <div className="text-6xl mb-4">🔍</div>
-                  <p className="text-2xl text-gray-600 mb-2">
-                    Aucun résultat trouvé
-                  </p>
-                  <p className="text-gray-500">
-                    Essayez une autre recherche ou ajoutez plus de pages à crawler
+                  <div className="h-24 w-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Globe className="h-10 w-10 text-gray-300" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    Aucun résultat
+                  </h3>
+                  <p className="text-gray-500 max-w-md mx-auto">
+                    Nous n'avons rien trouvé pour cette recherche. Essayez d'autres mots-clés ou vérifiez l'orthographe.
                   </p>
                 </div>
               )}
