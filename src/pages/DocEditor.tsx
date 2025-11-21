@@ -110,7 +110,7 @@ const DocEditor = () => {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[calc(100vh-300px)]',
+        class: 'prose prose-lg max-w-none outline-none focus:outline-none',
       },
     },
     onUpdate: ({ editor }) => {
@@ -148,7 +148,6 @@ const DocEditor = () => {
             setSelectedIcon(updated.icon || 'FileText');
             setSelectedColor(updated.color || '#3B82F6');
             
-            // Préserver la position du curseur si possible, sinon juste mettre à jour
             if (editor.getHTML() !== decryptedContent) {
                 editor.commands.setContent(decryptedContent);
             }
@@ -205,7 +204,6 @@ const DocEditor = () => {
       setSelectedIcon(data.icon || 'FileText');
       setSelectedColor(data.color || '#3B82F6');
       
-      // Important: Set content for Tiptap
       editor.commands.setContent(decryptedContent);
       
     } catch (error: any) {
@@ -326,6 +324,14 @@ const DocEditor = () => {
     }
   };
 
+  const exportToPDF = () => {
+    showError('Fonctionnalité PDF en cours de développement');
+  };
+
+  const shareDocument = () => {
+    showError('Fonctionnalité de partage en cours de développement');
+  };
+
   const getIconTextColor = (bgColor: string) => {
     const hex = bgColor.replace('#', '');
     const r = parseInt(hex.substr(0, 2), 16);
@@ -351,11 +357,12 @@ const DocEditor = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="border-b border-gray-200 sticky top-0 z-10 bg-white">
-        <div className="container mx-auto px-6 py-3">
-          <div className="flex items-center justify-between">
+    <div className="min-h-screen flex flex-col bg-[#F8F9FA]">
+      {/* Header (Sticky) */}
+      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
+        {/* Top Bar */}
+        <div className="px-6 py-3">
+          <div className="flex items-center justify-between max-w-7xl mx-auto">
             <div className="flex items-center gap-4 flex-1">
               <Button variant="ghost" size="icon" onClick={() => navigate('/docs')}>
                 <ArrowLeft className="h-5 w-5" />
@@ -399,7 +406,21 @@ const DocEditor = () => {
               <Button variant="ghost" size="icon" onClick={toggleStar}>
                 <Star className={`h-5 w-5 ${document?.is_starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
               </Button>
-              {/* Autres boutons d'action... */}
+
+              <Button variant="ghost" size="icon" onClick={shareDocument}>
+                <Users className="h-5 w-5" />
+              </Button>
+
+              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex">
+                <Download className="mr-2 h-4 w-4" />
+                PDF
+              </Button>
+
+              <Button onClick={shareDocument} className="bg-gray-700 hover:bg-gray-800 hidden sm:flex">
+                <Share2 className="mr-2 h-4 w-4" />
+                Partager
+              </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon">
@@ -416,118 +437,136 @@ const DocEditor = () => {
           </div>
         </div>
 
-        {/* Toolbar de l'éditeur */}
-        <div className="border-t border-gray-200 bg-gray-50 px-6 py-2 flex items-center gap-1 flex-wrap">
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('heading', { level: 1 })}
-                onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-                aria-label="Titre 1"
-            >
-                <Heading1 className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('heading', { level: 2 })}
-                onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-                aria-label="Titre 2"
-            >
-                <Heading2 className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('heading', { level: 3 })}
-                onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-                aria-label="Titre 3"
-            >
-                <Heading3 className="h-4 w-4" />
-            </Toggle>
-            
-            <div className="h-6 w-px bg-gray-300 mx-2" />
+        {/* Toolbar de l'éditeur (Centrée) */}
+        <div className="border-t border-gray-200 bg-[#F8F9FA] px-4 py-2 flex justify-center items-center gap-1 flex-wrap shadow-inner">
+            <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 py-1 gap-1">
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('heading', { level: 1 })}
+                    onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
+                    aria-label="Titre 1"
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <Heading1 className="h-4 w-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('heading', { level: 2 })}
+                    onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+                    aria-label="Titre 2"
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <Heading2 className="h-4 w-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('heading', { level: 3 })}
+                    onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+                    aria-label="Titre 3"
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <Heading3 className="h-4 w-4" />
+                </Toggle>
+                
+                <div className="h-6 w-px bg-gray-200 mx-1" />
 
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('bold')}
-                onPressedChange={() => editor?.chain().focus().toggleBold().run()}
-                aria-label="Gras"
-            >
-                <Bold className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('italic')}
-                onPressedChange={() => editor?.chain().focus().toggleItalic().run()}
-                aria-label="Italique"
-            >
-                <Italic className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('underline')}
-                onPressedChange={() => editor?.chain().focus().toggleUnderline().run()}
-                aria-label="Souligné"
-            >
-                <UnderlineIcon className="h-4 w-4" />
-            </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('bold')}
+                    onPressedChange={() => editor?.chain().focus().toggleBold().run()}
+                    aria-label="Gras"
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <Bold className="h-4 w-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('italic')}
+                    onPressedChange={() => editor?.chain().focus().toggleItalic().run()}
+                    aria-label="Italique"
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <Italic className="h-4 w-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('underline')}
+                    onPressedChange={() => editor?.chain().focus().toggleUnderline().run()}
+                    aria-label="Souligné"
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <UnderlineIcon className="h-4 w-4" />
+                </Toggle>
 
-            <div className="h-6 w-px bg-gray-300 mx-2" />
+                <div className="h-6 w-px bg-gray-200 mx-1" />
 
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('bulletList')}
-                onPressedChange={() => editor?.chain().focus().toggleBulletList().run()}
-            >
-                <List className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('orderedList')}
-                onPressedChange={() => editor?.chain().focus().toggleOrderedList().run()}
-            >
-                <ListOrdered className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive('blockquote')}
-                onPressedChange={() => editor?.chain().focus().toggleBlockquote().run()}
-            >
-                <Quote className="h-4 w-4" />
-            </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('bulletList')}
+                    onPressedChange={() => editor?.chain().focus().toggleBulletList().run()}
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <List className="h-4 w-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('orderedList')}
+                    onPressedChange={() => editor?.chain().focus().toggleOrderedList().run()}
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <ListOrdered className="h-4 w-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive('blockquote')}
+                    onPressedChange={() => editor?.chain().focus().toggleBlockquote().run()}
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <Quote className="h-4 w-4" />
+                </Toggle>
 
-             <div className="h-6 w-px bg-gray-300 mx-2" />
+                <div className="h-6 w-px bg-gray-200 mx-1" />
 
-             <Toggle
-                size="sm"
-                pressed={editor?.isActive({ textAlign: 'left' })}
-                onPressedChange={() => editor?.chain().focus().setTextAlign('left').run()}
-            >
-                <AlignLeft className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive({ textAlign: 'center' })}
-                onPressedChange={() => editor?.chain().focus().setTextAlign('center').run()}
-            >
-                <AlignCenter className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-                size="sm"
-                pressed={editor?.isActive({ textAlign: 'right' })}
-                onPressedChange={() => editor?.chain().focus().setTextAlign('right').run()}
-            >
-                <AlignRight className="h-4 w-4" />
-            </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive({ textAlign: 'left' })}
+                    onPressedChange={() => editor?.chain().focus().setTextAlign('left').run()}
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <AlignLeft className="h-4 w-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive({ textAlign: 'center' })}
+                    onPressedChange={() => editor?.chain().focus().setTextAlign('center').run()}
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <AlignCenter className="h-4 w-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor?.isActive({ textAlign: 'right' })}
+                    onPressedChange={() => editor?.chain().focus().setTextAlign('right').run()}
+                    className="data-[state=on]:bg-gray-100"
+                >
+                    <AlignRight className="h-4 w-4" />
+                </Toggle>
+            </div>
         </div>
       </header>
 
-      {/* Zone de contenu */}
-      <div className="container mx-auto px-6 py-8">
-        <div className="max-w-4xl mx-auto">
+      {/* Zone de contenu (Fond Gris) */}
+      <div className="flex-1 bg-[#F8F9FA] py-8 px-4 overflow-y-auto cursor-text" onClick={() => editor?.commands.focus()}>
+        {/* Page A4 */}
+        <div 
+            className="max-w-[21cm] w-full mx-auto bg-white shadow-md border border-gray-200 min-h-[29.7cm] p-[2.5cm] cursor-text transition-shadow hover:shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+        >
           <EditorContent editor={editor} />
         </div>
       </div>
 
-      {/* Dialog Personnalisation (Identique à avant) */}
+      {/* Dialog Personnalisation */}
       <Dialog open={showIconPicker} onOpenChange={setShowIconPicker}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
