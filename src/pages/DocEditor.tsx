@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { encryptionService } from '@/lib/encryption';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
@@ -14,7 +15,9 @@ import {
   Star,
   MoreVertical,
   Trash2,
-  Copy
+  Copy,
+  Shield,
+  Lock
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -31,6 +34,7 @@ interface Document {
   owner_id: string;
   is_starred: boolean;
   updated_at: string;
+  encryption_iv: string;
 }
 
 const DocEditor = () => {
@@ -42,6 +46,7 @@ const DocEditor = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [encryptionIV, setEncryptionIV] = useState('');
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const contentRef = useRef<HTMLDivElement>(null);
   const isUpdatingFromRemoteRef = useRef(false);
@@ -53,6 +58,7 @@ const DocEditor = () => {
       return;
     }
 
+    initializeEncryption();
     fetchDocument();
 
     // Subscription temps réel pour la collaboration
@@ -63,16 +69,25 @@ const DocEditor = () => {
         schema: 'public',
         table: 'documents',
         filter: `id=eq.${id}`
-      }, (payload) => {
+      }, async (payload) => {
         const updated = payload.new as Document;
         // Ne pas écraser si l'utilisateur est en train de taper
         if (!saveTimeoutRef.current) {
           isUpdatingFromRemoteRef.current = true;
-          setTitle(updated.title);
-          setContent(updated.content);
-          if (contentRef.current) {
-            contentRef.current.innerHTML = updated.content;
+          
+          try {
+            const decryptedTitle = await encryptionService.decrypt(updated.title, updated.encryption_iv);
+            const decryptedContent = await encryptionService.decrypt(updated.content, updated.encryption_iv);
+            
+            setTitle(decryptedTitle);
+            setContent(decryptedContent);
+            if (contentRef.current) {
+              contentRef.current.innerHTML = decryptedContent;
+            }
+          } catch (error) {
+            console.error('Decryption error:', error);
           }
+          
           setTimeout(() => {
             isUpdatingFromRemoteRef.current = false;
           }, 100);
@@ -87,6 +102,20 @@ const DocEditor = () => {
       }
     };
   }, [id, user, navigate]);
+
+  const initializeEncryption = async () => {
+    if (!user) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await encryptionService.initialize(user.id, session.access_token);
+      }
+    } catch (error) {
+      console.error('Encryption initialization error:', error);
+      showError('Erreur d\'initialisation du chiffrement');
+    }
+  };
 
   // Effet séparé pour charger le contenu dans l'éditeur
   useEffect(() => {
@@ -108,13 +137,18 @@ const DocEditor = () => {
 
       if (error) throw error;
 
+      // Déchiffrer le document
+      const decryptedTitle = await encryptionService.decrypt(data.title, data.encryption_iv);
+      const decryptedContent = await encryptionService.decrypt(data.content, data.encryption_iv);
+
       setDocument(data);
-      setTitle(data.title);
-      setContent(data.content);
+      setTitle(decryptedTitle);
+      setContent(decryptedContent);
+      setEncryptionIV(data.encryption_iv);
       
       // Charger le contenu dans l'éditeur
-      if (contentRef.current && data.content) {
-        contentRef.current.innerHTML = data.content;
+      if (contentRef.current && decryptedContent) {
+        contentRef.current.innerHTML = decryptedContent;
         hasLoadedContentRef.current = true;
       }
     } catch (error: any) {
@@ -132,16 +166,23 @@ const DocEditor = () => {
     try {
       setIsSaving(true);
 
+      // Chiffrer le titre et le contenu avec le même IV
+      const { encrypted: encryptedTitle } = await encryptionService.encrypt(newTitle);
+      const { encrypted: encryptedContent, iv: newIV } = await encryptionService.encrypt(newContent);
+
       const { error } = await supabase
         .from('documents')
         .update({
-          title: newTitle,
-          content: newContent,
+          title: encryptedTitle,
+          content: encryptedContent,
+          encryption_iv: newIV,
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
 
       if (error) throw error;
+      
+      setEncryptionIV(newIV);
     } catch (error: any) {
       console.error('Error saving document:', error);
       showError('Erreur lors de la sauvegarde');
@@ -219,13 +260,18 @@ const DocEditor = () => {
     if (!user || !document) return;
 
     try {
+      // Re-chiffrer avec un nouvel IV
+      const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(`${title} (copie)`);
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(content);
+
       const { error } = await supabase
         .from('documents')
         .insert({
-          title: `${document.title} (copie)`,
-          content: document.content,
+          title: encryptedTitle,
+          content: encryptedContent,
           owner_id: user.id,
-          is_starred: false
+          is_starred: false,
+          encryption_iv: iv
         });
 
       if (error) throw error;
@@ -255,7 +301,13 @@ const DocEditor = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-4" />
+          <p className="text-sm text-gray-500 flex items-center gap-2">
+            <Lock className="h-4 w-4" />
+            Déchiffrement du document...
+          </p>
+        </div>
       </div>
     );
   }
@@ -283,16 +335,21 @@ const DocEditor = () => {
                   className="text-lg font-medium border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 max-w-md"
                   placeholder="Document sans titre"
                 />
+                <div className="flex items-center gap-1 px-2 py-1 bg-green-50 rounded-full">
+                  <Shield className="h-3 w-3 text-green-600" />
+                  <span className="text-xs font-medium text-green-700">Chiffré</span>
+                </div>
               </div>
 
               {isSaving && (
                 <span className="text-sm text-gray-500 flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Enregistrement...
+                  Chiffrement...
                 </span>
               )}
               {!isSaving && content && (
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-gray-500 flex items-center gap-2">
+                  <Lock className="h-3 w-3" />
                   Enregistré
                 </span>
               )}

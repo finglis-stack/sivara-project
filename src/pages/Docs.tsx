@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { encryptionService } from '@/lib/encryption';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -29,7 +30,8 @@ import {
   Loader2,
   Grid3x3,
   List,
-  ArrowLeft
+  ArrowLeft,
+  Shield
 } from 'lucide-react';
 
 interface Document {
@@ -40,12 +42,18 @@ interface Document {
   updated_at: string;
   owner_id: string;
   is_starred: boolean;
+  encryption_iv: string;
+}
+
+interface DecryptedDocument extends Document {
+  decryptedTitle: string;
+  decryptedContent: string;
 }
 
 const Docs = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents, setDocuments] = useState<DecryptedDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -57,6 +65,7 @@ const Docs = () => {
       return;
     }
 
+    initializeEncryption();
     fetchDocuments();
 
     // Subscription temps réel
@@ -77,6 +86,20 @@ const Docs = () => {
     };
   }, [user, navigate]);
 
+  const initializeEncryption = async () => {
+    if (!user) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await encryptionService.initialize(user.id, session.access_token);
+      }
+    } catch (error) {
+      console.error('Encryption initialization error:', error);
+      showError('Erreur d\'initialisation du chiffrement');
+    }
+  };
+
   const fetchDocuments = async () => {
     if (!user) return;
 
@@ -88,7 +111,31 @@ const Docs = () => {
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      setDocuments(data || []);
+
+      // Déchiffrer tous les documents
+      const decryptedDocs = await Promise.all(
+        (data || []).map(async (doc) => {
+          try {
+            const decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
+            const decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
+            
+            return {
+              ...doc,
+              decryptedTitle,
+              decryptedContent
+            };
+          } catch (error) {
+            console.error('Decryption error for document:', doc.id, error);
+            return {
+              ...doc,
+              decryptedTitle: '🔒 Erreur de déchiffrement',
+              decryptedContent: ''
+            };
+          }
+        })
+      );
+
+      setDocuments(decryptedDocs);
     } catch (error: any) {
       console.error('Error fetching documents:', error);
       showError('Erreur lors du chargement des documents');
@@ -101,20 +148,25 @@ const Docs = () => {
     if (!user) return;
 
     try {
+      // Chiffrer le titre et le contenu
+      const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt('Document sans titre');
+      const { encrypted: encryptedContent } = await encryptionService.encrypt('');
+
       const { data, error } = await supabase
         .from('documents')
         .insert({
-          title: 'Document sans titre',
-          content: '',
+          title: encryptedTitle,
+          content: encryptedContent,
           owner_id: user.id,
-          is_starred: false
+          is_starred: false,
+          encryption_iv: iv
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      showSuccess('Document créé');
+      showSuccess('Document créé (chiffré)');
       navigate(`/docs/${data.id}`);
     } catch (error: any) {
       console.error('Error creating document:', error);
@@ -153,17 +205,22 @@ const Docs = () => {
     }
   };
 
-  const duplicateDocument = async (doc: Document) => {
+  const duplicateDocument = async (doc: DecryptedDocument) => {
     if (!user) return;
 
     try {
+      // Re-chiffrer avec un nouvel IV
+      const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(`${doc.decryptedTitle} (copie)`);
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(doc.decryptedContent);
+
       const { error } = await supabase
         .from('documents')
         .insert({
-          title: `${doc.title} (copie)`,
-          content: doc.content,
+          title: encryptedTitle,
+          content: encryptedContent,
           owner_id: user.id,
-          is_starred: false
+          is_starred: false,
+          encryption_iv: iv
         });
 
       if (error) throw error;
@@ -211,13 +268,19 @@ const Docs = () => {
       return true;
     })
     .filter(doc => 
-      doc.title.toLowerCase().includes(searchQuery.toLowerCase())
+      doc.decryptedTitle.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-4" />
+          <p className="text-sm text-gray-500 flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Déchiffrement des documents...
+          </p>
+        </div>
       </div>
     );
   }
@@ -241,6 +304,10 @@ const Docs = () => {
               <div className="flex items-center gap-3">
                 <img src="/docs-icon.png" alt="Docs" className="h-8 w-8" />
                 <h1 className="text-2xl font-light text-gray-900">Docs</h1>
+                <div className="flex items-center gap-1 px-2 py-1 bg-green-50 rounded-full">
+                  <Shield className="h-3 w-3 text-green-600" />
+                  <span className="text-xs font-medium text-green-700">AES-256</span>
+                </div>
               </div>
             </div>
 
@@ -341,7 +408,7 @@ const Docs = () => {
               {searchQuery ? 'Aucun document trouvé' : 'Aucun document'}
             </h3>
             <p className="text-gray-500 mb-6">
-              {searchQuery ? 'Essayez une autre recherche' : 'Créez votre premier document pour commencer'}
+              {searchQuery ? 'Essayez une autre recherche' : 'Créez votre premier document chiffré'}
             </p>
             {!searchQuery && (
               <Button onClick={createDocument} className="bg-gray-700 hover:bg-gray-800">
@@ -373,7 +440,10 @@ const Docs = () => {
                     onClick={() => navigate(`/docs/${doc.id}`)}
                   >
                     <div className="flex items-start justify-between mb-3">
-                      <FileText className="h-8 w-8 text-blue-600" />
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-8 w-8 text-blue-600" />
+                        <Shield className="h-4 w-4 text-green-600" />
+                      </div>
                       <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
@@ -433,7 +503,7 @@ const Docs = () => {
                         </DropdownMenu>
                       </div>
                     </div>
-                    <h3 className="font-medium text-gray-900 mb-2 truncate">{doc.title}</h3>
+                    <h3 className="font-medium text-gray-900 mb-2 truncate">{doc.decryptedTitle}</h3>
                     <p className="text-sm text-gray-500">{formatDate(doc.updated_at)}</p>
                   </Card>
                 ))}
@@ -447,9 +517,12 @@ const Docs = () => {
                     onClick={() => navigate(`/docs/${doc.id}`)}
                   >
                     <div className="flex items-center gap-4 flex-1">
-                      <FileText className="h-6 w-6 text-blue-600 flex-shrink-0" />
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-6 w-6 text-blue-600 flex-shrink-0" />
+                        <Shield className="h-4 w-4 text-green-600" />
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 truncate">{doc.title}</h3>
+                        <h3 className="font-medium text-gray-900 truncate">{doc.decryptedTitle}</h3>
                         <p className="text-sm text-gray-500">{formatDate(doc.updated_at)}</p>
                       </div>
                     </div>
