@@ -27,17 +27,14 @@ class CryptoService {
     );
   }
 
-  // Ajout du mode déterministe pour permettre la déduplication des URLs (UPSERT)
   async encrypt(text: string, deterministic: boolean = false): Promise<string> {
     if (!this.key) throw new Error('Crypto not initialized');
     
     let iv: Uint8Array;
     if (deterministic) {
-       // Dérive l'IV du contenu pour avoir toujours le même résultat chiffré pour la même URL
        const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(text));
        iv = new Uint8Array(hashBuffer).slice(0, 12);
     } else {
-       // IV aléatoire pour la sécurité sémantique maximale (par défaut pour le contenu)
        iv = crypto.getRandomValues(new Uint8Array(12));
     }
     
@@ -65,7 +62,18 @@ class CryptoService {
 }
 
 function cleanJsonString(str: string): string {
-  return str.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  // Nettoyage agressif pour trouver le JSON valide
+  let clean = str.replace(/```json/g, '').replace(/```/g, '');
+  
+  // Trouver le premier '{' et le dernier '}'
+  const firstOpen = clean.indexOf('{');
+  const lastClose = clean.lastIndexOf('}');
+  
+  if (firstOpen !== -1 && lastClose !== -1) {
+    clean = clean.substring(firstOpen, lastClose + 1);
+  }
+  
+  return clean;
 }
 
 function extractLinks(html: string, baseUrl: string): { url: string, text: string }[] {
@@ -73,8 +81,6 @@ function extractLinks(html: string, baseUrl: string): { url: string, text: strin
   const regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
   let match;
   
-  // On ne filtre plus par domaine pour autoriser les liens externes
-
   while ((match = regex.exec(html)) !== null) {
     try {
       const href = match[1];
@@ -84,7 +90,6 @@ function extractLinks(html: string, baseUrl: string): { url: string, text: strin
 
       const absoluteUrl = new URL(href, baseUrl);
       
-      // Filtre basique pour économiser l'IA (réseaux sociaux communs)
       const h = absoluteUrl.hostname;
       if (h.includes('facebook.') || h.includes('twitter.') || h.includes('x.com') || 
           h.includes('instagram.') || h.includes('linkedin.') || h.includes('pinterest.') ||
@@ -175,48 +180,47 @@ serve(async (req) => {
       .trim()
       .substring(0, 30000);
 
-    await logToDb(queueId, `Consulting AI for analysis & external links discovery...`, 'AI_ANALYSIS', 'info');
+    await logToDb(queueId, `Consulting AI for analysis...`, 'AI_ANALYSIS', 'info');
     
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: geminiModel });
+    
+    // Force JSON mode in config
+    const model = genAI.getGenerativeModel({ 
+      model: geminiModel,
+      generationConfig: { responseMimeType: "application/json" }
+    });
 
     const prompt = `
-    Tu es un robot d'indexation intelligent. Analyse cette page web.
+    Analyse cette page web et retourne UNIQUEMENT un objet JSON valide.
 
     URL: ${url}
     
-    TACHE 1 : Contenu
-    - Extrais le TITRE principal.
-    - Fais une DESCRIPTION SEO.
-    - Reformule le CONTENU en français, dense et informatif.
-
-    TACHE 2 : Découverte de liens intelligente (Internes et Externes)
-    Voici une liste de liens trouvés sur la page :
+    TACHES:
+    1. Extrais le titre, description et reformule le contenu.
+    2. Analyse les liens candidats et assigne un score de priorité (0-10).
+    
+    LIENS CANDIDATS:
     ${JSON.stringify(candidateLinks)}
 
-    Analyse ces liens et sélectionne ceux qui sont pertinents à ajouter à la file d'attente.
-    IMPORTANT : Inclus les liens vers D'AUTRES SITES (externes) s'ils semblent être des sources, des partenaires ou du contenu pertinent.
-    
-    CRITÈRES DE PRIORITÉ (Score 0-10) :
-    - 10 : Pages produits, Pages principales, Documentation clé.
-    - 8-9 : Sous-catégories, Articles de blog, Sites externes pertinents (sources, partenaires).
-    - 5-7 : Pages "À propos", Contact, Liens externes généraux utiles.
-    - 0-3 : Pages 404, CGU, Politique de confidentialité, Login, Panier vide.
-    - IGNORE : Réseaux sociaux (Facebook, Twitter...), Pubs, Ancres (#).
+    CRITÈRES PRIORITÉ:
+    - 10: Pages importantes (Produits, Docs, Accueil)
+    - 8-9: Blog, Partenaires, Login
+    - 5-7: Contact, À propos
+    - 0-4: Inutile, 404, CGU
+    - Ignorer réseaux sociaux
 
-    Format JSON attendu :
+    CONTENU PAGE:
+    ${cleanedText}
+
+    SCHEMA JSON ATTENDU:
     {
-      "title": "...",
-      "description": "...",
-      "rephrased_content": "...",
+      "title": "string",
+      "description": "string",
+      "rephrased_content": "string",
       "discovered_urls": [
-        { "url": "https://...", "priority": 9 },
-        { "url": "https://...", "priority": 5 }
+        { "url": "string", "priority": number }
       ]
     }
-    
-    Contenu de la page (extrait) :
-    ${cleanedText}
     `;
 
     const result = await model.generateContent(prompt);
@@ -224,10 +228,19 @@ serve(async (req) => {
     
     let aiData;
     try {
-      aiData = JSON.parse(cleanJsonString(aiResponseText));
+      // Utilisation du nettoyeur amélioré
+      const cleanedJson = cleanJsonString(aiResponseText);
+      aiData = JSON.parse(cleanedJson);
     } catch (e) {
-      console.error("JSON Parse Error", aiResponseText);
-      throw new Error("AI Failed to produce valid JSON");
+      console.error("JSON Parse Error. Raw:", aiResponseText);
+      // Fallback manuel si l'IA échoue totalement (rare avec le mode JSON)
+      aiData = {
+        title: 'Erreur Analyse IA',
+        description: '',
+        rephrased_content: cleanedText.substring(0, 500),
+        discovered_urls: []
+      };
+      await logToDb(queueId, "AI JSON Warning: Using fallback content", "AI_ANALYSIS", "error");
     }
 
     await logToDb(queueId, 'Encrypting and indexing...', 'ENCRYPTION', 'info');
@@ -235,13 +248,11 @@ serve(async (req) => {
     const urlObj = new URL(url)
     const domain = urlObj.hostname
     
-    // Encryption standard (aléatoire) pour le contenu
     const encryptedTitle = await cryptoService.encrypt(aiData.title || 'Sans titre')
     const encryptedDescription = await cryptoService.encrypt(aiData.description || '')
     const encryptedContent = await cryptoService.encrypt(aiData.rephrased_content || '')
     const encryptedDomain = await cryptoService.encrypt(domain)
     
-    // Encryption déterministe pour l'URL principale aussi, pour faciliter la maintenance future
     const encryptedUrl = await cryptoService.encrypt(url, true)
     
     const searchHash = await cryptoService.hash(aiData.title + ' ' + aiData.description + ' ' + aiData.rephrased_content)
@@ -267,12 +278,10 @@ serve(async (req) => {
     if (aiData.discovered_urls && Array.isArray(aiData.discovered_urls)) {
       const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 5);
       
-      await logToDb(queueId, `AI found ${highValueLinks.length} relevant links (including external)`, 'DISCOVERY', 'success');
+      await logToDb(queueId, `AI found ${highValueLinks.length} relevant links`, 'DISCOVERY', 'success');
 
       for (const link of highValueLinks) {
         try {
-          // UTILISATION DE L'ENCRYPTION DÉTERMINISTE POUR LES URLS
-          // C'est crucial pour que 'onConflict' détecte les doublons et évite les boucles infinies
           const linkEncrypted = await cryptoService.encrypt(link.url, true);
           
           await supabase.from('crawl_queue')
@@ -311,7 +320,6 @@ serve(async (req) => {
     if (currentUrl && cryptoService) {
       try {
         await logToDb(queueId, `Cleaning up failed URL from index...`, 'CLEANUP', 'info');
-        // Nettoyage avec encryption déterministe
         const encryptedUrlToDelete = await cryptoService.encrypt(currentUrl, true);
         await supabase.from('crawled_pages').delete().eq('url', encryptedUrlToDelete);
       } catch (cleanupError) {
