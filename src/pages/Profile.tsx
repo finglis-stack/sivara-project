@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3 } from 'lucide-react';
 
 interface Profile {
   first_name: string;
@@ -129,86 +129,159 @@ const Profile = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Header */}
-        <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/')}
-            className="mb-4"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Retour à l'accueil
-          </Button>
-          <h1 className="text-3xl font-light text-gray-900">Mon Profil</h1>
-          <p className="text-gray-500 mt-2">Gérez vos informations personnelles</p>
+      {/* Header fixe */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                onClick={() => navigate('/')}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Retour
+              </Button>
+              <div className="h-6 w-px bg-gray-200"></div>
+              <h1 className="text-2xl font-light text-gray-900">Mon Profil</h1>
+            </div>
+            <Button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="bg-gray-700 hover:bg-gray-800"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                'Enregistrer'
+              )}
+            </Button>
+          </div>
         </div>
+      </header>
 
-        <div className="space-y-6">
-          {/* Avatar & Email Card */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-6">
-                <Avatar className="h-24 w-24">
-                  <AvatarFallback className="bg-gray-700 text-white text-2xl">
-                    {getInitials()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <h2 className="text-2xl font-light text-gray-900">
-                    {profile.first_name} {profile.last_name}
-                  </h2>
-                  <div className="flex items-center gap-2 text-gray-500 mt-2">
-                    <Mail className="h-4 w-4" />
-                    <span>{user?.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-500 mt-1">
-                    <Calendar className="h-4 w-4" />
-                    <span>Membre depuis le {formatDate(profile.created_at)}</span>
-                  </div>
+      <div className="container mx-auto px-6 py-8">
+        {/* Section Avatar et infos principales */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
+          <div className="flex items-start gap-8">
+            <Avatar className="h-32 w-32 flex-shrink-0">
+              <AvatarFallback className="bg-gray-700 text-white text-4xl">
+                {getInitials()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <h2 className="text-3xl font-light text-gray-900 mb-3">
+                {profile.first_name} {profile.last_name}
+              </h2>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 text-gray-600">
+                  <Mail className="h-5 w-5" />
+                  <span className="text-lg">{user?.email}</span>
+                </div>
+                <div className="flex items-center gap-3 text-gray-600">
+                  <Calendar className="h-5 w-5" />
+                  <span>Membre depuis le {formatDate(profile.created_at)}</span>
+                </div>
+                <div className="flex items-center gap-3 text-gray-600">
+                  {profile.account_type === 'individual' ? (
+                    <>
+                      <User className="h-5 w-5" />
+                      <span>Compte Individuel</span>
+                    </>
+                  ) : (
+                    <>
+                      <Building2 className="h-5 w-5" />
+                      <span>Compte Entreprise</span>
+                    </>
+                  )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+        </div>
 
+        {/* Section Mes Applications */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Grid3x3 className="h-6 w-6 text-gray-700" />
+            <h2 className="text-2xl font-light text-gray-900">Mes application(s)</h2>
+          </div>
+          <div className="border-2 border-dashed border-gray-200 rounded-lg p-12 text-center">
+            <div className="max-w-md mx-auto">
+              <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Grid3x3 className="h-8 w-8 text-gray-400" />
+              </div>
+              <p className="text-gray-500 text-lg mb-2">Aucune application pour le moment</p>
+              <p className="text-gray-400 text-sm">Vos applications apparaîtront ici</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Grille pour les informations */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Informations personnelles */}
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="font-light">Informations personnelles</CardTitle>
+              <CardTitle className="font-light text-xl">Informations personnelles</CardTitle>
               <CardDescription>
                 Modifiez vos informations de profil
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">Prénom</Label>
-                  <Input
-                    id="firstName"
-                    value={profile.first_name}
-                    onChange={(e) => setProfile({ ...profile, first_name: e.target.value })}
-                    placeholder="Jean"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Nom</Label>
-                  <Input
-                    id="lastName"
-                    value={profile.last_name}
-                    onChange={(e) => setProfile({ ...profile, last_name: e.target.value })}
-                    placeholder="Dupont"
-                  />
-                </div>
-              </div>
-
+            <CardContent className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="phone">Numéro de téléphone</Label>
+                <Label htmlFor="firstName" className="text-sm font-medium">Prénom</Label>
+                <Input
+                  id="firstName"
+                  value={profile.first_name}
+                  onChange={(e) => setProfile({ ...profile, first_name: e.target.value })}
+                  placeholder="Jean"
+                  className="h-11"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName" className="text-sm font-medium">Nom</Label>
+                <Input
+                  id="lastName"
+                  value={profile.last_name}
+                  onChange={(e) => setProfile({ ...profile, last_name: e.target.value })}
+                  placeholder="Dupont"
+                  className="h-11"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Contact */}
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="font-light text-xl">Contact</CardTitle>
+              <CardDescription>
+                Gérez vos informations de contact
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-medium">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={user?.email || ''}
+                  disabled
+                  className="h-11 bg-gray-50"
+                />
+                <p className="text-xs text-gray-500">L'email ne peut pas être modifié</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-sm font-medium">Numéro de téléphone</Label>
                 <div className="flex gap-2">
                   <Select
                     value={profile.phone_country_code}
                     onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}
                   >
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-[140px] h-11">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -228,57 +301,9 @@ const Profile = () => {
                     value={profile.phone_number}
                     onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })}
                     placeholder="6 12 34 56 78"
-                    className="flex-1"
+                    className="flex-1 h-11"
                   />
                 </div>
-              </div>
-
-              <div className="pt-4">
-                <Button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="w-full md:w-auto bg-gray-700 hover:bg-gray-800"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Enregistrement...
-                    </>
-                  ) : (
-                    'Enregistrer les modifications'
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Type de compte */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-light">Type de compte</CardTitle>
-              <CardDescription>
-                Informations sur votre type de compte
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-                {profile.account_type === 'individual' ? (
-                  <>
-                    <User className="h-5 w-5 text-gray-600" />
-                    <div>
-                      <p className="font-medium text-gray-900">Compte Individuel</p>
-                      <p className="text-sm text-gray-500">Pour un usage personnel</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <Building2 className="h-5 w-5 text-gray-600" />
-                    <div>
-                      <p className="font-medium text-gray-900">Compte Entreprise</p>
-                      <p className="text-sm text-gray-500">Pour un usage professionnel</p>
-                    </div>
-                  </>
-                )}
               </div>
             </CardContent>
           </Card>
