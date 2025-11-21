@@ -51,6 +51,15 @@ class CryptoService {
     return btoa(String.fromCharCode(...combined));
   }
 
+  async decrypt(encryptedText: string): Promise<string> {
+    if (!this.key) throw new Error('Crypto not initialized');
+    const combined = Uint8Array.from(atob(encryptedText), c => c.charCodeAt(0));
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this.key, data);
+    return new TextDecoder().decode(decrypted);
+  }
+
   async hash(text: string): Promise<string> {
     const data = encoder.encode(text.toLowerCase());
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -59,17 +68,33 @@ class CryptoService {
   }
 }
 
+function isAllowedLanguage(html: string): boolean {
+  // 1. Check HTML lang attribute
+  const langMatch = html.match(/<html[^>]+lang=["']([a-zA-Z\-]+)["'][^>]*>/i);
+  if (langMatch) {
+    const lang = langMatch[1].toLowerCase();
+    if (lang.startsWith('fr') || lang.startsWith('en')) return true;
+    return false; // Explicitly other language
+  }
+
+  // 2. Fallback: Check common words if no lang attribute
+  const textSample = html.substring(0, 2000).toLowerCase();
+  const frWords = ['le', 'la', 'et', 'est', 'pour', 'dans', 'avec'];
+  const enWords = ['the', 'and', 'is', 'for', 'with', 'that', 'this'];
+
+  const frCount = frWords.filter(w => textSample.includes(` ${w} `)).length;
+  const enCount = enWords.filter(w => textSample.includes(` ${w} `)).length;
+
+  return frCount > 2 || enCount > 2;
+}
+
 function extractMetadata(html: string): { title: string, description: string, content: string } {
-  // Extraction Title
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   const title = titleMatch ? titleMatch[1].trim() : 'Sans titre';
 
-  // Extraction Description (Meta)
   const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i);
   const description = descMatch ? descMatch[1].trim() : '';
 
-  // Nettoyage du contenu pour la recherche (Body -> Text)
-  // On enlève scripts, styles, commentaires, balises
   let content = html
     .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, " ")
     .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, " ")
@@ -81,8 +106,31 @@ function extractMetadata(html: string): { title: string, description: string, co
   return {
     title: title.substring(0, 255),
     description: description.substring(0, 500),
-    content: content.substring(0, 5000) // On garde un bon morceau pour l'indexation
+    content: content.substring(0, 5000)
   };
+}
+
+function calculatePriority(url: string, text: string): number {
+  const lowerUrl = url.toLowerCase();
+  const lowerText = text.toLowerCase();
+  let score = 5; // Base score
+
+  // Boost content pages
+  if (lowerUrl.includes('/blog/') || lowerUrl.includes('/article/')) score += 3;
+  if (lowerUrl.includes('/product/') || lowerUrl.includes('/item/')) score += 2;
+  if (lowerUrl.includes('about') || lowerUrl.includes('propos')) score += 2;
+  
+  // Penalty for noise
+  if (lowerUrl.includes('/tag/')) score -= 2;
+  if (lowerUrl.includes('/category/')) score -= 1;
+  if (lowerUrl.includes('/archive/')) score -= 3;
+  if (lowerUrl.includes('/page/')) score -= 2;
+  if (lowerUrl.includes('?')) score -= 1; // Query params often duplicate
+  
+  // Text relevance
+  if (lowerText.length > 40) score += 1;
+  
+  return Math.max(0, Math.min(score, 10));
 }
 
 function extractLinks(html: string, baseUrl: string): { url: string, priority: number }[] {
@@ -90,7 +138,9 @@ function extractLinks(html: string, baseUrl: string): { url: string, priority: n
   const regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
   let match;
   
-  const baseHostname = new URL(baseUrl).hostname;
+  // Normalize base domain to strict hostname
+  const baseObj = new URL(baseUrl);
+  const baseHostname = baseObj.hostname.replace(/^www\./, '');
 
   while ((match = regex.exec(html)) !== null) {
     try {
@@ -101,28 +151,33 @@ function extractLinks(html: string, baseUrl: string): { url: string, priority: n
       if (text.length < 2) continue;
 
       const absoluteUrl = new URL(href, baseUrl);
-      
-      // REGLE STRICTE : Même hostname uniquement (pas de sous-domaine différent, pas d'externe)
-      if (absoluteUrl.hostname !== baseHostname) {
+      const currentHostname = absoluteUrl.hostname.replace(/^www\./, '');
+
+      // STRICT DOMAIN CHECK: Must match base hostname exactly (no subdomains unless base was subdomain)
+      if (currentHostname !== baseHostname) {
         continue;
       }
       
-      // Pas de fichiers statiques
-      if (absoluteUrl.pathname.match(/\.(jpg|jpeg|png|gif|pdf|zip|css|js)$/i)) {
+      // Ignore static files
+      if (absoluteUrl.pathname.match(/\.(jpg|jpeg|png|gif|pdf|zip|css|js|json|xml)$/i)) {
+        continue;
+      }
+
+      // Ignore login/signup/cart
+      if (absoluteUrl.pathname.match(/(login|signin|signup|register|cart|checkout|account)/i)) {
         continue;
       }
 
       if (!links.some(l => l.url === absoluteUrl.href)) {
-        // Calcul basique de priorité SEO
-        let priority = 5;
-        if (text.length > 20) priority += 1; // Lien avec ancre descriptive
-        if (absoluteUrl.pathname.length < baseUrl.length + 10) priority += 2; // URL courte (souvent catégorie)
-        
-        links.push({ url: absoluteUrl.href, priority: Math.min(priority, 10) });
+        const priority = calculatePriority(absoluteUrl.href, text);
+        // Only add if priority is decent (>3)
+        if (priority > 3) {
+           links.push({ url: absoluteUrl.href, priority });
+        }
       }
     } catch (e) { continue; }
   }
-  return links.slice(0, 30); // On limite à 30 liens par page pour ne pas exploser
+  return links.slice(0, 20); // Hard limit 20 links per page
 }
 
 // @ts-ignore: Deno types
@@ -168,6 +223,26 @@ serve(async (req) => {
 
     if (!url) throw new Error('URL is required')
 
+    // 0. DOMAIN LIMIT CHECK
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname;
+    const encryptedDomain = await cryptoService.encrypt(domain);
+    
+    // Check how many pages we already have for this domain
+    const { count } = await supabase
+      .from('crawled_pages')
+      .select('*', { count: 'exact', head: true })
+      .eq('domain', encryptedDomain);
+
+    if (count && count >= 50) {
+      await logToDb(queueId, `Domain limit reached (50 pages) for ${domain}. Skipping.`, 'LIMIT', 'warning');
+      // We mark as completed to remove from queue but don't process
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: 'limit_reached' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     await logToDb(queueId, `Crawling: ${url}`, 'INIT', 'info');
 
     // 1. Fetching
@@ -175,38 +250,42 @@ serve(async (req) => {
       redirect: 'follow',
       headers: { 
         'User-Agent': 'Mozilla/5.0 (compatible; SivaraBot/1.0; +http://sivara.search)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5'
+        'Accept': 'text/html',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
     })
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    
+    // Content-Type check
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) {
+      throw new Error('Not an HTML page');
     }
 
     const rawHtml = await response.text();
 
+    // 2. Language Check
+    if (!isAllowedLanguage(rawHtml)) {
+       throw new Error('Language not supported (Not FR/EN)');
+    }
+
     await logToDb(queueId, `Parsing SEO data...`, 'PARSING', 'info');
     
-    // 2. Parsing (Algorithmic)
+    // 3. Parsing
     const metadata = extractMetadata(rawHtml);
     const discoveredLinks = extractLinks(rawHtml, url);
 
-    await logToDb(queueId, `Found: "${metadata.title}" & ${discoveredLinks.length} internal links`, 'PARSING', 'success');
+    await logToDb(queueId, `Found: "${metadata.title}" & ${discoveredLinks.length} valid links`, 'PARSING', 'success');
 
-    // 3. Encryption & Save
+    // 4. Encryption & Save
     await logToDb(queueId, 'Encrypting data...', 'ENCRYPTION', 'info');
 
-    const urlObj = new URL(url)
-    const domain = urlObj.hostname
-    
     const encryptedTitle = await cryptoService.encrypt(metadata.title)
     const encryptedDescription = await cryptoService.encrypt(metadata.description)
     const encryptedContent = await cryptoService.encrypt(metadata.content)
-    const encryptedDomain = await cryptoService.encrypt(domain)
     const encryptedUrl = await cryptoService.encrypt(url, true)
     
-    // Hash pour la recherche (sur contenu clair)
     const searchHash = await cryptoService.hash(metadata.title + ' ' + metadata.description + ' ' + metadata.content)
 
     const { error } = await supabase
@@ -227,33 +306,38 @@ serve(async (req) => {
 
     if (error) throw error
 
-    // 4. Ajout des nouveaux liens à la file d'attente
-    if (discoveredLinks.length > 0) {
+    // 5. Add new links to queue
+    if (discoveredLinks.length > 0 && (!count || count < 45)) { // Stop adding links if we are close to limit
       let addedCount = 0;
       for (const link of discoveredLinks) {
         try {
           const linkEncrypted = await cryptoService.encrypt(link.url, true);
-          // On ignore si existe déjà
-          const { error: queueError } = await supabase.from('crawl_queue')
-            .insert({
-              url: linkEncrypted,
-              priority: link.priority,
-              status: 'pending'
-            }) // .insert sans upsert échouera si duplicate key (si contrainte unique existe), ou ajoutera.
-               // Idéalement on utilise upsert avec ignoreDuplicates si on a une contrainte unique sur URL.
-               // Ici on suppose qu'on veut éviter les doublons de crawl en attente.
           
-          if (!queueError) addedCount++;
+          // Check if already crawled
+          const { data: existing } = await supabase
+            .from('crawled_pages')
+            .select('id')
+            .eq('url', linkEncrypted)
+            .single();
+            
+          if (!existing) {
+             const { error: queueError } = await supabase.from('crawl_queue')
+              .insert({
+                url: linkEncrypted,
+                priority: link.priority,
+                status: 'pending'
+              });
+             if (!queueError) addedCount++;
+          }
         } catch (err) {}
       }
       if (addedCount > 0) {
-        await logToDb(queueId, `Added ${addedCount} new pages to queue`, 'DISCOVERY', 'success');
+        await logToDb(queueId, `Queued ${addedCount} new pages`, 'DISCOVERY', 'success');
       }
     }
 
     await logToDb(queueId, 'Page indexed successfully', 'COMPLETE', 'success');
 
-    // Mise à jour des stats
     try {
       await supabase.rpc('increment_crawl_stats')
     } catch (e) {}
@@ -267,7 +351,6 @@ serve(async (req) => {
     console.error('[CRAWL ERROR]', error)
     await logToDb(queueId, `Error: ${error.message}`, 'ERROR', 'error');
 
-    // Nettoyage si échec
     if (currentUrl && cryptoService) {
       try {
         const encryptedUrlToDelete = await cryptoService.encrypt(currentUrl, true);
