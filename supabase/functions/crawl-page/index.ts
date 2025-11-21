@@ -82,7 +82,7 @@ function extractLinks(html: string, baseUrl: string): { url: string, text: strin
       const text = match[2].replace(/<[^>]+>/g, '').trim();
       
       if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || !text) continue;
-      if (text.length < 3) continue; // Ignore liens trop courts (ex: "fr", "en", "->")
+      if (text.length < 3) continue;
 
       const absoluteUrl = new URL(href, baseUrl);
       
@@ -94,11 +94,10 @@ function extractLinks(html: string, baseUrl: string): { url: string, text: strin
       }
 
       if (!links.some(l => l.url === absoluteUrl.href)) {
-        links.push({ url: absoluteUrl.href, text: text.substring(0, 40) }); // Truncate link text
+        links.push({ url: absoluteUrl.href, text: text.substring(0, 40) });
       }
     } catch (e) { continue; }
   }
-  // OPTIMISATION TOKEN : On ne garde que 15 liens max
   return links.slice(0, 15);
 }
 
@@ -153,12 +152,31 @@ serve(async (req) => {
 
     await logToDb(queueId, `Processing: ${url}`, 'INIT', 'info');
 
+    // Simulation d'un navigateur moderne pour éviter les 403
     const response = await fetch(url, {
       redirect: 'follow',
-      headers: { 'User-Agent': 'SivaraBot/3.0' },
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Sec-Ch-Ua': '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+        'Cache-Control': 'max-age=0'
+      },
     })
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    if (!response.ok) {
+      // Si c'est un 403/401, on ne pourra rien faire de plus en Edge Function pure
+      // On loggue spécifiquement l'erreur
+      throw new Error(`HTTP ${response.status} - Access Denied/Protected`)
+    }
 
     const buffer = await response.arrayBuffer()
     const textDecoder = new TextDecoder('utf-8')
@@ -166,16 +184,15 @@ serve(async (req) => {
 
     const candidateLinks = extractLinks(rawHtml, url);
     
-    // OPTIMISATION TOKEN : On coupe drastiquement le contenu
     const cleanedText = rawHtml
       .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
       .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 3000); // Max 3k chars (~800 tokens)
+      .substring(0, 3000);
 
-    await logToDb(queueId, `AI Analysis (Economy Mode)...`, 'AI_ANALYSIS', 'info');
+    await logToDb(queueId, `AI Analysis...`, 'AI_ANALYSIS', 'info');
     
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     
@@ -184,7 +201,6 @@ serve(async (req) => {
       generationConfig: { responseMimeType: "application/json" }
     });
 
-    // Prompt compact
     const prompt = `
     Analyse cette page. Retourne JSON.
     URL: ${url}
@@ -257,7 +273,7 @@ serve(async (req) => {
     if (error) throw error
 
     if (aiData.discovered_urls && Array.isArray(aiData.discovered_urls)) {
-      const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 6); // Seuil augmenté à 6
+      const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 6);
       
       if (highValueLinks.length > 0) {
         await logToDb(queueId, `Found ${highValueLinks.length} links`, 'DISCOVERY', 'success');
@@ -277,7 +293,6 @@ serve(async (req) => {
 
     await logToDb(queueId, 'Done', 'COMPLETE', 'success');
 
-    // Stats update (sans await pour aller plus vite)
     supabase.rpc('increment_crawl_stats').catch(() => {});
 
     return new Response(
