@@ -6,7 +6,7 @@ import { encryptionService } from '@/lib/encryption';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +50,10 @@ interface DecryptedDocument extends Document {
   decryptedContent: string;
 }
 
+interface Profile {
+  avatar_url: string | null;
+}
+
 const Docs = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -58,6 +62,7 @@ const Docs = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filter, setFilter] = useState<'all' | 'recent' | 'starred'>('all');
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -67,6 +72,7 @@ const Docs = () => {
 
     initializeEncryption();
     fetchDocuments();
+    fetchProfile();
 
     // Subscription temps réel
     const channel = supabase
@@ -81,10 +87,36 @@ const Docs = () => {
       })
       .subscribe();
 
+    // Subscription pour les changements de profil
+    const profileChannel = supabase
+      .channel('profile_changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${user.id}`,
+      }, (payload) => {
+        setProfile(payload.new as Profile);
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(profileChannel);
     };
   }, [user, navigate]);
+
+  const fetchProfile = async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('id', user.id)
+      .single();
+
+    setProfile(data);
+  };
 
   const initializeEncryption = async () => {
     if (!user) return;
@@ -330,6 +362,9 @@ const Docs = () => {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                     <Avatar className="h-10 w-10">
+                      {profile?.avatar_url && (
+                        <AvatarImage src={profile.avatar_url} alt="Avatar" />
+                      )}
                       <AvatarFallback className="bg-gray-700 text-white">
                         {getInitials()}
                       </AvatarFallback>

@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { showSuccess, showError } from '@/utils/toast';
@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 interface Profile {
   first_name: string;
   last_name: string;
+  avatar_url: string | null;
 }
 
 const UserMenu = () => {
@@ -31,7 +32,7 @@ const UserMenu = () => {
       if (user) {
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('first_name, last_name')
+          .select('first_name, last_name, avatar_url')
           .eq('id', user.id)
           .single();
 
@@ -42,6 +43,23 @@ const UserMenu = () => {
     };
 
     fetchProfile();
+
+    // Subscription pour les changements de profil
+    const channel = supabase
+      .channel('profile_changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${user?.id}`,
+      }, (payload) => {
+        setProfile(payload.new as Profile);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const handleSignOut = async () => {
@@ -94,6 +112,9 @@ const UserMenu = () => {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
           <Avatar className="h-10 w-10">
+            {profile?.avatar_url && (
+              <AvatarImage src={profile.avatar_url} alt={getDisplayName()} />
+            )}
             <AvatarFallback className="bg-gray-700 text-white">
               {getInitials()}
             </AvatarFallback>

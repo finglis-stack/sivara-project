@@ -1,15 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3 } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface Profile {
   first_name: string;
@@ -18,6 +25,7 @@ interface Profile {
   phone_number: string;
   account_type: string;
   created_at: string;
+  avatar_url: string | null;
 }
 
 const countryCodes = [
@@ -36,6 +44,14 @@ const Profile = () => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [showAvatarDialog, setShowAvatarDialog] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const [profile, setProfile] = useState<Profile>({
     first_name: '',
     last_name: '',
@@ -43,6 +59,7 @@ const Profile = () => {
     phone_number: '',
     account_type: 'individual',
     created_at: '',
+    avatar_url: null,
   });
 
   useEffect(() => {
@@ -100,6 +117,128 @@ const Profile = () => {
       showError('Erreur lors de la mise à jour du profil');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showError('Veuillez sélectionner une image');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showError('L\'image ne doit pas dépasser 5 MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setSelectedImage(e.target?.result as string);
+      setImagePosition({ x: 0, y: 0 });
+      setShowAvatarDialog(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - imagePosition.x,
+      y: e.clientY - imagePosition.y,
+    });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !imageRef.current) return;
+
+    const newX = e.clientX - dragStart.x;
+    const newY = e.clientY - dragStart.y;
+
+    setImagePosition({ x: newX, y: newY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleValidateAvatar = async () => {
+    if (!selectedImage || !user) return;
+
+    try {
+      setIsUploadingAvatar(true);
+
+      // Créer un canvas pour recadrer l'image
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas context not available');
+
+      const img = new Image();
+      img.src = selectedImage;
+
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
+
+      // Taille du canvas (carré de 400x400)
+      const size = 400;
+      canvas.width = size;
+      canvas.height = size;
+
+      // Calculer le facteur de zoom pour remplir le cercle
+      const scale = Math.max(size / img.width, size / img.height);
+
+      // Dessiner l'image centrée et zoomée
+      const scaledWidth = img.width * scale;
+      const scaledHeight = img.height * scale;
+      const x = (size - scaledWidth) / 2 + imagePosition.x;
+      const y = (size - scaledHeight) / 2 + imagePosition.y;
+
+      ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+
+      // Convertir en blob
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.9);
+      });
+
+      // Upload vers Supabase Storage
+      const fileName = `${user.id}-${Date.now()}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obtenir l'URL publique
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      // Mettre à jour le profil
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          avatar_url: publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      setProfile({ ...profile, avatar_url: publicUrl });
+      setShowAvatarDialog(false);
+      setSelectedImage(null);
+      showSuccess('Photo de profil mise à jour');
+    } catch (error: any) {
+      console.error('Error uploading avatar:', error);
+      showError('Erreur lors de l\'upload de la photo');
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -167,11 +306,30 @@ const Profile = () => {
         {/* Section Avatar et infos principales */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
           <div className="flex items-start gap-8">
-            <Avatar className="h-32 w-32 flex-shrink-0">
-              <AvatarFallback className="bg-gray-700 text-white text-4xl">
-                {getInitials()}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative group">
+              <Avatar className="h-32 w-32 flex-shrink-0">
+                {profile.avatar_url ? (
+                  <AvatarImage src={profile.avatar_url} alt={profile.first_name} />
+                ) : (
+                  <AvatarFallback className="bg-gray-700 text-white text-4xl">
+                    {getInitials()}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+              >
+                <Camera className="h-8 w-8 text-white" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </div>
             <div className="flex-1">
               <h2 className="text-3xl font-light text-gray-900 mb-3">
                 {profile.first_name} {profile.last_name}
@@ -317,6 +475,84 @@ const Profile = () => {
           </Card>
         </div>
       </div>
+
+      {/* Dialog de recadrage d'avatar */}
+      <Dialog open={showAvatarDialog} onOpenChange={setShowAvatarDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Ajuster votre photo</DialogTitle>
+            <DialogDescription>
+              Déplacez l'image pour la centrer dans le cercle
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div 
+              className="relative w-full h-[400px] bg-gray-100 rounded-lg overflow-hidden cursor-move"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              {selectedImage && (
+                <>
+                  <img
+                    ref={imageRef}
+                    src={selectedImage}
+                    alt="Preview"
+                    className="absolute select-none"
+                    style={{
+                      transform: `translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+                      maxWidth: 'none',
+                      height: '100%',
+                      width: 'auto',
+                    }}
+                    draggable={false}
+                  />
+                  {/* Overlay avec cercle de découpe */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    <svg width="100%" height="100%">
+                      <defs>
+                        <mask id="circle-mask">
+                          <rect width="100%" height="100%" fill="white" />
+                          <circle cx="50%" cy="50%" r="180" fill="black" />
+                        </mask>
+                      </defs>
+                      <rect width="100%" height="100%" fill="black" opacity="0.5" mask="url(#circle-mask)" />
+                      <circle cx="50%" cy="50%" r="180" fill="none" stroke="white" strokeWidth="2" />
+                    </svg>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAvatarDialog(false);
+                  setSelectedImage(null);
+                }}
+              >
+                <X className="mr-2 h-4 w-4" />
+                Annuler
+              </Button>
+              <Button
+                onClick={handleValidateAvatar}
+                disabled={isUploadingAvatar}
+                className="bg-gray-700 hover:bg-gray-800"
+              >
+                {isUploadingAvatar ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Upload...
+                  </>
+                ) : (
+                  'Valider'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
