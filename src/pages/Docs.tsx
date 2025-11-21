@@ -31,6 +31,25 @@ import {
   Grid3x3,
   List,
   ArrowLeft,
+  Briefcase,
+  FolderOpen,
+  BookOpen,
+  Lightbulb,
+  Target,
+  TrendingUp,
+  Users as UsersIcon,
+  Calendar,
+  CheckSquare,
+  MessageSquare,
+  Mail,
+  Phone,
+  Globe,
+  Settings,
+  Heart,
+  Zap,
+  Award,
+  BarChart,
+  PieChart,
   Shield
 } from 'lucide-react';
 
@@ -55,6 +74,13 @@ interface DecryptedDocument extends Document {
 interface Profile {
   avatar_url: string | null;
 }
+
+// Mapping des icônes pour l'affichage
+const ICON_MAP: { [key: string]: any } = {
+  FileText, Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, 
+  UsersIcon, Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, 
+  Settings, Heart, Zap, Award, BarChart, PieChart
+};
 
 const Docs = () => {
   const navigate = useNavigate();
@@ -354,7 +380,7 @@ const Docs = () => {
               <div className="h-6 w-px bg-gray-200"></div>
               <div className="flex items-center gap-3">
                 <img src="/docs-icon.png" alt="Docs" className="h-8 w-8" />
-                <h1 className="text-2xl font-light text-gray-900">Documents</h1>
+                <h1 className="text-2xl font-light text-gray-900">Docs</h1>
               </div>
             </div>
 
@@ -486,6 +512,7 @@ const Docs = () => {
                 {filteredDocuments.map((doc) => {
                   const bgColor = doc.color || '#3B82F6';
                   const iconColor = getIconTextColor(bgColor);
+                  const IconComponent = ICON_MAP[doc.icon || 'FileText'] || FileText;
                   
                   return (
                     <Card
@@ -498,7 +525,7 @@ const Docs = () => {
                           className="h-12 w-12 rounded-lg flex items-center justify-center flex-shrink-0"
                           style={{ backgroundColor: bgColor }}
                         >
-                          <FileText className="h-6 w-6" style={{ color: iconColor }} />
+                          <IconComponent className="h-6 w-6" style={{ color: iconColor }} />
                         </div>
                         <div className="flex items-center gap-1">
                           {doc.is_starred && (
@@ -579,6 +606,7 @@ const Docs = () => {
                 {filteredDocuments.map((doc) => {
                   const bgColor = doc.color || '#3B82F6';
                   const iconColor = getIconTextColor(bgColor);
+                  const IconComponent = ICON_MAP[doc.icon || 'FileText'] || FileText;
                   
                   return (
                     <div
@@ -591,7 +619,7 @@ const Docs = () => {
                           className="h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0"
                           style={{ backgroundColor: bgColor }}
                         >
-                          <FileText className="h-5 w-5" style={{ color: iconColor }} />
+                          <IconComponent className="h-5 w-5" style={{ color: iconColor }} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">

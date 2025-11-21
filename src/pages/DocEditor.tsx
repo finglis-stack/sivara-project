@@ -440,7 +440,7 @@ const DocEditor = () => {
                 {/* Icône cliquable */}
                 <button
                   onClick={() => setShowIconPicker(true)}
-                  className="h-10 w-10 rounded-lg flex items-center justify-center hover:opacity-80 transition-opacity"
+                  className="h-10 w-10 rounded-lg flex items-center justify-center hover:opacity-80 transition-opacity flex-shrink-0"
                   style={{ backgroundColor: selectedColor }}
                 >
                   <CurrentIcon className="h-5 w-5" style={{ color: getIconTextColor(selectedColor) }} />
