@@ -81,7 +81,8 @@ serve(async (req) => {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'processing');
       
-    const MAX_CONCURRENT_JOBS = 3;
+    // UPDATE: Increased from 3 to 5
+    const MAX_CONCURRENT_JOBS = 5;
 
     if (countError) throw countError;
 
@@ -94,7 +95,8 @@ serve(async (req) => {
     }
 
     const availableSlots = MAX_CONCURRENT_JOBS - (processingCount || 0);
-    const { batchSize: requestedBatchSize = 3 } = await req.json()
+    // UPDATE: Default batch size is now 5
+    const { batchSize: requestedBatchSize = 5 } = await req.json()
     const effectiveBatchSize = Math.min(requestedBatchSize, availableSlots);
 
     if (effectiveBatchSize <= 0) {
@@ -170,8 +172,7 @@ serve(async (req) => {
       }
     }))
 
-    // --- 6. CHAIN REACTION (NEW) ---
-    // Vérifier s'il reste des items en attente
+    // --- 6. CHAIN REACTION ---
     const { count: remainingPending } = await supabase
       .from('crawl_queue')
       .select('*', { count: 'exact', head: true })
@@ -180,14 +181,14 @@ serve(async (req) => {
     if (remainingPending && remainingPending > 0) {
       console.log(`[CHAIN] ${remainingPending} items remaining. Triggering next batch...`);
       
-      // Appel asynchrone (Fire and Forget) pour ne pas bloquer la réponse actuelle
       fetch(`${supabaseUrl}/functions/v1/process-queue`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': req.headers.get('Authorization') || '',
         },
-        body: JSON.stringify({ batchSize: 3 }),
+        // UPDATE: Trigger next batch of 5
+        body: JSON.stringify({ batchSize: 5 }),
       }).catch(e => console.error("Chain trigger failed", e));
     }
 
