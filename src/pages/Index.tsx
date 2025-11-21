@@ -5,7 +5,6 @@ import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
 import UserMenu from '@/components/UserMenu';
-import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError } from '@/utils/toast';
 import { Settings } from 'lucide-react';
 
@@ -139,7 +138,6 @@ const Index = () => {
             <CrawlManager />
           </div>
         </div>
-        <MadeWithDyad />
       </div>
     );
   }
@@ -259,8 +257,6 @@ const Index = () => {
           </div>
         )}
       </div>
-      
-      <MadeWithDyad />
     </div>
   );
 };
