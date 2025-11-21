@@ -3,9 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Terminal, CheckCircle, XCircle, Clock, ArrowLeft, Activity, Server } from 'lucide-react';
+import { Loader2, Terminal, CheckCircle, XCircle, Clock, ArrowLeft, Activity, Server, OctagonAlert, PlayCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { showSuccess, showError } from '@/utils/toast';
 
 interface QueueItem {
   id: string;
@@ -28,7 +29,34 @@ const Monitor = () => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogItem[]>([]);
+  const [isActive, setIsActive] = useState(true);
+  const [isToggling, setIsToggling] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data } = await supabase
+        .from('crawler_settings')
+        .select('is_active')
+        .eq('id', 1)
+        .single();
+      if (data) setIsActive(data.is_active);
+    };
+    fetchSettings();
+
+    // Realtime settings updates
+    const channel = supabase
+      .channel('settings_updates')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crawler_settings' }, (payload) => {
+        setIsActive(payload.new.is_active);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Fetch initial queue
   useEffect(() => {
@@ -60,7 +88,7 @@ const Monitor = () => {
     };
   }, []);
 
-  // Fetch logs for selected item
+  // Fetch logs
   useEffect(() => {
     if (!selectedId) {
       setLogs([]);
@@ -100,6 +128,39 @@ const Monitor = () => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
+  const toggleSystem = async () => {
+    try {
+      setIsToggling(true);
+      const newState = !isActive;
+      
+      const { error } = await supabase
+        .from('crawler_settings')
+        .update({ is_active: newState })
+        .eq('id', 1);
+
+      if (error) throw error;
+
+      if (newState) {
+        showSuccess('Système relancé. Le traitement reprend.');
+        // Relancer manuellement un batch
+        await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/process-queue', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
+          },
+          body: JSON.stringify({ batchSize: 3 }),
+        });
+      } else {
+        showSuccess("ARRÊT D'URGENCE ACTIVÉ. Les tâches en cours se termineront, mais aucune nouvelle tâche ne sera lancée.");
+      }
+    } catch (err: any) {
+      showError("Erreur lors du basculement : " + err.message);
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-yellow-500';
@@ -125,7 +186,7 @@ const Monitor = () => {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" onClick={() => navigate('/')} className="text-gray-400 hover:text-white">
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -134,9 +195,12 @@ const Monitor = () => {
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
                 Monitoring Serveur
-                <Badge variant="secondary" className="bg-gray-800 text-gray-300 font-normal text-xs ml-2">
+                <Badge 
+                  variant="secondary" 
+                  className={`font-normal text-xs ml-2 ${isActive ? 'bg-green-900/30 text-green-400 border-green-800' : 'bg-red-900/30 text-red-400 border-red-800 animate-pulse'}`}
+                >
                   <Server className="w-3 h-3 mr-1" />
-                  pg_cron actif
+                  {isActive ? 'Système Actif' : 'ARRÊT D\'URGENCE'}
                 </Badge>
               </h1>
               <div className="flex items-center gap-3 text-sm text-gray-400 mt-1">
@@ -148,22 +212,39 @@ const Monitor = () => {
               </div>
             </div>
           </div>
-          <div className="flex gap-3">
-            <Badge variant="outline" className="bg-green-900/20 text-green-400 border-green-900">
-              Gemini 3.0 Pro
-            </Badge>
-            <Badge variant="outline" className="bg-blue-900/20 text-blue-400 border-blue-900">
-              AES-256-GCM
-            </Badge>
+          
+          <div className="flex items-center gap-4">
+            <Button
+              size="lg"
+              variant={isActive ? "destructive" : "default"}
+              onClick={toggleSystem}
+              disabled={isToggling}
+              className={`font-bold shadow-lg ${isActive ? 'hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'}`}
+            >
+              {isToggling ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : isActive ? (
+                <>
+                  <OctagonAlert className="mr-2 h-5 w-5" />
+                  ARRÊT D'URGENCE
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="mr-2 h-5 w-5" />
+                  RELANCER LE SYSTÈME
+                </>
+              )}
+            </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[80vh]">
           {/* Liste de la queue */}
-          <Card className="bg-gray-900 border-gray-800 flex flex-col">
+          <Card className={`bg-gray-900 border-gray-800 flex flex-col transition-colors duration-500 ${!isActive ? 'border-red-900/50' : ''}`}>
             <CardHeader className="py-3 px-4 border-b border-gray-800">
-              <CardTitle className="text-sm font-medium text-gray-400">
-                File d'attente (FIFO)
+              <CardTitle className="text-sm font-medium text-gray-400 flex justify-between items-center">
+                <span>File d'attente (FIFO)</span>
+                {!isActive && <span className="text-xs text-red-500 font-bold">PAUSE</span>}
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden p-0">
