@@ -70,8 +70,12 @@ const Docs = () => {
       return;
     }
 
-    initializeEncryption();
-    fetchDocuments();
+    const initializeAndFetch = async () => {
+      await initializeEncryption();
+      await fetchDocuments();
+    };
+
+    initializeAndFetch();
     fetchProfile();
 
     // Subscription temps réel
