@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, CheckCircle, XCircle, Clock, ArrowLeft, Activity, Server, OctagonAlert, PlayCircle, Hash, FileText, Link as LinkIcon } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Clock, ArrowLeft, Activity, OctagonAlert, PlayCircle, Hash, FileText, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { showSuccess, showError } from '@/utils/toast';
@@ -31,80 +31,101 @@ const Monitor = () => {
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [isActive, setIsActive] = useState(true);
   const [isToggling, setIsToggling] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Fetch settings
+  // --- DATA FETCHING FUNCTIONS ---
+
+  const fetchSettings = async () => {
+    const { data } = await supabase
+      .from('crawler_settings')
+      .select('is_active')
+      .eq('id', 1)
+      .single();
+    if (data) setIsActive(data.is_active);
+  };
+
+  const fetchQueue = async () => {
+    const { data } = await supabase
+      .from('crawl_queue')
+      .select('*')
+      .order('added_at', { ascending: false })
+      .limit(50);
+    
+    if (data) {
+      // On ne met à jour que si les données ont changé pour éviter les re-renders inutiles
+      setQueue(prev => {
+        const isSame = prev.length === data.length && prev[0]?.id === data[0]?.id && prev[0]?.status === data[0]?.status;
+        if (isSame) return prev;
+        setLastUpdate(new Date());
+        return data;
+      });
+    }
+  };
+
+  const fetchLogs = async (id: string) => {
+    const { data } = await supabase
+      .from('crawl_logs')
+      .select('*')
+      .eq('queue_id', id)
+      .order('created_at', { ascending: true });
+    
+    if (data) {
+      setLogs(data);
+      // Auto-scroll down on fetch
+      setTimeout(() => logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    }
+  };
+
+  // --- SUBSCRIPTIONS & POLLING ---
+
+  // 1. Settings & Global Queue (Realtime + Polling)
   useEffect(() => {
-    const fetchSettings = async () => {
-      const { data } = await supabase
-        .from('crawler_settings')
-        .select('is_active')
-        .eq('id', 1)
-        .single();
-      if (data) setIsActive(data.is_active);
-    };
     fetchSettings();
+    fetchQueue();
 
-    const channel = supabase
+    // Subscription Realtime
+    const settingsChannel = supabase
       .channel('settings_updates')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crawler_settings' }, (payload) => {
         setIsActive(payload.new.is_active);
       })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  // Fetch queue
-  useEffect(() => {
-    const fetchQueue = async () => {
-      const { data } = await supabase
-        .from('crawl_queue')
-        .select('*')
-        .order('added_at', { ascending: false })
-        .limit(50);
-      if (data) setQueue(data);
-    };
-
-    fetchQueue();
-
-    const channel = supabase
+    const queueChannel = supabase
       .channel('queue_updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'crawl_queue' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setQueue(prev => [payload.new as QueueItem, ...prev]);
-        } else if (payload.eventType === 'UPDATE') {
-          setQueue(prev => prev.map(item => item.id === payload.new.id ? payload.new as QueueItem : item));
-        }
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'crawl_queue' }, () => {
+        // Sur tout changement, on refetch pour être sûr d'avoir l'ordre correct
+        fetchQueue();
       })
       .subscribe();
 
+    // Polling de sécurité (toutes les 5s)
+    const interval = setInterval(() => {
+      fetchQueue();
+      fetchSettings();
+    }, 5000);
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(settingsChannel);
+      supabase.removeChannel(queueChannel);
+      clearInterval(interval);
     };
   }, []);
 
-  // Fetch logs
+  // 2. Logs for Selected Item (Realtime + Fast Polling)
   useEffect(() => {
     if (!selectedId) {
       setLogs([]);
       return;
     }
 
-    const fetchLogs = async () => {
-      const { data } = await supabase
-        .from('crawl_logs')
-        .select('*')
-        .eq('queue_id', selectedId)
-        .order('created_at', { ascending: true });
-      if (data) setLogs(data);
-    };
+    // Initial fetch
+    fetchLogs(selectedId);
 
-    fetchLogs();
-
-    const channel = supabase
+    // Subscription
+    const logsChannel = supabase
       .channel(`logs:${selectedId}`)
       .on('postgres_changes', { 
         event: 'INSERT', 
@@ -112,18 +133,29 @@ const Monitor = () => {
         table: 'crawl_logs',
         filter: `queue_id=eq.${selectedId}`
       }, (payload) => {
-        setLogs(prev => [...prev, payload.new as LogItem]);
+        setLogs(prev => {
+          const newLogs = [...prev, payload.new as LogItem];
+          // Auto-scroll immédiat sur nouvel événement
+          setTimeout(() => logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+          return newLogs;
+        });
       })
       .subscribe();
 
+    // Fast Polling pour les logs (2s) car c'est critique de voir l'avancement
+    const logInterval = setInterval(() => {
+      if (queue.find(q => q.id === selectedId)?.status === 'processing') {
+        fetchLogs(selectedId);
+      }
+    }, 2000);
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(logsChannel);
+      clearInterval(logInterval);
     };
   }, [selectedId]);
 
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+  // --- ACTIONS ---
 
   const toggleSystem = async () => {
     try {
@@ -139,7 +171,6 @@ const Monitor = () => {
 
       if (newState) {
         showSuccess('Système relancé.');
-        // Relancer un batch
         await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/process-queue', {
           method: 'POST',
           headers: {
@@ -151,6 +182,9 @@ const Monitor = () => {
       } else {
         showSuccess("Arrêt du système (Pause).");
       }
+      
+      // Force refresh immédiat
+      fetchSettings();
     } catch (err: any) {
       showError(err.message);
     } finally {
@@ -170,44 +204,56 @@ const Monitor = () => {
 
   const getLogBadge = (step: string) => {
     const variants: {[key: string]: string} = {
-      'INIT': 'bg-gray-100 text-gray-800',
-      'PARSING': 'bg-blue-50 text-blue-700',
-      'ENCRYPTION': 'bg-purple-50 text-purple-700',
-      'DISCOVERY': 'bg-indigo-50 text-indigo-700',
-      'COMPLETE': 'bg-green-50 text-green-700',
-      'ERROR': 'bg-red-50 text-red-700',
+      'INIT': 'bg-gray-100 text-gray-800 border-gray-200',
+      'FETCH_DIRECT': 'bg-blue-50 text-blue-700 border-blue-200',
+      'FETCH_PROXY': 'bg-orange-50 text-orange-700 border-orange-200',
+      'PARSING': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      'AI_ANALYSIS': 'bg-purple-50 text-purple-700 border-purple-200',
+      'ENCRYPTION': 'bg-slate-100 text-slate-700 border-slate-200',
+      'DISCOVERY': 'bg-cyan-50 text-cyan-700 border-cyan-200',
+      'SAVE': 'bg-teal-50 text-teal-700 border-teal-200',
+      'COMPLETE': 'bg-green-50 text-green-700 border-green-200',
+      'ERROR': 'bg-red-50 text-red-700 border-red-200',
     };
-    return variants[step] || 'bg-gray-100 text-gray-600';
+    return variants[step] || 'bg-gray-50 text-gray-600 border-gray-200';
   };
 
   const pendingCount = queue.filter(i => i.status === 'pending').length;
   const processingCount = queue.filter(i => i.status === 'processing').length;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
+    <div className="min-h-screen bg-gray-50 text-gray-900 p-4 md:p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-900 hover:bg-gray-100">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full px-4">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Retour
             </Button>
             <div className="h-8 w-px bg-gray-200 mx-2 hidden md:block"></div>
             <div>
-              <h1 className="text-xl font-bold flex items-center gap-2 text-gray-800">
-                Console Superviseur
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-bold text-gray-800">Console Superviseur</h1>
                 <Badge 
                   variant="outline" 
-                  className={`ml-2 ${isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}
+                  className={`px-3 py-1 rounded-full border ${isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}
                 >
-                  {isActive ? 'Système Actif' : 'En Pause'}
+                  {isActive ? (
+                    <span className="flex items-center gap-1.5"><span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>Système Actif</span>
+                  ) : (
+                     <span className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-red-500"></div>En Pause</span>
+                  )}
                 </Badge>
-              </h1>
-              <p className="text-sm text-gray-500 flex items-center gap-3 mt-1">
-                <span className="flex items-center gap-1"><Activity className="h-3 w-3" /> {processingCount} en cours</span>
+              </div>
+              <p className="text-sm text-gray-500 flex items-center gap-3 mt-1.5">
+                <span className="flex items-center gap-1.5 font-medium text-blue-600"><Activity className="h-3.5 w-3.5" /> {processingCount} en cours</span>
                 <span className="text-gray-300">•</span>
-                <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {pendingCount} en attente</span>
+                <span className="flex items-center gap-1.5 text-amber-600"><Clock className="h-3.5 w-3.5" /> {pendingCount} en attente</span>
+                <span className="text-gray-300 hidden sm:inline">•</span>
+                <span className="text-xs text-gray-400 hidden sm:flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3 animate-spin-slow" /> Live
+                </span>
               </p>
             </div>
           </div>
@@ -217,7 +263,7 @@ const Monitor = () => {
             variant={isActive ? "destructive" : "default"}
             onClick={toggleSystem}
             disabled={isToggling}
-            className={`font-medium shadow-sm transition-all ${isActive ? '' : 'bg-green-600 hover:bg-green-700 text-white'}`}
+            className={`font-medium shadow-sm transition-all rounded-lg ${isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700 text-white'}`}
           >
             {isToggling ? (
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -235,32 +281,32 @@ const Monitor = () => {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-180px)]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-180px)] min-h-[500px]">
           {/* Liste des tâches */}
-          <Card className="flex flex-col border-gray-200 shadow-sm overflow-hidden">
-            <CardHeader className="py-4 px-5 border-b border-gray-100 bg-gray-50/50">
-              <CardTitle className="text-sm font-semibold text-gray-700 flex justify-between items-center">
+          <Card className="flex flex-col border-gray-200 shadow-sm overflow-hidden rounded-xl">
+            <CardHeader className="py-3 px-4 border-b border-gray-100 bg-gray-50/80">
+              <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider flex justify-between items-center">
                 <span>File d'attente</span>
-                <Badge variant="secondary" className="text-xs bg-white border border-gray-200 text-gray-600 shadow-sm">
-                  3 tâches / batch
-                </Badge>
+                <span className="text-[10px] font-normal bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-400">
+                  Live Feed
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden p-0 bg-white">
               <ScrollArea className="h-full">
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-gray-50">
                   {queue.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
-                      className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-all duration-200 flex items-center justify-between group ${
-                        selectedId === item.id ? 'bg-blue-50/60 border-l-4 border-blue-500' : 'border-l-4 border-transparent'
+                      className={`w-full text-left px-4 py-3.5 hover:bg-gray-50 transition-all duration-200 flex items-center justify-between group ${
+                        selectedId === item.id ? 'bg-blue-50/50 border-l-4 border-blue-500 pl-3' : 'border-l-4 border-transparent pl-3'
                       }`}
                     >
-                      <div className="overflow-hidden flex-1 mr-4">
-                        <div className="flex items-center gap-2 mb-1.5">
+                      <div className="overflow-hidden flex-1 mr-3">
+                        <div className="flex items-center gap-2 mb-1">
                           {getStatusIcon(item.status)}
-                          <span className={`text-xs font-semibold uppercase tracking-wide ${
+                          <span className={`text-xs font-bold uppercase tracking-wide ${
                             item.status === 'processing' ? 'text-blue-600' : 
                             item.status === 'completed' ? 'text-green-600' : 
                             item.status === 'failed' ? 'text-red-600' : 'text-amber-600'
@@ -268,24 +314,24 @@ const Monitor = () => {
                             {item.status}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
-                          <Hash className="h-3 w-3" />
-                          {item.id.split('-')[0]}...
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono truncate">
+                          <Hash className="h-3 w-3 flex-shrink-0" />
+                          {item.id}
                         </div>
                       </div>
-                      <div className="text-right">
-                         <span className="text-xs text-gray-400 font-medium">
-                           {new Date(item.added_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      <div className="text-right flex flex-col items-end justify-center">
+                         <span className="text-[10px] text-gray-400 font-medium bg-gray-50 px-1.5 py-0.5 rounded">
+                           {new Date(item.added_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}
                          </span>
                       </div>
                     </button>
                   ))}
                   {queue.length === 0 && (
-                    <div className="p-10 text-center text-gray-400 flex flex-col items-center gap-2">
-                      <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
-                        <Clock className="h-6 w-6 text-gray-300" />
+                    <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2 p-8">
+                      <div className="h-10 w-10 rounded-full bg-gray-50 flex items-center justify-center">
+                        <Clock className="h-5 w-5 text-gray-300" />
                       </div>
-                      <p className="text-sm">File d'attente vide</p>
+                      <p className="text-xs font-medium">File d'attente vide</p>
                     </div>
                   )}
                 </div>
@@ -294,47 +340,53 @@ const Monitor = () => {
           </Card>
 
           {/* Détails & Logs */}
-          <Card className="lg:col-span-2 flex flex-col border-gray-200 shadow-sm overflow-hidden">
-            <CardHeader className="py-4 px-5 border-b border-gray-100 bg-gray-50/50 flex flex-row items-center justify-between">
+          <Card className="lg:col-span-2 flex flex-col border-gray-200 shadow-sm overflow-hidden rounded-xl">
+            <CardHeader className="py-3 px-4 border-b border-gray-100 bg-gray-50/80 flex flex-row items-center justify-between h-[53px]">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-gray-500" />
-                <CardTitle className="text-sm font-semibold text-gray-700">
-                  {selectedId ? 'Détails de l\'exécution' : 'Sélectionnez une tâche'}
+                <CardTitle className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  {selectedId ? 'Console Logs' : 'Aperçu'}
                 </CardTitle>
               </div>
               {selectedId && (
-                <div className="flex items-center gap-2 text-xs text-gray-500 font-mono bg-white px-2 py-1 rounded border border-gray-200">
-                  ID: {selectedId}
+                <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">
+                  UUID: {selectedId}
                 </div>
               )}
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden p-0 bg-white relative">
               {selectedId ? (
-                <ScrollArea className="h-full">
-                   <div className="p-6 space-y-6">
-                      <div className="space-y-4">
+                <ScrollArea className="h-full w-full" ref={scrollAreaRef}>
+                   <div className="p-6 space-y-6 min-h-full">
+                      {logs.length === 0 && (
+                        <div className="flex items-center justify-center h-20 text-gray-400 text-sm italic">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Attente de logs...
+                        </div>
+                      )}
+                      <div className="space-y-6 pb-4">
                         {logs.map((log, idx) => (
-                          <div key={log.id} className="flex gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className="flex flex-col items-center gap-1 min-w-[40px]">
+                          <div key={log.id} className="flex gap-4 group animate-in fade-in slide-in-from-bottom-1 duration-300">
+                            <div className="flex flex-col items-center gap-1 min-w-[45px] pt-1">
                                <span className="text-[10px] font-mono text-gray-400">
                                  {new Date(log.created_at).toLocaleTimeString([], { minute:'2-digit', second:'2-digit' })}
                                </span>
-                               <div className={`w-px h-full bg-gray-100 group-last:hidden`}></div>
+                               <div className={`w-px flex-1 bg-gray-100 my-1 group-last:hidden`}></div>
                             </div>
                             
-                            <div className="flex-1 pb-2">
-                              <div className="flex items-center gap-3 mb-1">
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold tracking-wider ${getLogBadge(log.step)}`}>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold tracking-wide border ${getLogBadge(log.step)}`}>
                                   {log.step}
                                 </span>
                               </div>
-                              <p className={`text-sm ${log.status === 'error' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                              <p className={`text-sm leading-relaxed font-mono ${log.status === 'error' ? 'text-red-600 font-medium bg-red-50 p-2 rounded border border-red-100' : 'text-gray-600'}`}>
                                 {log.message}
                               </p>
                             </div>
                           </div>
                         ))}
-                        <div ref={logsEndRef} />
+                        <div ref={logsEndRef} className="h-px w-full" />
                       </div>
                    </div>
                 </ScrollArea>
@@ -344,8 +396,8 @@ const Monitor = () => {
                     <Activity className="h-8 w-8 text-gray-300" />
                   </div>
                   <div className="text-center">
-                    <p className="font-medium text-gray-600">En attente</p>
-                    <p className="text-sm">Sélectionnez une tâche à gauche pour voir les logs</p>
+                    <p className="font-medium text-gray-600 text-sm">En attente de sélection</p>
+                    <p className="text-xs text-gray-400 mt-1">Cliquez sur une tâche à gauche pour voir le détail</p>
                   </div>
                 </div>
               )}
