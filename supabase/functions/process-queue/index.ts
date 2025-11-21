@@ -61,7 +61,7 @@ serve(async (req) => {
     const cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
 
-    // --- CIRCUIT BREAKER CHECK ---
+    // --- 1. GLOBAL PAUSE CHECK ---
     const { data: settings } = await supabase
       .from('crawler_settings')
       .select('is_active')
@@ -69,24 +69,52 @@ serve(async (req) => {
       .single();
 
     if (settings && settings.is_active === false) {
-      console.log('[CIRCUIT BREAKER] Crawler is globally PAUSED. Skipping batch.');
       return new Response(
-        JSON.stringify({ message: 'Crawler paused by emergency stop', processed: 0 }),
+        JSON.stringify({ message: 'Crawler paused', processed: 0 }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
-    // -----------------------------
 
-    const { batchSize = 3 } = await req.json()
+    // --- 2. CONCURRENCY LIMIT CHECK (NEW) ---
+    // Vérifier combien de tâches sont DÉJÀ en cours
+    const { count: processingCount, error: countError } = await supabase
+      .from('crawl_queue')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'processing');
+      
+    const MAX_CONCURRENT_JOBS = 3;
 
-    // 1. Récupérer les items (FIFO : older added_at first)
+    if (countError) throw countError;
+
+    if (processingCount !== null && processingCount >= MAX_CONCURRENT_JOBS) {
+      console.log(`[LIMIT] Max concurrency reached (${processingCount}/${MAX_CONCURRENT_JOBS}). Skipping batch.`);
+      return new Response(
+        JSON.stringify({ message: 'Max concurrency reached', processed: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Calibrer la taille du lot pour ne pas dépasser la limite
+    // Si 1 job tourne et max est 3, on ne prend que 2 max.
+    const availableSlots = MAX_CONCURRENT_JOBS - (processingCount || 0);
+    const { batchSize: requestedBatchSize = 3 } = await req.json()
+    const effectiveBatchSize = Math.min(requestedBatchSize, availableSlots);
+
+    if (effectiveBatchSize <= 0) {
+       return new Response(
+        JSON.stringify({ message: 'No slots available', processed: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 3. Récupérer les items (FIFO)
     const { data: queueItems, error: queueError } = await supabase
       .from('crawl_queue')
       .select('*')
       .eq('status', 'pending')
       .order('priority', { ascending: false })
       .order('added_at', { ascending: true })
-      .limit(batchSize)
+      .limit(effectiveBatchSize)
 
     if (queueError) throw queueError
 
@@ -97,9 +125,9 @@ serve(async (req) => {
       )
     }
 
-    console.log(`[PROCESS] Processing batch of ${queueItems.length} items concurrently...`)
+    console.log(`[PROCESS] Processing batch of ${queueItems.length} items...`)
 
-    // 2. Marquer tout le lot comme "processing"
+    // 4. Marquer comme "processing"
     const ids = queueItems.map((i: any) => i.id)
     await supabase
       .from('crawl_queue')
@@ -109,14 +137,12 @@ serve(async (req) => {
       })
       .in('id', ids)
 
-    // 3. Traiter en parallèle
+    // 5. Traiter
     const results = await Promise.all(queueItems.map(async (item: any) => {
       try {
         const decryptedUrl = await cryptoService.decrypt(item.url)
         
-        console.log(`[PROCESS] Calling crawl-page for item ${item.id}`)
-
-        // Appel du crawler (worker)
+        // Appel du crawler
         const crawlResponse = await fetch(`${supabaseUrl}/functions/v1/crawl-page`, {
           method: 'POST',
           headers: {
@@ -131,27 +157,20 @@ serve(async (req) => {
         })
 
         if (crawlResponse.ok) {
-          // Check if it was skipped
           const resJson = await crawlResponse.json().catch(() => ({}));
-          
           await supabase
             .from('crawl_queue')
             .update({ status: 'completed' })
             .eq('id', item.id)
-          
           return { id: item.id, status: 'success', skipped: resJson.skipped }
         } else {
           throw new Error(`Crawl status: ${crawlResponse.status}`)
         }
       } catch (error) {
         console.error(`[ERROR] Item ${item.id}:`, error)
-        
-        // SUPPRESSION AUTOMATIQUE SI ERREUR (ex: 500, 404, etc.)
-        // On supprime les logs associés d'abord pour éviter les soucis de clé étrangère
+        // Suppression automatique si erreur fatale
         await supabase.from('crawl_logs').delete().eq('queue_id', item.id)
-        // On supprime l'élément de la file
         await supabase.from('crawl_queue').delete().eq('id', item.id)
-          
         return { id: item.id, status: 'deleted_on_error', error: error.message }
       }
     }))

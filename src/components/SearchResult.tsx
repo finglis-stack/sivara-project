@@ -44,7 +44,9 @@ const SearchResult = ({
   const getUrlPath = (fullUrl: string) => {
     try {
       const path = new URL(fullUrl).pathname;
-      return path === '/' ? '' : path;
+      // Décoder les caractères spéciaux (ex: %C3%A9 -> é)
+      const decodedPath = decodeURIComponent(path);
+      return decodedPath === '/' ? '' : decodedPath;
     } catch {
       return '';
     }
@@ -143,7 +145,7 @@ const SearchResult = ({
                           >
                             <span>{result.title}</span>
                             {path && (
-                              <span className="text-xs font-mono text-gray-400 font-normal">{path}</span>
+                              <span className="text-xs font-mono text-gray-400 font-normal break-all">{path}</span>
                             )}
                           </a>
                         </h3>
