@@ -234,9 +234,9 @@ serve(async (req) => {
       .select('*', { count: 'exact', head: true })
       .eq('domain', encryptedDomain);
 
-    if (count && count >= 50) {
-      await logToDb(queueId, `Domain limit reached (50 pages) for ${domain}. Skipping.`, 'LIMIT', 'warning');
-      // We mark as completed to remove from queue but don't process
+    // STRICT LIMIT: 10 PAGES MAX
+    if (count && count >= 10) {
+      await logToDb(queueId, `Domain limit reached (10 pages) for ${domain}. Skipping.`, 'LIMIT', 'warning');
       return new Response(
         JSON.stringify({ success: true, skipped: true, reason: 'limit_reached' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -307,7 +307,8 @@ serve(async (req) => {
     if (error) throw error
 
     // 5. Add new links to queue
-    if (discoveredLinks.length > 0 && (!count || count < 45)) { // Stop adding links if we are close to limit
+    // STOP adding new links if we are close to the limit (8 pages)
+    if (discoveredLinks.length > 0 && (!count || count < 8)) { 
       let addedCount = 0;
       for (const link of discoveredLinks) {
         try {
