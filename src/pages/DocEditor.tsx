@@ -45,6 +45,7 @@ const DocEditor = () => {
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const contentRef = useRef<HTMLDivElement>(null);
   const isUpdatingFromRemoteRef = useRef(false);
+  const hasLoadedContentRef = useRef(false);
 
   useEffect(() => {
     if (!user || !id) {
@@ -87,6 +88,14 @@ const DocEditor = () => {
     };
   }, [id, user, navigate]);
 
+  // Effet séparé pour charger le contenu dans l'éditeur
+  useEffect(() => {
+    if (content && contentRef.current && !hasLoadedContentRef.current) {
+      contentRef.current.innerHTML = content;
+      hasLoadedContentRef.current = true;
+    }
+  }, [content]);
+
   const fetchDocument = async () => {
     if (!id) return;
 
@@ -102,8 +111,11 @@ const DocEditor = () => {
       setDocument(data);
       setTitle(data.title);
       setContent(data.content);
-      if (contentRef.current) {
+      
+      // Charger le contenu dans l'éditeur
+      if (contentRef.current && data.content) {
         contentRef.current.innerHTML = data.content;
+        hasLoadedContentRef.current = true;
       }
     } catch (error: any) {
       console.error('Error fetching document:', error);
