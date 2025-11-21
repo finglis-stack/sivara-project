@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -97,6 +99,24 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 300;
+  }
+
+  button, .font-medium {
+    font-weight: 400;
+  }
+
+  .font-semibold {
+    font-weight: 500;
+  }
+
+  .font-bold {
+    font-weight: 600;
   }
 }
 

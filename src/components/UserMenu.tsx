@@ -1,4 +1,4 @@
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -70,7 +70,7 @@ const UserMenu = () => {
         className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-800 transition-all duration-300 text-white"
       >
         <User size={18} />
-        <span className="text-sm font-medium">Connexion</span>
+        <span className="text-sm font-light">Connexion</span>
       </Button>
     );
   }
@@ -103,12 +103,22 @@ const UserMenu = () => {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{getDisplayName()}</p>
+            <p className="text-sm font-light leading-none">{getDisplayName()}</p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
             </p>
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem 
+          onSelect={(e) => {
+            e.preventDefault();
+            navigate('/profile');
+          }}
+        >
+          <UserCircle className="mr-2 h-4 w-4" />
+          <span>Mon profil</span>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem 
           onSelect={(e) => {
