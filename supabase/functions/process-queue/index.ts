@@ -75,8 +75,7 @@ serve(async (req) => {
       )
     }
 
-    // --- 2. CONCURRENCY LIMIT CHECK (NEW) ---
-    // Vérifier combien de tâches sont DÉJÀ en cours
+    // --- 2. CONCURRENCY LIMIT CHECK ---
     const { count: processingCount, error: countError } = await supabase
       .from('crawl_queue')
       .select('*', { count: 'exact', head: true })
@@ -94,8 +93,6 @@ serve(async (req) => {
       )
     }
 
-    // Calibrer la taille du lot pour ne pas dépasser la limite
-    // Si 1 job tourne et max est 3, on ne prend que 2 max.
     const availableSlots = MAX_CONCURRENT_JOBS - (processingCount || 0);
     const { batchSize: requestedBatchSize = 3 } = await req.json()
     const effectiveBatchSize = Math.min(requestedBatchSize, availableSlots);
@@ -142,7 +139,6 @@ serve(async (req) => {
       try {
         const decryptedUrl = await cryptoService.decrypt(item.url)
         
-        // Appel du crawler
         const crawlResponse = await fetch(`${supabaseUrl}/functions/v1/crawl-page`, {
           method: 'POST',
           headers: {
@@ -168,12 +164,32 @@ serve(async (req) => {
         }
       } catch (error) {
         console.error(`[ERROR] Item ${item.id}:`, error)
-        // Suppression automatique si erreur fatale
         await supabase.from('crawl_logs').delete().eq('queue_id', item.id)
         await supabase.from('crawl_queue').delete().eq('id', item.id)
         return { id: item.id, status: 'deleted_on_error', error: error.message }
       }
     }))
+
+    // --- 6. CHAIN REACTION (NEW) ---
+    // Vérifier s'il reste des items en attente
+    const { count: remainingPending } = await supabase
+      .from('crawl_queue')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
+
+    if (remainingPending && remainingPending > 0) {
+      console.log(`[CHAIN] ${remainingPending} items remaining. Triggering next batch...`);
+      
+      // Appel asynchrone (Fire and Forget) pour ne pas bloquer la réponse actuelle
+      fetch(`${supabaseUrl}/functions/v1/process-queue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': req.headers.get('Authorization') || '',
+        },
+        body: JSON.stringify({ batchSize: 3 }),
+      }).catch(e => console.error("Chain trigger failed", e));
+    }
 
     return new Response(
       JSON.stringify({ processed: results.length, results }),
