@@ -92,7 +92,6 @@ function extractMetadata(html: string, url: string): { title: string, descriptio
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   let title = titleMatch ? titleMatch[1].trim() : 'Sans titre';
 
-  // AMÉLIORATION : Si le titre est générique, on ajoute le domaine pour le contexte
   const urlObj = new URL(url);
   const domainName = urlObj.hostname.replace('www.', '');
   const genericTerms = ['accueil', 'home', 'index', 'bienvenue', 'page d\'accueil', 'homepage', 'sans titre'];
@@ -124,19 +123,16 @@ function calculatePriority(url: string, text: string): number {
   const lowerText = text.toLowerCase();
   let score = 5; // Base score
 
-  // Boost content pages
   if (lowerUrl.includes('/blog/') || lowerUrl.includes('/article/')) score += 3;
   if (lowerUrl.includes('/product/') || lowerUrl.includes('/item/')) score += 2;
   if (lowerUrl.includes('about') || lowerUrl.includes('propos')) score += 2;
   
-  // Penalty for noise
   if (lowerUrl.includes('/tag/')) score -= 2;
   if (lowerUrl.includes('/category/')) score -= 1;
   if (lowerUrl.includes('/archive/')) score -= 3;
   if (lowerUrl.includes('/page/')) score -= 2;
-  if (lowerUrl.includes('?')) score -= 1; // Query params often duplicate
+  if (lowerUrl.includes('?')) score -= 1; 
   
-  // Text relevance
   if (lowerText.length > 40) score += 1;
   
   return Math.max(0, Math.min(score, 10));
@@ -147,7 +143,6 @@ function extractLinks(html: string, baseUrl: string): { url: string, priority: n
   const regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
   let match;
   
-  // Normalize base domain to strict hostname
   const baseObj = new URL(baseUrl);
   const baseHostname = baseObj.hostname.replace(/^www\./, '');
 
@@ -162,31 +157,27 @@ function extractLinks(html: string, baseUrl: string): { url: string, priority: n
       const absoluteUrl = new URL(href, baseUrl);
       const currentHostname = absoluteUrl.hostname.replace(/^www\./, '');
 
-      // STRICT DOMAIN CHECK: Must match base hostname exactly (no subdomains unless base was subdomain)
       if (currentHostname !== baseHostname) {
         continue;
       }
       
-      // Ignore static files
       if (absoluteUrl.pathname.match(/\.(jpg|jpeg|png|gif|pdf|zip|css|js|json|xml)$/i)) {
         continue;
       }
 
-      // Ignore login/signup/cart
       if (absoluteUrl.pathname.match(/(login|signin|signup|register|cart|checkout|account)/i)) {
         continue;
       }
 
       if (!links.some(l => l.url === absoluteUrl.href)) {
         const priority = calculatePriority(absoluteUrl.href, text);
-        // Only add if priority is decent (>3)
         if (priority > 3) {
            links.push({ url: absoluteUrl.href, priority });
         }
       }
     } catch (e) { continue; }
   }
-  return links.slice(0, 20); // Hard limit 20 links per page
+  return links.slice(0, 20);
 }
 
 // @ts-ignore: Deno types
@@ -232,18 +223,25 @@ serve(async (req) => {
 
     if (!url) throw new Error('URL is required')
 
-    // 0. DOMAIN LIMIT CHECK
+    // 0. CHECK DISCOVERY MODE
+    const { data: settings } = await supabase
+      .from('crawler_settings')
+      .select('discovery_enabled')
+      .eq('id', 1)
+      .single();
+    
+    const discoveryEnabled = settings?.discovery_enabled !== false;
+
+    // 0.5 DOMAIN LIMIT CHECK
     const urlObj = new URL(url);
     const domain = urlObj.hostname;
     const encryptedDomain = await cryptoService.encrypt(domain);
     
-    // Check how many pages we already have for this domain
     const { count } = await supabase
       .from('crawled_pages')
       .select('*', { count: 'exact', head: true })
       .eq('domain', encryptedDomain);
 
-    // STRICT LIMIT: 10 PAGES MAX
     if (count && count >= 10) {
       await logToDb(queueId, `Domain limit reached (10 pages) for ${domain}. Skipping.`, 'LIMIT', 'warning');
       return new Response(
@@ -266,7 +264,6 @@ serve(async (req) => {
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     
-    // Content-Type check
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) {
       throw new Error('Not an HTML page');
@@ -316,34 +313,36 @@ serve(async (req) => {
     if (error) throw error
 
     // 5. Add new links to queue
-    // STOP adding new links if we are close to the limit (8 pages)
-    if (discoveredLinks.length > 0 && (!count || count < 8)) { 
-      let addedCount = 0;
-      for (const link of discoveredLinks) {
-        try {
-          const linkEncrypted = await cryptoService.encrypt(link.url, true);
-          
-          // Check if already crawled
-          const { data: existing } = await supabase
-            .from('crawled_pages')
-            .select('id')
-            .eq('url', linkEncrypted)
-            .single();
+    if (discoveryEnabled) {
+      if (discoveredLinks.length > 0 && (!count || count < 8)) { 
+        let addedCount = 0;
+        for (const link of discoveredLinks) {
+          try {
+            const linkEncrypted = await cryptoService.encrypt(link.url, true);
             
-          if (!existing) {
-             const { error: queueError } = await supabase.from('crawl_queue')
-              .insert({
-                url: linkEncrypted,
-                priority: link.priority,
-                status: 'pending'
-              });
-             if (!queueError) addedCount++;
-          }
-        } catch (err) {}
+            const { data: existing } = await supabase
+              .from('crawled_pages')
+              .select('id')
+              .eq('url', linkEncrypted)
+              .single();
+              
+            if (!existing) {
+               const { error: queueError } = await supabase.from('crawl_queue')
+                .insert({
+                  url: linkEncrypted,
+                  priority: link.priority,
+                  status: 'pending'
+                });
+               if (!queueError) addedCount++;
+            }
+          } catch (err) {}
+        }
+        if (addedCount > 0) {
+          await logToDb(queueId, `Queued ${addedCount} new pages`, 'DISCOVERY', 'success');
+        }
       }
-      if (addedCount > 0) {
-        await logToDb(queueId, `Queued ${addedCount} new pages`, 'DISCOVERY', 'success');
-      }
+    } else {
+       await logToDb(queueId, `Discovery disabled. Ignoring ${discoveredLinks.length} links.`, 'DISCOVERY', 'warning');
     }
 
     await logToDb(queueId, 'Page indexed successfully', 'COMPLETE', 'success');

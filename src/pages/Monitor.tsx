@@ -3,10 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, CheckCircle, XCircle, Clock, ArrowLeft, Activity, OctagonAlert, PlayCircle, Hash, FileText, RefreshCw, Zap } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Clock, ArrowLeft, Activity, OctagonAlert, PlayCircle, Hash, FileText, RefreshCw, Zap, Link2, Link2Off } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { showSuccess, showError } from '@/utils/toast';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface QueueItem {
   id: string;
@@ -30,6 +32,7 @@ const Monitor = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [isActive, setIsActive] = useState(true);
+  const [isDiscoveryEnabled, setIsDiscoveryEnabled] = useState(true);
   const [isToggling, setIsToggling] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -40,10 +43,13 @@ const Monitor = () => {
   const fetchSettings = async () => {
     const { data } = await supabase
       .from('crawler_settings')
-      .select('is_active')
+      .select('is_active, discovery_enabled')
       .eq('id', 1)
       .single();
-    if (data) setIsActive(data.is_active);
+    if (data) {
+      setIsActive(data.is_active);
+      setIsDiscoveryEnabled(data.discovery_enabled !== false);
+    }
   };
 
   const fetchQueue = async () => {
@@ -116,6 +122,9 @@ const Monitor = () => {
       .channel('settings_updates')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crawler_settings' }, (payload) => {
         setIsActive(payload.new.is_active);
+        if (payload.new.discovery_enabled !== undefined) {
+          setIsDiscoveryEnabled(payload.new.discovery_enabled);
+        }
       })
       .subscribe();
 
@@ -203,6 +212,28 @@ const Monitor = () => {
     }
   };
 
+  const toggleDiscovery = async (checked: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('crawler_settings')
+        .update({ discovery_enabled: checked })
+        .eq('id', 1);
+
+      if (error) throw error;
+
+      setIsDiscoveryEnabled(checked);
+      if (checked) {
+        showSuccess('Mode Découverte activé (ajoute des liens)');
+      } else {
+        showSuccess('Mode Découverte désactivé (traitement pur)');
+      }
+    } catch (err: any) {
+      showError("Erreur lors du changement de mode");
+      // Revert UI state on error
+      setIsDiscoveryEnabled(!checked);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending': return <Clock className="h-4 w-4 text-amber-500" />;
@@ -268,7 +299,30 @@ const Monitor = () => {
             </div>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
+               <Switch 
+                  id="discovery-mode" 
+                  checked={isDiscoveryEnabled}
+                  onCheckedChange={toggleDiscovery}
+               />
+               <Label htmlFor="discovery-mode" className="text-sm font-medium text-gray-600 flex items-center gap-2 cursor-pointer select-none">
+                  {isDiscoveryEnabled ? (
+                    <>
+                      <Link2 className="h-4 w-4 text-blue-500" />
+                      Mode Découverte
+                    </>
+                  ) : (
+                    <>
+                      <Link2Off className="h-4 w-4 text-gray-400" />
+                      Traitement Seul
+                    </>
+                  )}
+               </Label>
+            </div>
+
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+
             {pendingCount > 0 && (
                 <Button 
                     size="lg"
