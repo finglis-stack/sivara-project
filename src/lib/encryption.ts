@@ -1,19 +1,17 @@
 /**
  * Service de chiffrement AES-256-GCM côté client
- * Niveau de sécurité: Militaire (NSA-proof)
+ * Niveau de sécurité: Standard Web (Persistant)
  * 
  * Caractéristiques:
- * - AES-256-GCM (Galois/Counter Mode) - Standard militaire
- * - Chiffrement côté client uniquement
- * - Clé dérivée de la session utilisateur avec PBKDF2 (600,000 itérations)
- * - IV (Initialization Vector) unique et aléatoire pour chaque document
- * - Authentification intégrée (GCM) pour détecter toute modification
- * - Zero-knowledge: Le serveur ne voit JAMAIS les données en clair
+ * - AES-256-GCM (Galois/Counter Mode)
+ * - Chiffrement côté client
+ * - Clé dérivée de l'ID utilisateur (Stable) pour assurer la persistance entre les sessions
+ * - IV unique pour chaque document
  */
 
-const PBKDF2_ITERATIONS = 600000; // Recommandation OWASP 2024
+const PBKDF2_ITERATIONS = 100000;
 const KEY_LENGTH = 256;
-const IV_LENGTH = 12; // 96 bits pour GCM
+const IV_LENGTH = 12;
 
 export class EncryptionService {
   private static instance: EncryptionService;
@@ -29,17 +27,17 @@ export class EncryptionService {
   }
 
   /**
-   * Initialise la clé maître à partir de la session utilisateur
-   * Cette clé est dérivée de l'ID utilisateur + timestamp de session
-   * JAMAIS stockée, JAMAIS envoyée au serveur
+   * Initialise la clé maître à partir de l'ID utilisateur unique.
+   * CORRECTION: On n'utilise plus le sessionToken car il change à chaque connexion,
+   * ce qui rendait les données indéchiffrables après un logout.
    */
-  async initialize(userId: string, sessionToken: string): Promise<void> {
+  async initialize(userId: string): Promise<void> {
     const encoder = new TextEncoder();
     
-    // Créer un salt unique basé sur l'utilisateur
-    const saltData = encoder.encode(`${userId}:${sessionToken}:sivara-docs-v1`);
+    // Utilisation d'une graine stable basée sur l'ID utilisateur
+    // Cela garantit que la clé sera la même à chaque reconnexion de cet utilisateur
+    const saltData = encoder.encode(`${userId}:sivara-docs-persistent-key-v2`);
     
-    // Importer le matériel de clé
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
       saltData,
@@ -48,7 +46,6 @@ export class EncryptionService {
       ['deriveBits', 'deriveKey']
     );
 
-    // Dériver la clé maître avec PBKDF2
     this.masterKey = await crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
@@ -58,21 +55,15 @@ export class EncryptionService {
       },
       keyMaterial,
       { name: 'AES-GCM', length: KEY_LENGTH },
-      false, // Non extractible - impossible de récupérer la clé
+      false,
       ['encrypt', 'decrypt']
     );
   }
 
-  /**
-   * Génère un IV (Initialization Vector) aléatoire cryptographiquement sûr
-   */
   private generateIV(): Uint8Array {
     return crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   }
 
-  /**
-   * Convertit un Uint8Array en string Base64
-   */
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
     const bytes = new Uint8Array(buffer);
     let binary = '';
@@ -82,9 +73,6 @@ export class EncryptionService {
     return btoa(binary);
   }
 
-  /**
-   * Convertit une string Base64 en Uint8Array
-   */
   private base64ToArrayBuffer(base64: string): Uint8Array {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -94,28 +82,15 @@ export class EncryptionService {
     return bytes;
   }
 
-  /**
-   * Chiffre des données avec AES-256-GCM
-   * Retourne: { encrypted: string, iv: string }
-   */
   async encrypt(plaintext: string, ivBase64?: string): Promise<{ encrypted: string; iv: string }> {
-    if (!this.masterKey) {
-      throw new Error('Encryption service not initialized');
-    }
+    if (!this.masterKey) throw new Error('Encryption service not initialized');
 
     const encoder = new TextEncoder();
     const data = encoder.encode(plaintext);
-    
-    // Utiliser l'IV fourni ou en générer un nouveau
     const iv = ivBase64 ? this.base64ToArrayBuffer(ivBase64) : this.generateIV();
 
-    // Chiffrement AES-256-GCM
     const encryptedData = await crypto.subtle.encrypt(
-      {
-        name: 'AES-GCM',
-        iv: iv,
-        tagLength: 128 // Tag d'authentification de 128 bits
-      },
+      { name: 'AES-GCM', iv: iv, tagLength: 128 },
       this.masterKey,
       data
     );
@@ -126,25 +101,15 @@ export class EncryptionService {
     };
   }
 
-  /**
-   * Déchiffre des données avec AES-256-GCM
-   */
   async decrypt(encrypted: string, ivBase64: string): Promise<string> {
-    if (!this.masterKey) {
-      throw new Error('Encryption service not initialized');
-    }
-
-    const encryptedData = this.base64ToArrayBuffer(encrypted);
-    const iv = this.base64ToArrayBuffer(ivBase64);
+    if (!this.masterKey) throw new Error('Encryption service not initialized');
 
     try {
-      // Déchiffrement AES-256-GCM avec vérification d'authenticité
+      const encryptedData = this.base64ToArrayBuffer(encrypted);
+      const iv = this.base64ToArrayBuffer(ivBase64);
+
       const decryptedData = await crypto.subtle.decrypt(
-        {
-          name: 'AES-GCM',
-          iv: iv,
-          tagLength: 128
-        },
+        { name: 'AES-GCM', iv: iv, tagLength: 128 },
         this.masterKey,
         encryptedData
       );
@@ -152,16 +117,9 @@ export class EncryptionService {
       const decoder = new TextDecoder();
       return decoder.decode(decryptedData);
     } catch (error) {
-      // Si le déchiffrement échoue, les données ont été modifiées
-      throw new Error('Decryption failed: Data may have been tampered with');
+      console.error("Decryption failed:", error);
+      throw new Error('Impossible de déchiffrer les données (Clé invalide ou données corrompues)');
     }
-  }
-
-  /**
-   * Nettoie la clé de la mémoire (appelé à la déconnexion)
-   */
-  destroy(): void {
-    this.masterKey = null;
   }
 }
 

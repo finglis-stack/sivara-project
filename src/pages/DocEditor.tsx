@@ -173,10 +173,8 @@ const DocEditor = () => {
   const initializeEncryption = async () => {
     if (!user) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        await encryptionService.initialize(user.id, session.access_token);
-      }
+      // CORRECTION: Utilisation de la clé stable
+      await encryptionService.initialize(user.id);
     } catch (error) {
       console.error('Encryption initialization error:', error);
       showError('Erreur d\'initialisation du chiffrement');
@@ -208,7 +206,7 @@ const DocEditor = () => {
       
     } catch (error: any) {
       console.error('Error fetching document:', error);
-      showError('Erreur lors du chargement du document');
+      showError('Impossible de lire ce document (Ancienne clé)');
       navigate('/docs');
     } finally {
       setIsLoading(false);

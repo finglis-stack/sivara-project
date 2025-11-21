@@ -150,12 +150,9 @@ const Docs = () => {
 
   const initializeEncryption = async () => {
     if (!user) return;
-
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        await encryptionService.initialize(user.id, session.access_token);
-      }
+      // CORRECTION: On n'utilise plus le token de session pour éviter la perte de données au logout
+      await encryptionService.initialize(user.id);
     } catch (error) {
       console.error('Encryption initialization error:', error);
       showError('Erreur d\'initialisation du chiffrement');
@@ -186,11 +183,11 @@ const Docs = () => {
               decryptedContent
             };
           } catch (error) {
-            console.error('Decryption error for document:', doc.id, error);
+            // Si on ne peut pas déchiffrer (anciens docs avec mauvaise clé), on affiche un message
             return {
               ...doc,
-              decryptedTitle: '🔒 Erreur de déchiffrement',
-              decryptedContent: ''
+              decryptedTitle: '🔒 Données illisibles (Ancienne clé)',
+              decryptedContent: 'Ce document a été chiffré avec une clé de session expirée.'
             };
           }
         })
@@ -271,8 +268,12 @@ const Docs = () => {
     if (!user) return;
 
     try {
-      const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(`${doc.decryptedTitle} (copie)`);
-      const { encrypted: encryptedContent } = await encryptionService.encrypt(doc.decryptedContent, iv);
+      // Attention: si le doc source est illisible, on ne peut pas le dupliquer correctement
+      const titleToUse = doc.decryptedTitle.startsWith('🔒') ? 'Copie de document illisible' : `${doc.decryptedTitle} (copie)`;
+      const contentToUse = doc.decryptedTitle.startsWith('🔒') ? '' : doc.decryptedContent;
+
+      const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(titleToUse);
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(contentToUse, iv);
 
       const { error } = await supabase
         .from('documents')
