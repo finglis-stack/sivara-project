@@ -173,8 +173,6 @@ serve(async (req) => {
     })
 
     if (!response.ok) {
-      // Si c'est un 403/401, on ne pourra rien faire de plus en Edge Function pure
-      // On loggue spécifiquement l'erreur
       throw new Error(`HTTP ${response.status} - Access Denied/Protected`)
     }
 
@@ -293,7 +291,12 @@ serve(async (req) => {
 
     await logToDb(queueId, 'Done', 'COMPLETE', 'success');
 
-    supabase.rpc('increment_crawl_stats').catch(() => {});
+    // FIX: Utilisation de await au lieu de .catch() sur l'objet RPC
+    try {
+      await supabase.rpc('increment_crawl_stats')
+    } catch (rpcError) {
+      console.error('Failed to update stats', rpcError)
+    }
 
     return new Response(
       JSON.stringify({ success: true }),
