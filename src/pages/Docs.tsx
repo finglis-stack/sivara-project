@@ -127,12 +127,17 @@ const Docs = () => {
     if (!user) return;
 
     try {
+      console.log('[ENCRYPTION] Initializing encryption service...');
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
+        console.log('[ENCRYPTION] Session found, initializing with user ID:', user.id);
         await encryptionService.initialize(user.id, session.access_token);
+        console.log('[ENCRYPTION] Encryption service initialized successfully');
+      } else {
+        console.error('[ENCRYPTION] No session found');
       }
     } catch (error) {
-      console.error('Encryption initialization error:', error);
+      console.error('[ENCRYPTION] Initialization error:', error);
       showError('Erreur d\'initialisation du chiffrement');
     }
   };
@@ -141,6 +146,7 @@ const Docs = () => {
     if (!user) return;
 
     try {
+      console.log('[DOCS] Fetching documents...');
       const { data, error } = await supabase
         .from('documents')
         .select('*')
@@ -149,12 +155,20 @@ const Docs = () => {
 
       if (error) throw error;
 
+      console.log('[DOCS] Found', data?.length || 0, 'documents');
+
       // Déchiffrer tous les documents
       const decryptedDocs = await Promise.all(
         (data || []).map(async (doc) => {
           try {
+            console.log('[DECRYPT] Attempting to decrypt document:', doc.id);
+            console.log('[DECRYPT] IV length:', doc.encryption_iv?.length);
+            console.log('[DECRYPT] Title length:', doc.title?.length);
+            
             const decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
             const decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
+            
+            console.log('[DECRYPT] Successfully decrypted document:', doc.id);
             
             return {
               ...doc,
@@ -162,7 +176,14 @@ const Docs = () => {
               decryptedContent
             };
           } catch (error) {
-            console.error('Decryption error for document:', doc.id, error);
+            console.error('[DECRYPT] Error decrypting document:', doc.id, error);
+            console.error('[DECRYPT] Error details:', {
+              message: error.message,
+              stack: error.stack,
+              docId: doc.id,
+              ivLength: doc.encryption_iv?.length,
+              titleLength: doc.title?.length
+            });
             return {
               ...doc,
               decryptedTitle: '🔒 Erreur de déchiffrement',
@@ -173,8 +194,9 @@ const Docs = () => {
       );
 
       setDocuments(decryptedDocs);
+      console.log('[DOCS] Documents loaded and decrypted');
     } catch (error: any) {
-      console.error('Error fetching documents:', error);
+      console.error('[DOCS] Error fetching documents:', error);
       showError('Erreur lors du chargement des documents');
     } finally {
       setIsLoading(false);
@@ -185,8 +207,11 @@ const Docs = () => {
     if (!user) return;
 
     try {
+      console.log('[CREATE] Creating new document...');
+      
       // Générer un seul IV pour le document
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt('Document sans titre');
+      console.log('[CREATE] Generated IV length:', iv.length);
       
       // Utiliser le MÊME IV pour chiffrer le contenu
       const { encrypted: encryptedContent } = await encryptionService.encrypt('', iv);
@@ -205,10 +230,11 @@ const Docs = () => {
 
       if (error) throw error;
 
+      console.log('[CREATE] Document created successfully:', data.id);
       showSuccess('Document créé (chiffré)');
       navigate(`/docs/${data.id}`);
     } catch (error: any) {
-      console.error('Error creating document:', error);
+      console.error('[CREATE] Error creating document:', error);
       showError('Erreur lors de la création du document');
     }
   };
@@ -321,7 +347,7 @@ const Docs = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-4" />
-          <p className="text-sm text-gray-500 flex items-center gap-2">
+          <p className="text-sm text-gray-500 flex items-center gap-2 justify-center">
             <Shield className="h-4 w-4" />
             Déchiffrement des documents...
           </p>
