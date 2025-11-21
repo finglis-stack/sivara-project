@@ -62,17 +62,12 @@ class CryptoService {
 }
 
 function cleanJsonString(str: string): string {
-  // Nettoyage agressif pour trouver le JSON valide
   let clean = str.replace(/```json/g, '').replace(/```/g, '');
-  
-  // Trouver le premier '{' et le dernier '}'
   const firstOpen = clean.indexOf('{');
   const lastClose = clean.lastIndexOf('}');
-  
   if (firstOpen !== -1 && lastClose !== -1) {
     clean = clean.substring(firstOpen, lastClose + 1);
   }
-  
   return clean;
 }
 
@@ -87,6 +82,7 @@ function extractLinks(html: string, baseUrl: string): { url: string, text: strin
       const text = match[2].replace(/<[^>]+>/g, '').trim();
       
       if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || !text) continue;
+      if (text.length < 3) continue; // Ignore liens trop courts (ex: "fr", "en", "->")
 
       const absoluteUrl = new URL(href, baseUrl);
       
@@ -98,11 +94,12 @@ function extractLinks(html: string, baseUrl: string): { url: string, text: strin
       }
 
       if (!links.some(l => l.url === absoluteUrl.href)) {
-        links.push({ url: absoluteUrl.href, text: text.substring(0, 50) });
+        links.push({ url: absoluteUrl.href, text: text.substring(0, 40) }); // Truncate link text
       }
     } catch (e) { continue; }
   }
-  return links.slice(0, 50);
+  // OPTIMISATION TOKEN : On ne garde que 15 liens max
+  return links.slice(0, 15);
 }
 
 // @ts-ignore: Deno types
@@ -154,73 +151,63 @@ serve(async (req) => {
 
     if (!url) throw new Error('URL is required')
 
-    await logToDb(queueId, `Starting smart crawl for: ${url}`, 'INIT', 'info');
+    await logToDb(queueId, `Processing: ${url}`, 'INIT', 'info');
 
-    await logToDb(queueId, 'Fetching URL content...', 'SCRAPING', 'info');
     const response = await fetch(url, {
       redirect: 'follow',
-      headers: { 'User-Agent': 'SivaraBot/3.0 (AI Powered Indexer)' },
+      headers: { 'User-Agent': 'SivaraBot/3.0' },
     })
 
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
     const buffer = await response.arrayBuffer()
     const textDecoder = new TextDecoder('utf-8')
     const rawHtml = textDecoder.decode(buffer)
 
-    await logToDb(queueId, `Content fetched. Extracting candidates...`, 'SCRAPING', 'success');
-
     const candidateLinks = extractLinks(rawHtml, url);
     
+    // OPTIMISATION TOKEN : On coupe drastiquement le contenu
     const cleanedText = rawHtml
       .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
       .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 30000);
+      .substring(0, 3000); // Max 3k chars (~800 tokens)
 
-    await logToDb(queueId, `Consulting AI for analysis...`, 'AI_ANALYSIS', 'info');
+    await logToDb(queueId, `AI Analysis (Economy Mode)...`, 'AI_ANALYSIS', 'info');
     
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     
-    // Force JSON mode in config
     const model = genAI.getGenerativeModel({ 
       model: geminiModel,
       generationConfig: { responseMimeType: "application/json" }
     });
 
+    // Prompt compact
     const prompt = `
-    Analyse cette page web et retourne UNIQUEMENT un objet JSON valide.
-
+    Analyse cette page. Retourne JSON.
     URL: ${url}
     
-    TACHES:
-    1. Extrais le titre, description et reformule le contenu.
-    2. Analyse les liens candidats et assigne un score de priorité (0-10).
+    Links to analyze: ${JSON.stringify(candidateLinks)}
     
-    LIENS CANDIDATS:
-    ${JSON.stringify(candidateLinks)}
+    Page Start: ${cleanedText}
 
-    CRITÈRES PRIORITÉ:
-    - 10: Pages importantes (Produits, Docs, Accueil)
-    - 8-9: Blog, Partenaires, Login
-    - 5-7: Contact, À propos
-    - 0-4: Inutile, 404, CGU
-    - Ignorer réseaux sociaux
-
-    CONTENU PAGE:
-    ${cleanedText}
-
-    SCHEMA JSON ATTENDU:
+    JSON Expected:
     {
-      "title": "string",
-      "description": "string",
-      "rephrased_content": "string",
+      "title": "Page Title",
+      "description": "Short summary (max 160 chars)",
+      "rephrased_content": "Dense summary of the page content (max 500 chars)",
       "discovered_urls": [
-        { "url": "string", "priority": number }
+        { "url": "http...", "priority": 0-10 }
       ]
     }
+    
+    Priorities:
+    10: Important content/product
+    8: External sources/partners
+    5: General info
+    0: Useless/Social/Login
     `;
 
     const result = await model.generateContent(prompt);
@@ -228,22 +215,17 @@ serve(async (req) => {
     
     let aiData;
     try {
-      // Utilisation du nettoyeur amélioré
-      const cleanedJson = cleanJsonString(aiResponseText);
-      aiData = JSON.parse(cleanedJson);
+      aiData = JSON.parse(cleanJsonString(aiResponseText));
     } catch (e) {
-      console.error("JSON Parse Error. Raw:", aiResponseText);
-      // Fallback manuel si l'IA échoue totalement (rare avec le mode JSON)
       aiData = {
-        title: 'Erreur Analyse IA',
-        description: '',
+        title: 'Title Error',
+        description: 'Content extraction failed',
         rephrased_content: cleanedText.substring(0, 500),
         discovered_urls: []
       };
-      await logToDb(queueId, "AI JSON Warning: Using fallback content", "AI_ANALYSIS", "error");
     }
 
-    await logToDb(queueId, 'Encrypting and indexing...', 'ENCRYPTION', 'info');
+    await logToDb(queueId, 'Saving...', 'ENCRYPTION', 'info');
 
     const urlObj = new URL(url)
     const domain = urlObj.hostname
@@ -252,7 +234,6 @@ serve(async (req) => {
     const encryptedDescription = await cryptoService.encrypt(aiData.description || '')
     const encryptedContent = await cryptoService.encrypt(aiData.rephrased_content || '')
     const encryptedDomain = await cryptoService.encrypt(domain)
-    
     const encryptedUrl = await cryptoService.encrypt(url, true)
     
     const searchHash = await cryptoService.hash(aiData.title + ' ' + aiData.description + ' ' + aiData.rephrased_content)
@@ -276,37 +257,28 @@ serve(async (req) => {
     if (error) throw error
 
     if (aiData.discovered_urls && Array.isArray(aiData.discovered_urls)) {
-      const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 5);
+      const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 6); // Seuil augmenté à 6
       
-      await logToDb(queueId, `AI found ${highValueLinks.length} relevant links`, 'DISCOVERY', 'success');
-
-      for (const link of highValueLinks) {
-        try {
-          const linkEncrypted = await cryptoService.encrypt(link.url, true);
-          
-          await supabase.from('crawl_queue')
-            .upsert({
-              url: linkEncrypted,
-              priority: link.priority,
-              status: 'pending'
-            }, { onConflict: 'url', ignoreDuplicates: true });
-            
-        } catch (err) {
-          console.error("Link add error", err);
+      if (highValueLinks.length > 0) {
+        await logToDb(queueId, `Found ${highValueLinks.length} links`, 'DISCOVERY', 'success');
+        for (const link of highValueLinks) {
+          try {
+            const linkEncrypted = await cryptoService.encrypt(link.url, true);
+            await supabase.from('crawl_queue')
+              .upsert({
+                url: linkEncrypted,
+                priority: link.priority,
+                status: 'pending'
+              }, { onConflict: 'url', ignoreDuplicates: true });
+          } catch (err) {}
         }
       }
     }
 
-    await logToDb(queueId, 'Crawl completed successfully', 'COMPLETE', 'success');
+    await logToDb(queueId, 'Done', 'COMPLETE', 'success');
 
-    const { data: stats } = await supabase.from('crawl_stats').select('*').single()
-    if (stats) {
-      await supabase.from('crawl_stats').update({
-          total_pages: stats.total_pages + 1,
-          last_crawl_at: new Date().toISOString(),
-          pages_crawled_today: stats.pages_crawled_today + 1,
-        }).eq('id', stats.id)
-    }
+    // Stats update (sans await pour aller plus vite)
+    supabase.rpc('increment_crawl_stats').catch(() => {});
 
     return new Response(
       JSON.stringify({ success: true }),
@@ -315,16 +287,13 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('[CRAWL ERROR]', error)
-    await logToDb(queueId, `Fatal Error: ${error.message}`, 'ERROR', 'error');
+    await logToDb(queueId, `Error: ${error.message}`, 'ERROR', 'error');
 
     if (currentUrl && cryptoService) {
       try {
-        await logToDb(queueId, `Cleaning up failed URL from index...`, 'CLEANUP', 'info');
         const encryptedUrlToDelete = await cryptoService.encrypt(currentUrl, true);
         await supabase.from('crawled_pages').delete().eq('url', encryptedUrlToDelete);
-      } catch (cleanupError) {
-        console.error("Cleanup failed", cleanupError);
-      }
+      } catch (e) {}
     }
 
     return new Response(
