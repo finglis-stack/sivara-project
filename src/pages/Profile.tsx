@@ -203,11 +203,27 @@ const Profile = () => {
         canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.9);
       });
 
-      // Upload vers Supabase Storage
-      const fileName = `${user.id}-${Date.now()}.jpg`;
+      // Supprimer l'ancien avatar s'il existe
+      if (profile.avatar_url) {
+        try {
+          const oldPath = profile.avatar_url.split('/').pop();
+          if (oldPath) {
+            await supabase.storage
+              .from('avatars')
+              .remove([`${user.id}/${oldPath}`]);
+          }
+        } catch (error) {
+          console.log('No old avatar to delete or error deleting:', error);
+        }
+      }
+
+      // Upload vers Supabase Storage avec le bon chemin
+      const fileName = `avatar-${Date.now()}.jpg`;
+      const filePath = `${user.id}/${fileName}`;
+      
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, blob, {
+        .upload(filePath, blob, {
           contentType: 'image/jpeg',
           upsert: true,
         });
@@ -217,7 +233,7 @@ const Profile = () => {
       // Obtenir l'URL publique
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
-        .getPublicUrl(fileName);
+        .getPublicUrl(filePath);
 
       // Mettre à jour le profil
       const { error: updateError } = await supabase
@@ -236,7 +252,7 @@ const Profile = () => {
       showSuccess('Photo de profil mise à jour');
     } catch (error: any) {
       console.error('Error uploading avatar:', error);
-      showError('Erreur lors de l\'upload de la photo');
+      showError(error.message || 'Erreur lors de l\'upload de la photo');
     } finally {
       setIsUploadingAvatar(false);
     }
