@@ -88,12 +88,21 @@ const DocEditor = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [title, setTitle] = useState('');
+  
+  // FIX: Utilisation d'une ref pour garantir que l'éditeur accède toujours au titre le plus récent
+  const titleRef = useRef(title);
+
   const [encryptionIV, setEncryptionIV] = useState('');
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [selectedIcon, setSelectedIcon] = useState('FileText');
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const isUpdatingFromRemoteRef = useRef(false);
+
+  // Mettre à jour la ref quand le titre change
+  useEffect(() => {
+    titleRef.current = title;
+  }, [title]);
 
   // Initialisation de l'éditeur Tiptap
   const editor = useEditor({
@@ -173,7 +182,6 @@ const DocEditor = () => {
   const initializeEncryption = async () => {
     if (!user) return;
     try {
-      // CORRECTION: Utilisation de la clé stable
       await encryptionService.initialize(user.id);
     } catch (error) {
       console.error('Encryption initialization error:', error);
@@ -259,7 +267,8 @@ const DocEditor = () => {
   const handleContentChange = (newContent: string) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      saveDocument(title, newContent);
+      // FIX: Utilisation de titleRef.current au lieu de title pour avoir la valeur à jour
+      saveDocument(titleRef.current, newContent);
       saveTimeoutRef.current = undefined;
     }, 1000);
   };
@@ -268,7 +277,8 @@ const DocEditor = () => {
     setSelectedIcon(icon);
     setSelectedColor(color);
     setShowIconPicker(false);
-    await saveDocument(title, editor?.getHTML() || '', icon, color);
+    // Utilisation de titleRef ici aussi par sécurité
+    await saveDocument(titleRef.current, editor?.getHTML() || '', icon, color);
     showSuccess('Apparence mise à jour');
   };
 
