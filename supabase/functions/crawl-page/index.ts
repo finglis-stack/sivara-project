@@ -27,10 +27,20 @@ class CryptoService {
     );
   }
 
-  async encrypt(text: string): Promise<string> {
+  // Ajout du mode déterministe pour permettre la déduplication des URLs (UPSERT)
+  async encrypt(text: string, deterministic: boolean = false): Promise<string> {
     if (!this.key) throw new Error('Crypto not initialized');
     
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    let iv: Uint8Array;
+    if (deterministic) {
+       // Dérive l'IV du contenu pour avoir toujours le même résultat chiffré pour la même URL
+       const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(text));
+       iv = new Uint8Array(hashBuffer).slice(0, 12);
+    } else {
+       // IV aléatoire pour la sécurité sémantique maximale (par défaut pour le contenu)
+       iv = crypto.getRandomValues(new Uint8Array(12));
+    }
+    
     const data = encoder.encode(text);
     
     const encrypted = await crypto.subtle.encrypt(
@@ -63,28 +73,31 @@ function extractLinks(html: string, baseUrl: string): { url: string, text: strin
   const regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
   let match;
   
-  const baseDomain = new URL(baseUrl).hostname.replace('www.', '');
+  // On ne filtre plus par domaine pour autoriser les liens externes
 
   while ((match = regex.exec(html)) !== null) {
     try {
       const href = match[1];
-      const text = match[2].replace(/<[^>]+>/g, '').trim(); // Clean tags inside a
+      const text = match[2].replace(/<[^>]+>/g, '').trim();
       
-      // Ignore anchors, javascript, mailto
       if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || !text) continue;
 
       const absoluteUrl = new URL(href, baseUrl);
       
-      // Keep only same domain
-      if (!absoluteUrl.hostname.includes(baseDomain)) continue;
+      // Filtre basique pour économiser l'IA (réseaux sociaux communs)
+      const h = absoluteUrl.hostname;
+      if (h.includes('facebook.') || h.includes('twitter.') || h.includes('x.com') || 
+          h.includes('instagram.') || h.includes('linkedin.') || h.includes('pinterest.') ||
+          h.includes('google.') || h.includes('youtube.') || h.includes('tiktok.')) {
+        continue;
+      }
 
-      // Avoid duplicates in the current list
       if (!links.some(l => l.url === absoluteUrl.href)) {
         links.push({ url: absoluteUrl.href, text: text.substring(0, 50) });
       }
     } catch (e) { continue; }
   }
-  return links.slice(0, 50); // Limit to 50 candidates for AI analysis
+  return links.slice(0, 50);
 }
 
 // @ts-ignore: Deno types
@@ -93,7 +106,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  // Initialisation Supabase au scope global pour le logging
   // @ts-ignore
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   // @ts-ignore
@@ -104,7 +116,6 @@ serve(async (req) => {
   let currentUrl = '';
   let cryptoService: CryptoService | null = null;
 
-  // Helper pour logger en DB
   const logToDb = async (qId: string | null, message: string, step: string, status: string = 'info') => {
     console.log(`[${step}] ${message}`);
     if (qId) {
@@ -123,7 +134,7 @@ serve(async (req) => {
     // @ts-ignore
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!
     // @ts-ignore
-    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash'; // Faster model for scraping
+    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
     
     if (!encryptionKey) throw new Error('ENCRYPTION_KEY not configured')
     if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured')
@@ -133,7 +144,6 @@ serve(async (req) => {
 
     const body = await req.json();
     const url = body.url;
-    const maxDepth = body.maxDepth || 0; // Depth logic managed by priority now
     queueId = body.queueId || null;
     currentUrl = url;
 
@@ -141,18 +151,13 @@ serve(async (req) => {
 
     await logToDb(queueId, `Starting smart crawl for: ${url}`, 'INIT', 'info');
 
-    // 1. Fetcher le contenu brut
     await logToDb(queueId, 'Fetching URL content...', 'SCRAPING', 'info');
     const response = await fetch(url, {
       redirect: 'follow',
-      headers: {
-        'User-Agent': 'SivaraBot/3.0 (AI Powered Indexer)',
-      },
+      headers: { 'User-Agent': 'SivaraBot/3.0 (AI Powered Indexer)' },
     })
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 
     const buffer = await response.arrayBuffer()
     const textDecoder = new TextDecoder('utf-8')
@@ -160,7 +165,6 @@ serve(async (req) => {
 
     await logToDb(queueId, `Content fetched. Extracting candidates...`, 'SCRAPING', 'success');
 
-    // 2. Préparation des données pour l'IA
     const candidateLinks = extractLinks(rawHtml, url);
     
     const cleanedText = rawHtml
@@ -169,10 +173,9 @@ serve(async (req) => {
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 30000); // Increased context
+      .substring(0, 30000);
 
-    // 3. Analyse IA
-    await logToDb(queueId, `Consulting AI for content & priority analysis...`, 'AI_ANALYSIS', 'info');
+    await logToDb(queueId, `Consulting AI for analysis & external links discovery...`, 'AI_ANALYSIS', 'info');
     
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ model: geminiModel });
@@ -187,17 +190,19 @@ serve(async (req) => {
     - Fais une DESCRIPTION SEO.
     - Reformule le CONTENU en français, dense et informatif.
 
-    TACHE 2 : Découverte de liens intelligente
+    TACHE 2 : Découverte de liens intelligente (Internes et Externes)
     Voici une liste de liens trouvés sur la page :
     ${JSON.stringify(candidateLinks)}
 
-    Analyse ces liens et sélectionne UNIQUEMENT ceux qui sont pertinents à ajouter à la file d'attente.
+    Analyse ces liens et sélectionne ceux qui sont pertinents à ajouter à la file d'attente.
+    IMPORTANT : Inclus les liens vers D'AUTRES SITES (externes) s'ils semblent être des sources, des partenaires ou du contenu pertinent.
+    
     CRITÈRES DE PRIORITÉ (Score 0-10) :
     - 10 : Pages produits, Pages principales, Documentation clé.
-    - 8-9 : Sous-catégories, Articles de blog pertinents, Page de compte (Login/Dashboard).
-    - 5-7 : Pages "À propos", Contact.
-    - 0-3 : Pages 404, CGU, Politique de confidentialité, Liens de désinscription, Panier vide, Liens cassés probables.
-    - IGNORE : Les liens externes (Facebook, Twitter, etc), les ancres (#).
+    - 8-9 : Sous-catégories, Articles de blog, Sites externes pertinents (sources, partenaires).
+    - 5-7 : Pages "À propos", Contact, Liens externes généraux utiles.
+    - 0-3 : Pages 404, CGU, Politique de confidentialité, Login, Panier vide.
+    - IGNORE : Réseaux sociaux (Facebook, Twitter...), Pubs, Ancres (#).
 
     Format JSON attendu :
     {
@@ -225,20 +230,22 @@ serve(async (req) => {
       throw new Error("AI Failed to produce valid JSON");
     }
 
-    // 4. Cryptage et Sauvegarde
     await logToDb(queueId, 'Encrypting and indexing...', 'ENCRYPTION', 'info');
 
     const urlObj = new URL(url)
     const domain = urlObj.hostname
     
+    // Encryption standard (aléatoire) pour le contenu
     const encryptedTitle = await cryptoService.encrypt(aiData.title || 'Sans titre')
     const encryptedDescription = await cryptoService.encrypt(aiData.description || '')
     const encryptedContent = await cryptoService.encrypt(aiData.rephrased_content || '')
-    const encryptedUrl = await cryptoService.encrypt(url)
     const encryptedDomain = await cryptoService.encrypt(domain)
+    
+    // Encryption déterministe pour l'URL principale aussi, pour faciliter la maintenance future
+    const encryptedUrl = await cryptoService.encrypt(url, true)
+    
     const searchHash = await cryptoService.hash(aiData.title + ' ' + aiData.description + ' ' + aiData.rephrased_content)
 
-    // Upsert dans crawled_pages
     const { error } = await supabase
       .from('crawled_pages')
       .upsert({
@@ -257,22 +264,21 @@ serve(async (req) => {
 
     if (error) throw error
 
-    // 5. Gestion de la file d'attente (Links Discovery)
     if (aiData.discovered_urls && Array.isArray(aiData.discovered_urls)) {
-      const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 5); // Seuil de pertinence
+      const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 5);
       
-      await logToDb(queueId, `AI found ${highValueLinks.length} relevant links (out of ${candidateLinks.length})`, 'DISCOVERY', 'success');
+      await logToDb(queueId, `AI found ${highValueLinks.length} relevant links (including external)`, 'DISCOVERY', 'success');
 
       for (const link of highValueLinks) {
         try {
-          const linkEncrypted = await cryptoService.encrypt(link.url);
+          // UTILISATION DE L'ENCRYPTION DÉTERMINISTE POUR LES URLS
+          // C'est crucial pour que 'onConflict' détecte les doublons et évite les boucles infinies
+          const linkEncrypted = await cryptoService.encrypt(link.url, true);
           
-          // On insert seulement si ça n'existe pas déjà pour éviter les boucles infinies
-          // On utilise le score de l'IA comme priorité
           await supabase.from('crawl_queue')
             .upsert({
               url: linkEncrypted,
-              priority: link.priority, // Priorité définie par l'IA
+              priority: link.priority,
               status: 'pending'
             }, { onConflict: 'url', ignoreDuplicates: true });
             
@@ -284,7 +290,6 @@ serve(async (req) => {
 
     await logToDb(queueId, 'Crawl completed successfully', 'COMPLETE', 'success');
 
-    // Update stats
     const { data: stats } = await supabase.from('crawl_stats').select('*').single()
     if (stats) {
       await supabase.from('crawl_stats').update({
@@ -303,12 +308,11 @@ serve(async (req) => {
     console.error('[CRAWL ERROR]', error)
     await logToDb(queueId, `Fatal Error: ${error.message}`, 'ERROR', 'error');
 
-    // NETTOYAGE INTELLIGENT
-    // Si le crawl a échoué, on s'assure que cette URL n'est PAS dans l'index de recherche
     if (currentUrl && cryptoService) {
       try {
         await logToDb(queueId, `Cleaning up failed URL from index...`, 'CLEANUP', 'info');
-        const encryptedUrlToDelete = await cryptoService.encrypt(currentUrl);
+        // Nettoyage avec encryption déterministe
+        const encryptedUrlToDelete = await cryptoService.encrypt(currentUrl, true);
         await supabase.from('crawled_pages').delete().eq('url', encryptedUrlToDelete);
       } catch (cleanupError) {
         console.error("Cleanup failed", cleanupError);
