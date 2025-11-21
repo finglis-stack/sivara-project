@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Sparkles, Feather, Layout, Smartphone } from 'lucide-react';
+import { ArrowRight, Feather, Layout, Smartphone } from 'lucide-react';
 
 const DocsLanding = () => {
   const navigate = useNavigate();
@@ -54,7 +54,6 @@ const DocsLanding = () => {
           <div className="animate-in fade-in slide-in-from-bottom-8 duration-1000 space-y-8 flex flex-col items-center">
             
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-white text-sm font-medium shadow-lg mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
               <span>La nouvelle façon d'écrire</span>
             </div>
 
