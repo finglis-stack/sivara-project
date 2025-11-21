@@ -31,7 +31,8 @@ import {
   Grid3x3,
   List,
   ArrowLeft,
-  Shield
+  Shield,
+  Sparkles
 } from 'lucide-react';
 
 interface Document {
@@ -296,6 +297,11 @@ const Docs = () => {
     return user?.email?.substring(0, 2).toUpperCase() || 'U';
   };
 
+  const getPreviewText = (content: string) => {
+    const text = content.replace(/<[^>]*>/g, '').trim();
+    return text.substring(0, 120) + (text.length > 120 ? '...' : '');
+  };
+
   const filteredDocuments = documents
     .filter(doc => {
       if (filter === 'starred') return doc.is_starred;
@@ -466,55 +472,78 @@ const Docs = () => {
                 {/* Carte Nouveau document */}
                 <button
                   onClick={createDocument}
-                  className="group border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 flex flex-col items-center justify-center min-h-[200px]"
+                  className="group relative border-2 border-dashed border-gray-300 rounded-2xl p-8 hover:border-blue-400 hover:bg-blue-50/30 transition-all duration-300 flex flex-col items-center justify-center min-h-[280px] overflow-hidden"
                 >
-                  <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center mb-3 group-hover:bg-gray-200 transition-colors">
-                    <Plus className="h-6 w-6 text-gray-600" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-50/0 via-blue-50/0 to-blue-100/0 group-hover:from-blue-50/50 group-hover:via-blue-100/30 group-hover:to-blue-50/50 transition-all duration-500"></div>
+                  <div className="relative z-10 flex flex-col items-center">
+                    <div className="h-16 w-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg">
+                      <Plus className="h-8 w-8 text-white" />
+                    </div>
+                    <span className="text-base font-medium text-gray-700 group-hover:text-blue-700 transition-colors">Nouveau document</span>
+                    <span className="text-xs text-gray-500 mt-1">Chiffré de bout en bout</span>
                   </div>
-                  <span className="text-sm font-medium text-gray-600">Nouveau document</span>
                 </button>
 
                 {/* Documents existants */}
                 {filteredDocuments.map((doc) => (
-                  <Card
+                  <div
                     key={doc.id}
-                    className="group relative p-6 hover:shadow-md transition-all duration-200 cursor-pointer"
+                    className="group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.02]"
                     onClick={() => navigate(`/docs/${doc.id}`)}
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-8 w-8 text-blue-600" />
-                        <Shield className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleStar(doc.id, doc.is_starred);
-                          }}
-                        >
-                          <Star className={`h-4 w-4 ${doc.is_starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                        </Button>
+                    {/* Gradient background */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-white via-gray-50 to-gray-100 group-hover:from-blue-50 group-hover:via-white group-hover:to-purple-50 transition-all duration-500"></div>
+                    
+                    {/* Border glow effect */}
+                    <div className="absolute inset-0 rounded-2xl border-2 border-gray-200 group-hover:border-blue-300 transition-all duration-300"></div>
+                    <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 shadow-xl shadow-blue-200/50"></div>
+
+                    <Card className="relative bg-transparent border-0 shadow-none p-6 min-h-[280px] flex flex-col">
+                      {/* Header avec icônes */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                            <FileText className="h-6 w-6 text-white" />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <Shield className="h-3.5 w-3.5 text-green-600" />
+                              <span className="text-[10px] font-medium text-green-700 uppercase tracking-wide">Chiffré</span>
+                            </div>
+                            {doc.is_starred && (
+                              <div className="flex items-center gap-1">
+                                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                <span className="text-[10px] font-medium text-yellow-700">Favori</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-white/80"
                             >
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-48">
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
                               navigate(`/docs/${doc.id}`);
                             }}>
+                              <FileText className="mr-2 h-4 w-4" />
                               Ouvrir
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              toggleStar(doc.id, doc.is_starred);
+                            }}>
+                              <Star className="mr-2 h-4 w-4" />
+                              {doc.is_starred ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
                               duplicateDocument(doc);
@@ -544,53 +573,82 @@ const Docs = () => {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                    </div>
-                    <h3 className="font-medium text-gray-900 mb-2 truncate">{doc.decryptedTitle}</h3>
-                    <p className="text-sm text-gray-500">{formatDate(doc.updated_at)}</p>
-                  </Card>
+
+                      {/* Titre */}
+                      <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 text-lg group-hover:text-blue-700 transition-colors">
+                        {doc.decryptedTitle}
+                      </h3>
+
+                      {/* Aperçu du contenu */}
+                      <p className="text-sm text-gray-600 line-clamp-3 mb-4 flex-1">
+                        {getPreviewText(doc.decryptedContent) || 'Document vide'}
+                      </p>
+
+                      {/* Footer avec date */}
+                      <div className="flex items-center justify-between pt-4 border-t border-gray-200/50">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Clock className="h-3.5 w-3.5" />
+                          <span>{formatDate(doc.updated_at)}</span>
+                        </div>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <Sparkles className="h-4 w-4 text-blue-500" />
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
+              <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 shadow-sm overflow-hidden">
                 {filteredDocuments.map((doc) => (
                   <div
                     key={doc.id}
-                    className="group flex items-center justify-between p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="group flex items-center justify-between p-5 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-purple-50/30 cursor-pointer transition-all duration-300"
                     onClick={() => navigate(`/docs/${doc.id}`)}
                   >
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-6 w-6 text-blue-600 flex-shrink-0" />
-                        <Shield className="h-4 w-4 text-green-600" />
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="h-12 w-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 flex-shrink-0">
+                        <FileText className="h-6 w-6 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 truncate">{doc.decryptedTitle}</h3>
-                        <p className="text-sm text-gray-500">{formatDate(doc.updated_at)}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors">
+                            {doc.decryptedTitle}
+                          </h3>
+                          {doc.is_starred && (
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 flex-shrink-0" />
+                          )}
+                          <Shield className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-gray-500">
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5" />
+                            <span>{formatDate(doc.updated_at)}</span>
+                          </div>
+                          <span className="text-gray-300">•</span>
+                          <span className="truncate">{getPreviewText(doc.decryptedContent) || 'Document vide'}</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleStar(doc.id, doc.is_starred);
-                        }}
-                      >
-                        <Star className={`h-4 w-4 ${doc.is_starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                      </Button>
+                    <div className="flex items-center gap-2 ml-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-all duration-200"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={(e) => {
+                            e.stopPropagation();
+                            toggleStar(doc.id, doc.is_starred);
+                          }}>
+                            <Star className="mr-2 h-4 w-4" />
+                            {doc.is_starred ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={(e) => {
                             e.stopPropagation();
                             duplicateDocument(doc);
@@ -631,7 +689,7 @@ const Docs = () => {
       {/* Floating action button (mobile) */}
       <Button
         onClick={createDocument}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg bg-gray-700 hover:bg-gray-800 md:hidden"
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-2xl bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 md:hidden hover:scale-110 transition-all duration-300"
         size="icon"
       >
         <Plus className="h-6 w-6" />
