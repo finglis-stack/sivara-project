@@ -88,9 +88,18 @@ function isAllowedLanguage(html: string): boolean {
   return frCount > 2 || enCount > 2;
 }
 
-function extractMetadata(html: string): { title: string, description: string, content: string } {
+function extractMetadata(html: string, url: string): { title: string, description: string, content: string } {
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-  const title = titleMatch ? titleMatch[1].trim() : 'Sans titre';
+  let title = titleMatch ? titleMatch[1].trim() : 'Sans titre';
+
+  // AMÉLIORATION : Si le titre est générique, on ajoute le domaine pour le contexte
+  const urlObj = new URL(url);
+  const domainName = urlObj.hostname.replace('www.', '');
+  const genericTerms = ['accueil', 'home', 'index', 'bienvenue', 'page d\'accueil', 'homepage', 'sans titre'];
+  
+  if (genericTerms.includes(title.toLowerCase()) || title.length < 5) {
+    title = `${title} - ${domainName}`;
+  }
 
   const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i);
   const description = descMatch ? descMatch[1].trim() : '';
@@ -273,7 +282,7 @@ serve(async (req) => {
     await logToDb(queueId, `Parsing SEO data...`, 'PARSING', 'info');
     
     // 3. Parsing
-    const metadata = extractMetadata(rawHtml);
+    const metadata = extractMetadata(rawHtml, url);
     const discoveredLinks = extractLinks(rawHtml, url);
 
     await logToDb(queueId, `Found: "${metadata.title}" & ${discoveredLinks.length} valid links`, 'PARSING', 'success');

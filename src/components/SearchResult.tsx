@@ -1,4 +1,4 @@
-import { ExternalLink, Globe, ChevronDown, ChevronUp } from 'lucide-react';
+import { ExternalLink, Globe, ChevronDown, ChevronUp, CornerDownRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
@@ -39,6 +39,15 @@ const SearchResult = ({
       month: 'long', 
       day: 'numeric' 
     });
+  };
+
+  const getUrlPath = (fullUrl: string) => {
+    try {
+      const path = new URL(fullUrl).pathname;
+      return path === '/' ? '' : path;
+    } catch {
+      return '';
+    }
   };
 
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
@@ -101,43 +110,51 @@ const SearchResult = ({
             variant="ghost"
             size="sm"
             onClick={() => setShowRelated(!showRelated)}
-            className="text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full"
+            className="text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full mb-2"
           >
             {showRelated ? (
               <>
                 <ChevronUp className="mr-2 h-4 w-4" />
-                Masquer {relatedResults.length} autre{relatedResults.length > 1 ? 's' : ''} résultat{relatedResults.length > 1 ? 's' : ''} de {domain}
+                Masquer {relatedResults.length} autre{relatedResults.length > 1 ? 's' : ''} résultat{relatedResults.length > 1 ? 's' : ''}
               </>
             ) : (
               <>
                 <ChevronDown className="mr-2 h-4 w-4" />
-                Voir {relatedResults.length} autre{relatedResults.length > 1 ? 's' : ''} résultat{relatedResults.length > 1 ? 's' : ''} de {domain}
+                Voir {relatedResults.length} autre{relatedResults.length > 1 ? 's' : ''} résultat{relatedResults.length > 1 ? 's' : ''}
               </>
             )}
           </Button>
 
           {showRelated && (
-            <div className="mt-3 space-y-2">
-              {relatedResults.map((result) => (
-                <div key={result.id} className="hover:bg-gray-50 rounded-xl p-4 transition-all duration-300">
-                  <h3 className="text-lg mb-1">
-                    <a 
-                      href={result.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-gray-700 hover:text-gray-900 hover:underline flex items-center gap-2"
-                    >
-                      {result.title}
-                      <ExternalLink size={14} className="flex-shrink-0" />
-                    </a>
-                  </h3>
-                  {result.description && (
-                    <p className="text-sm text-gray-600 mb-1">{result.description}</p>
-                  )}
-                  <p className="text-xs text-gray-500 line-clamp-2">{result.content}</p>
-                  <p className="text-xs text-gray-400 mt-2">{formatDate(result.crawled_at)}</p>
-                </div>
-              ))}
+            <div className="border-l-2 border-gray-100 pl-4 space-y-3">
+              {relatedResults.map((result) => {
+                const path = getUrlPath(result.url);
+                return (
+                  <div key={result.id} className="group hover:bg-gray-50 rounded-xl p-3 transition-all duration-300">
+                    <div className="flex items-start gap-2">
+                      <CornerDownRight className="h-4 w-4 text-gray-300 mt-1.5 flex-shrink-0" />
+                      <div>
+                        <h3 className="text-lg leading-tight">
+                          <a 
+                            href={result.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-gray-700 hover:text-gray-900 hover:underline flex items-center gap-2 flex-wrap"
+                          >
+                            <span>{result.title}</span>
+                            {path && (
+                              <span className="text-xs font-mono text-gray-400 font-normal">{path}</span>
+                            )}
+                          </a>
+                        </h3>
+                        {result.description && (
+                          <p className="text-sm text-gray-600 mt-1 line-clamp-1">{result.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
