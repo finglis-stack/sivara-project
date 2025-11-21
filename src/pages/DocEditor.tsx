@@ -166,23 +166,24 @@ const DocEditor = () => {
     try {
       setIsSaving(true);
 
-      // Chiffrer le titre et le contenu - ils utiliseront le MÊME IV automatiquement
-      const { encrypted: encryptedTitle, iv: titleIV } = await encryptionService.encrypt(newTitle);
-      const { encrypted: encryptedContent } = await encryptionService.encrypt(newContent);
+      // Générer un nouvel IV
+      const { encrypted: encryptedTitle, iv: newIV } = await encryptionService.encrypt(newTitle);
+      // Utiliser le MÊME IV pour le contenu
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(newContent, newIV);
 
       const { error } = await supabase
         .from('documents')
         .update({
           title: encryptedTitle,
           content: encryptedContent,
-          encryption_iv: titleIV, // Utiliser l'IV du titre pour les deux
+          encryption_iv: newIV,
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
 
       if (error) throw error;
       
-      setEncryptionIV(titleIV);
+      setEncryptionIV(newIV);
     } catch (error: any) {
       console.error('Error saving document:', error);
       showError('Erreur lors de la sauvegarde');
@@ -260,9 +261,10 @@ const DocEditor = () => {
     if (!user || !document) return;
 
     try {
-      // Re-chiffrer avec un nouvel IV
+      // Générer un nouvel IV
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(`${title} (copie)`);
-      const { encrypted: encryptedContent } = await encryptionService.encrypt(content);
+      // Utiliser le MÊME IV pour le contenu
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(content, iv);
 
       const { error } = await supabase
         .from('documents')

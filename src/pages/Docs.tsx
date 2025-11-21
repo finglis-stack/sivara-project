@@ -151,22 +151,17 @@ const Docs = () => {
       // Générer un seul IV pour le document
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt('Document sans titre');
       
-      // Utiliser le MÊME IV pour le contenu (car on déchiffre avec le même IV)
-      const encoder = new TextEncoder();
-      const emptyContent = encoder.encode('');
-      const ivBytes = Uint8Array.from(atob(iv), c => c.charCodeAt(0));
-      
-      // Récupérer la clé depuis le service (on doit ajouter une méthode publique)
-      const encryptedContent = await encryptionService.encrypt('');
+      // Utiliser le MÊME IV pour chiffrer le contenu
+      const { encrypted: encryptedContent } = await encryptionService.encrypt('', iv);
 
       const { data, error } = await supabase
         .from('documents')
         .insert({
           title: encryptedTitle,
-          content: encryptedContent.encrypted,
+          content: encryptedContent,
           owner_id: user.id,
           is_starred: false,
-          encryption_iv: iv // Utiliser le même IV pour titre et contenu
+          encryption_iv: iv
         })
         .select()
         .single();
@@ -216,9 +211,10 @@ const Docs = () => {
     if (!user) return;
 
     try {
-      // Re-chiffrer avec un nouvel IV
+      // Générer un nouvel IV
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(`${doc.decryptedTitle} (copie)`);
-      const { encrypted: encryptedContent } = await encryptionService.encrypt(doc.decryptedContent);
+      // Utiliser le MÊME IV pour le contenu
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(doc.decryptedContent, iv);
 
       const { error } = await supabase
         .from('documents')

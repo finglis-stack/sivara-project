@@ -98,14 +98,16 @@ export class EncryptionService {
    * Chiffre des données avec AES-256-GCM
    * Retourne: { encrypted: string, iv: string }
    */
-  async encrypt(plaintext: string): Promise<{ encrypted: string; iv: string }> {
+  async encrypt(plaintext: string, ivBase64?: string): Promise<{ encrypted: string; iv: string }> {
     if (!this.masterKey) {
       throw new Error('Encryption service not initialized');
     }
 
     const encoder = new TextEncoder();
     const data = encoder.encode(plaintext);
-    const iv = this.generateIV();
+    
+    // Utiliser l'IV fourni ou en générer un nouveau
+    const iv = ivBase64 ? this.base64ToArrayBuffer(ivBase64) : this.generateIV();
 
     // Chiffrement AES-256-GCM
     const encryptedData = await crypto.subtle.encrypt(
