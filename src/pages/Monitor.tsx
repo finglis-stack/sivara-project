@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Terminal, CheckCircle, XCircle, Clock, ArrowLeft, Activity, Server, OctagonAlert, PlayCircle } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Clock, ArrowLeft, Activity, Server, OctagonAlert, PlayCircle, Hash, FileText, Link as LinkIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { showSuccess, showError } from '@/utils/toast';
@@ -45,7 +45,6 @@ const Monitor = () => {
     };
     fetchSettings();
 
-    // Realtime settings updates
     const channel = supabase
       .channel('settings_updates')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crawler_settings' }, (payload) => {
@@ -58,7 +57,7 @@ const Monitor = () => {
     };
   }, []);
 
-  // Fetch initial queue
+  // Fetch queue
   useEffect(() => {
     const fetchQueue = async () => {
       const { data } = await supabase
@@ -71,7 +70,6 @@ const Monitor = () => {
 
     fetchQueue();
 
-    // Realtime queue updates
     const channel = supabase
       .channel('queue_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'crawl_queue' }, (payload) => {
@@ -123,7 +121,6 @@ const Monitor = () => {
     };
   }, [selectedId]);
 
-  // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
@@ -141,8 +138,8 @@ const Monitor = () => {
       if (error) throw error;
 
       if (newState) {
-        showSuccess('Système relancé. Le traitement reprend.');
-        // Relancer manuellement un batch
+        showSuccess('Système relancé.');
+        // Relancer un batch
         await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/process-queue', {
           method: 'POST',
           headers: {
@@ -152,135 +149,143 @@ const Monitor = () => {
           body: JSON.stringify({ batchSize: 3 }),
         });
       } else {
-        showSuccess("ARRÊT D'URGENCE ACTIVÉ. Les tâches en cours se termineront, mais aucune nouvelle tâche ne sera lancée.");
+        showSuccess("Arrêt du système (Pause).");
       }
     } catch (err: any) {
-      showError("Erreur lors du basculement : " + err.message);
+      showError(err.message);
     } finally {
       setIsToggling(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-500';
-      case 'processing': return 'bg-blue-500 animate-pulse';
-      case 'completed': return 'bg-green-500';
-      case 'failed': return 'bg-red-500';
-      default: return 'bg-gray-500';
+      case 'pending': return <Clock className="h-4 w-4 text-amber-500" />;
+      case 'processing': return <Loader2 className="h-4 w-4 animate-spin text-blue-600" />;
+      case 'completed': return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'failed': return <XCircle className="h-4 w-4 text-red-600" />;
+      default: return <Clock className="h-4 w-4 text-gray-400" />;
     }
   };
 
-  const getLogColor = (status: string) => {
-    switch (status) {
-      case 'success': return 'text-green-400';
-      case 'error': return 'text-red-400';
-      case 'info': return 'text-blue-300';
-      default: return 'text-gray-300';
-    }
+  const getLogBadge = (step: string) => {
+    const variants: {[key: string]: string} = {
+      'INIT': 'bg-gray-100 text-gray-800',
+      'PARSING': 'bg-blue-50 text-blue-700',
+      'ENCRYPTION': 'bg-purple-50 text-purple-700',
+      'DISCOVERY': 'bg-indigo-50 text-indigo-700',
+      'COMPLETE': 'bg-green-50 text-green-700',
+      'ERROR': 'bg-red-50 text-red-700',
+    };
+    return variants[step] || 'bg-gray-100 text-gray-600';
   };
 
   const pendingCount = queue.filter(i => i.status === 'pending').length;
   const processingCount = queue.filter(i => i.status === 'processing').length;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+    <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => navigate('/')} className="text-gray-400 hover:text-white">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-900 hover:bg-gray-100">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Retour
             </Button>
+            <div className="h-8 w-px bg-gray-200 mx-2 hidden md:block"></div>
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                Monitoring Serveur
+              <h1 className="text-xl font-bold flex items-center gap-2 text-gray-800">
+                Console Superviseur
                 <Badge 
-                  variant="secondary" 
-                  className={`font-normal text-xs ml-2 ${isActive ? 'bg-green-900/30 text-green-400 border-green-800' : 'bg-red-900/30 text-red-400 border-red-800 animate-pulse'}`}
+                  variant="outline" 
+                  className={`ml-2 ${isActive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}
                 >
-                  <Server className="w-3 h-3 mr-1" />
-                  {isActive ? 'Système Actif' : 'ARRÊT D\'URGENCE'}
+                  {isActive ? 'Système Actif' : 'En Pause'}
                 </Badge>
               </h1>
-              <div className="flex items-center gap-3 text-sm text-gray-400 mt-1">
-                <span className={pendingCount > 0 ? "text-yellow-500" : ""}>{pendingCount} en attente</span>
-                <span>•</span>
-                <span className={processingCount > 0 ? "text-blue-400 font-bold animate-pulse" : ""}>
-                  {processingCount} en cours de traitement
-                </span>
-              </div>
+              <p className="text-sm text-gray-500 flex items-center gap-3 mt-1">
+                <span className="flex items-center gap-1"><Activity className="h-3 w-3" /> {processingCount} en cours</span>
+                <span className="text-gray-300">•</span>
+                <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {pendingCount} en attente</span>
+              </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            <Button
-              size="lg"
-              variant={isActive ? "destructive" : "default"}
-              onClick={toggleSystem}
-              disabled={isToggling}
-              className={`font-bold shadow-lg ${isActive ? 'hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'}`}
-            >
-              {isToggling ? (
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : isActive ? (
-                <>
-                  <OctagonAlert className="mr-2 h-5 w-5" />
-                  ARRÊT D'URGENCE
-                </>
-              ) : (
-                <>
-                  <PlayCircle className="mr-2 h-5 w-5" />
-                  RELANCER LE SYSTÈME
-                </>
-              )}
-            </Button>
-          </div>
+          <Button
+            size="lg"
+            variant={isActive ? "destructive" : "default"}
+            onClick={toggleSystem}
+            disabled={isToggling}
+            className={`font-medium shadow-sm transition-all ${isActive ? '' : 'bg-green-600 hover:bg-green-700 text-white'}`}
+          >
+            {isToggling ? (
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            ) : isActive ? (
+              <>
+                <OctagonAlert className="mr-2 h-5 w-5" />
+                Arrêt d'urgence
+              </>
+            ) : (
+              <>
+                <PlayCircle className="mr-2 h-5 w-5" />
+                Relancer le système
+              </>
+            )}
+          </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[80vh]">
-          {/* Liste de la queue */}
-          <Card className={`bg-gray-900 border-gray-800 flex flex-col transition-colors duration-500 ${!isActive ? 'border-red-900/50' : ''}`}>
-            <CardHeader className="py-3 px-4 border-b border-gray-800">
-              <CardTitle className="text-sm font-medium text-gray-400 flex justify-between items-center">
-                <span>File d'attente (FIFO)</span>
-                {!isActive && <span className="text-xs text-red-500 font-bold">PAUSE</span>}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-180px)]">
+          {/* Liste des tâches */}
+          <Card className="flex flex-col border-gray-200 shadow-sm overflow-hidden">
+            <CardHeader className="py-4 px-5 border-b border-gray-100 bg-gray-50/50">
+              <CardTitle className="text-sm font-semibold text-gray-700 flex justify-between items-center">
+                <span>File d'attente</span>
+                <Badge variant="secondary" className="text-xs bg-white border border-gray-200 text-gray-600 shadow-sm">
+                  3 tâches / batch
+                </Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden p-0">
+            <CardContent className="flex-1 overflow-hidden p-0 bg-white">
               <ScrollArea className="h-full">
-                <div className="divide-y divide-gray-800">
+                <div className="divide-y divide-gray-100">
                   {queue.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
-                      className={`w-full text-left p-3 hover:bg-gray-800 transition-colors flex items-center justify-between group ${
-                        selectedId === item.id ? 'bg-gray-800 border-l-2 border-blue-500' : 'border-l-2 border-transparent'
+                      className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-all duration-200 flex items-center justify-between group ${
+                        selectedId === item.id ? 'bg-blue-50/60 border-l-4 border-blue-500' : 'border-l-4 border-transparent'
                       }`}
                     >
-                      <div className="overflow-hidden flex-1 mr-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(item.status)}`} />
-                          <span className={`text-[10px] font-mono uppercase ${item.status === 'processing' ? 'text-blue-400' : 'text-gray-500'}`}>
+                      <div className="overflow-hidden flex-1 mr-4">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          {getStatusIcon(item.status)}
+                          <span className={`text-xs font-semibold uppercase tracking-wide ${
+                            item.status === 'processing' ? 'text-blue-600' : 
+                            item.status === 'completed' ? 'text-green-600' : 
+                            item.status === 'failed' ? 'text-red-600' : 'text-amber-600'
+                          }`}>
                             {item.status}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-300 truncate font-mono opacity-80 group-hover:opacity-100">
-                          Task {item.id.slice(0, 8)}...
-                        </p>
-                        <p className="text-[10px] text-gray-600 mt-0.5">
-                          {new Date(item.added_at).toLocaleTimeString()}
-                        </p>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400 font-mono">
+                          <Hash className="h-3 w-3" />
+                          {item.id.split('-')[0]}...
+                        </div>
                       </div>
-                      {item.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
-                      {item.status === 'completed' && <CheckCircle className="h-3 w-3 text-green-500" />}
-                      {item.status === 'failed' && <XCircle className="h-3 w-3 text-red-500" />}
-                      {item.status === 'pending' && <Clock className="h-3 w-3 text-yellow-600" />}
+                      <div className="text-right">
+                         <span className="text-xs text-gray-400 font-medium">
+                           {new Date(item.added_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                         </span>
+                      </div>
                     </button>
                   ))}
                   {queue.length === 0 && (
-                    <div className="p-8 text-center text-gray-500 text-sm">
-                      File d'attente vide
+                    <div className="p-10 text-center text-gray-400 flex flex-col items-center gap-2">
+                      <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
+                        <Clock className="h-6 w-6 text-gray-300" />
+                      </div>
+                      <p className="text-sm">File d'attente vide</p>
                     </div>
                   )}
                 </div>
@@ -288,46 +293,62 @@ const Monitor = () => {
             </CardContent>
           </Card>
 
-          {/* Console de logs */}
-          <Card className="lg:col-span-2 bg-black border-gray-800 font-mono flex flex-col shadow-2xl shadow-black/50">
-            <CardHeader className="py-3 px-4 border-b border-gray-800 bg-gray-900/30 flex flex-row items-center justify-between">
+          {/* Détails & Logs */}
+          <Card className="lg:col-span-2 flex flex-col border-gray-200 shadow-sm overflow-hidden">
+            <CardHeader className="py-4 px-5 border-b border-gray-100 bg-gray-50/50 flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-green-500" />
-                <CardTitle className="text-sm text-gray-300 font-normal">
-                  {selectedId ? `Logs: ${selectedId}` : 'Console système'}
+                <FileText className="h-4 w-4 text-gray-500" />
+                <CardTitle className="text-sm font-semibold text-gray-700">
+                  {selectedId ? 'Détails de l\'exécution' : 'Sélectionnez une tâche'}
                 </CardTitle>
               </div>
               {selectedId && (
-                <Badge variant="outline" className="text-[10px] h-5 border-gray-700 text-gray-500">
+                <div className="flex items-center gap-2 text-xs text-gray-500 font-mono bg-white px-2 py-1 rounded border border-gray-200">
                   ID: {selectedId}
-                </Badge>
+                </div>
               )}
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden p-4 bg-black/90 relative">
-              <ScrollArea className="h-full pr-4">
-                <div className="space-y-1.5">
-                  {logs.map((log) => (
-                    <div key={log.id} className="flex gap-3 text-xs font-mono animate-in fade-in slide-in-from-left-1 duration-200">
-                      <span className="text-gray-600 shrink-0 select-none w-16">
-                        {new Date(log.created_at).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' })}
-                      </span>
-                      <span className="text-blue-500 font-bold shrink-0 w-24 uppercase tracking-wider text-[10px] pt-0.5">
-                        {log.step}
-                      </span>
-                      <span className={`${getLogColor(log.status)} break-all flex-1`}>
-                        {log.message}
-                      </span>
-                    </div>
-                  ))}
-                  {!selectedId && (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-700 gap-4 opacity-50">
-                      <Activity className="h-16 w-16 animate-pulse" />
-                      <p className="text-sm">En attente de sélection d'une tâche...</p>
-                    </div>
-                  )}
-                  <div ref={logsEndRef} />
+            <CardContent className="flex-1 overflow-hidden p-0 bg-white relative">
+              {selectedId ? (
+                <ScrollArea className="h-full">
+                   <div className="p-6 space-y-6">
+                      <div className="space-y-4">
+                        {logs.map((log, idx) => (
+                          <div key={log.id} className="flex gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="flex flex-col items-center gap-1 min-w-[40px]">
+                               <span className="text-[10px] font-mono text-gray-400">
+                                 {new Date(log.created_at).toLocaleTimeString([], { minute:'2-digit', second:'2-digit' })}
+                               </span>
+                               <div className={`w-px h-full bg-gray-100 group-last:hidden`}></div>
+                            </div>
+                            
+                            <div className="flex-1 pb-2">
+                              <div className="flex items-center gap-3 mb-1">
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold tracking-wider ${getLogBadge(log.step)}`}>
+                                  {log.step}
+                                </span>
+                              </div>
+                              <p className={`text-sm ${log.status === 'error' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                                {log.message}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        <div ref={logsEndRef} />
+                      </div>
+                   </div>
+                </ScrollArea>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-4 bg-gray-50/30">
+                  <div className="h-16 w-16 rounded-2xl bg-white shadow-sm border border-gray-100 flex items-center justify-center">
+                    <Activity className="h-8 w-8 text-gray-300" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-gray-600">En attente</p>
+                    <p className="text-sm">Sélectionnez une tâche à gauche pour voir les logs</p>
+                  </div>
                 </div>
-              </ScrollArea>
+              )}
             </CardContent>
           </Card>
         </div>

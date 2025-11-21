@@ -2,8 +2,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-// @ts-ignore: Deno types
-import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.12.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -61,59 +59,70 @@ class CryptoService {
   }
 }
 
-function cleanJsonString(str: string): string {
-  let clean = str.replace(/```json/g, '').replace(/```/g, '');
-  const firstOpen = clean.indexOf('{');
-  const lastClose = clean.lastIndexOf('}');
-  if (firstOpen !== -1 && lastClose !== -1) {
-    clean = clean.substring(firstOpen, lastClose + 1);
-  }
-  return clean;
+function extractMetadata(html: string): { title: string, description: string, content: string } {
+  // Extraction Title
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  const title = titleMatch ? titleMatch[1].trim() : 'Sans titre';
+
+  // Extraction Description (Meta)
+  const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i);
+  const description = descMatch ? descMatch[1].trim() : '';
+
+  // Nettoyage du contenu pour la recherche (Body -> Text)
+  // On enlève scripts, styles, commentaires, balises
+  let content = html
+    .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, " ")
+    .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    title: title.substring(0, 255),
+    description: description.substring(0, 500),
+    content: content.substring(0, 5000) // On garde un bon morceau pour l'indexation
+  };
 }
 
-function extractLinks(content: string, baseUrl: string, isMarkdown: boolean): { url: string, text: string }[] {
-  const links: { url: string, text: string }[] = [];
-  let regex;
-
-  if (isMarkdown) {
-    // Regex pour Markdown [text](url)
-    regex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
-  } else {
-    // Regex pour HTML <a href="...">
-    regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
-  }
-
+function extractLinks(html: string, baseUrl: string): { url: string, priority: number }[] {
+  const links: { url: string, priority: number }[] = [];
+  const regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
   let match;
-  while ((match = regex.exec(content)) !== null) {
+  
+  const baseHostname = new URL(baseUrl).hostname;
+
+  while ((match = regex.exec(html)) !== null) {
     try {
-      let href, text;
-      if (isMarkdown) {
-        text = match[1];
-        href = match[2];
-      } else {
-        href = match[1];
-        text = match[2].replace(/<[^>]+>/g, '').trim();
-      }
+      const href = match[1];
+      const text = match[2].replace(/<[^>]+>/g, '').trim();
       
       if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || !text) continue;
-      if (text.length < 3) continue;
+      if (text.length < 2) continue;
 
       const absoluteUrl = new URL(href, baseUrl);
       
-      const h = absoluteUrl.hostname;
-      // Filtre anti-réseaux sociaux basique
-      if (h.includes('facebook.') || h.includes('twitter.') || h.includes('x.com') || 
-          h.includes('instagram.') || h.includes('linkedin.') || h.includes('pinterest.') ||
-          h.includes('google.') || h.includes('youtube.') || h.includes('tiktok.')) {
+      // REGLE STRICTE : Même hostname uniquement (pas de sous-domaine différent, pas d'externe)
+      if (absoluteUrl.hostname !== baseHostname) {
+        continue;
+      }
+      
+      // Pas de fichiers statiques
+      if (absoluteUrl.pathname.match(/\.(jpg|jpeg|png|gif|pdf|zip|css|js)$/i)) {
         continue;
       }
 
       if (!links.some(l => l.url === absoluteUrl.href)) {
-        links.push({ url: absoluteUrl.href, text: text.substring(0, 40) });
+        // Calcul basique de priorité SEO
+        let priority = 5;
+        if (text.length > 20) priority += 1; // Lien avec ancre descriptive
+        if (absoluteUrl.pathname.length < baseUrl.length + 10) priority += 2; // URL courte (souvent catégorie)
+        
+        links.push({ url: absoluteUrl.href, priority: Math.min(priority, 10) });
       }
     } catch (e) { continue; }
   }
-  return links.slice(0, 15);
+  return links.slice(0, 30); // On limite à 30 liens par page pour ne pas exploser
 }
 
 // @ts-ignore: Deno types
@@ -147,13 +156,7 @@ serve(async (req) => {
   try {
     // @ts-ignore
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!
-    // @ts-ignore
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!
-    // @ts-ignore
-    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
-    
     if (!encryptionKey) throw new Error('ENCRYPTION_KEY not configured')
-    if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured')
 
     cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
@@ -165,131 +168,46 @@ serve(async (req) => {
 
     if (!url) throw new Error('URL is required')
 
-    await logToDb(queueId, `Processing: ${url}`, 'INIT', 'info');
+    await logToDb(queueId, `Crawling: ${url}`, 'INIT', 'info');
 
-    let rawContent = '';
-    let isMarkdown = false;
-    let fetchStatus = 200;
+    // 1. Fetching
+    const response = await fetch(url, {
+      redirect: 'follow',
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (compatible; SivaraBot/1.0; +http://sivara.search)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5'
+      },
+    })
 
-    // --- STRATÉGIE DE FETCH ---
-    try {
-      // 1. Tentative directe avec headers Chrome
-      await logToDb(queueId, 'Trying direct access...', 'FETCH_DIRECT', 'info');
-      const response = await fetch(url, {
-        redirect: 'follow',
-        headers: { 
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Referer': 'https://www.google.com/',
-          'Upgrade-Insecure-Requests': '1',
-          'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': '"Windows"'
-        },
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      rawContent = await response.text();
-      fetchStatus = response.status;
-    } catch (directError) {
-      // 2. FALLBACK "MAGOUILLE" : Proxy Jina AI
-      console.error('Direct fetch failed:', directError);
-      await logToDb(queueId, `Direct failed (${directError.message}). Switching to Proxy Mode.`, 'FETCH_PROXY', 'warning');
-      
-      try {
-        const jinaUrl = `https://r.jina.ai/${url}`;
-        const proxyResponse = await fetch(jinaUrl, {
-           headers: {
-             'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
-           }
-        });
-        
-        if (!proxyResponse.ok) throw new Error(`Proxy HTTP ${proxyResponse.status}`);
-        
-        rawContent = await proxyResponse.text();
-        isMarkdown = true; // Jina renvoie du Markdown
-        fetchStatus = proxyResponse.status;
-        await logToDb(queueId, 'Proxy access successful!', 'FETCH_PROXY', 'success');
-      } catch (proxyError) {
-        throw new Error(`All fetch methods failed. Last error: ${proxyError.message}`);
-      }
-    }
-    // ---------------------------
-
-    const candidateLinks = extractLinks(rawContent, url, isMarkdown);
-    
-    // Nettoyage selon le format
-    let cleanedText = '';
-    if (isMarkdown) {
-      // Pour le Markdown, on garde le début brut, c'est déjà propre
-      cleanedText = rawContent.substring(0, 3000);
-    } else {
-      // Pour le HTML, on nettoie
-      cleanedText = rawContent
-        .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
-        .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .substring(0, 3000);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
     }
 
-    await logToDb(queueId, `AI Analysis (${isMarkdown ? 'Markdown' : 'HTML'})...`, 'AI_ANALYSIS', 'info');
-    
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: geminiModel,
-      generationConfig: { responseMimeType: "application/json" }
-    });
+    const rawHtml = await response.text();
 
-    const prompt = `
-    Analyse ce contenu (${isMarkdown ? 'Markdown' : 'HTML'}). Retourne JSON.
-    URL: ${url}
+    await logToDb(queueId, `Parsing SEO data...`, 'PARSING', 'info');
     
-    Content Start: ${cleanedText}
+    // 2. Parsing (Algorithmic)
+    const metadata = extractMetadata(rawHtml);
+    const discoveredLinks = extractLinks(rawHtml, url);
 
-    JSON Expected:
-    {
-      "title": "Page Title",
-      "description": "Short summary (max 160 chars)",
-      "rephrased_content": "Dense summary of the page content (max 500 chars)",
-      "discovered_urls": [
-        { "url": "http...", "priority": 0-10 }
-      ]
-    }
-    
-    Note for discovered_urls: Use this list of links found in the source: 
-    ${JSON.stringify(candidateLinks)}
-    `;
+    await logToDb(queueId, `Found: "${metadata.title}" & ${discoveredLinks.length} internal links`, 'PARSING', 'success');
 
-    const result = await model.generateContent(prompt);
-    const aiResponseText = result.response.text();
-    
-    let aiData;
-    try {
-      aiData = JSON.parse(cleanJsonString(aiResponseText));
-    } catch (e) {
-      aiData = {
-        title: 'Title Error',
-        description: 'Content extraction failed',
-        rephrased_content: cleanedText.substring(0, 500),
-        discovered_urls: []
-      };
-    }
-
-    await logToDb(queueId, 'Encryption & Save...', 'SAVE', 'info');
+    // 3. Encryption & Save
+    await logToDb(queueId, 'Encrypting data...', 'ENCRYPTION', 'info');
 
     const urlObj = new URL(url)
     const domain = urlObj.hostname
     
-    const encryptedTitle = await cryptoService.encrypt(aiData.title || 'Sans titre')
-    const encryptedDescription = await cryptoService.encrypt(aiData.description || '')
-    const encryptedContent = await cryptoService.encrypt(aiData.rephrased_content || '')
+    const encryptedTitle = await cryptoService.encrypt(metadata.title)
+    const encryptedDescription = await cryptoService.encrypt(metadata.description)
+    const encryptedContent = await cryptoService.encrypt(metadata.content)
     const encryptedDomain = await cryptoService.encrypt(domain)
     const encryptedUrl = await cryptoService.encrypt(url, true)
     
-    const searchHash = await cryptoService.hash(aiData.title + ' ' + aiData.description + ' ' + aiData.rephrased_content)
+    // Hash pour la recherche (sur contenu clair)
+    const searchHash = await cryptoService.hash(metadata.title + ' ' + metadata.description + ' ' + metadata.content)
 
     const { error } = await supabase
       .from('crawled_pages')
@@ -299,7 +217,7 @@ serve(async (req) => {
         description: encryptedDescription,
         content: encryptedContent,
         domain: encryptedDomain,
-        http_status: fetchStatus,
+        http_status: response.status,
         status: 'success',
         search_hash: searchHash,
         updated_at: new Date().toISOString()
@@ -309,33 +227,36 @@ serve(async (req) => {
 
     if (error) throw error
 
-    // Sauvegarde des nouveaux liens trouvés
-    if (aiData.discovered_urls && Array.isArray(aiData.discovered_urls)) {
-      const highValueLinks = aiData.discovered_urls.filter((l: any) => l.priority >= 6);
-      
-      if (highValueLinks.length > 0) {
-        await logToDb(queueId, `Found ${highValueLinks.length} links`, 'DISCOVERY', 'success');
-        for (const link of highValueLinks) {
-          try {
-            const linkEncrypted = await cryptoService.encrypt(link.url, true);
-            await supabase.from('crawl_queue')
-              .upsert({
-                url: linkEncrypted,
-                priority: link.priority,
-                status: 'pending'
-              }, { onConflict: 'url', ignoreDuplicates: true });
-          } catch (err) {}
-        }
+    // 4. Ajout des nouveaux liens à la file d'attente
+    if (discoveredLinks.length > 0) {
+      let addedCount = 0;
+      for (const link of discoveredLinks) {
+        try {
+          const linkEncrypted = await cryptoService.encrypt(link.url, true);
+          // On ignore si existe déjà
+          const { error: queueError } = await supabase.from('crawl_queue')
+            .insert({
+              url: linkEncrypted,
+              priority: link.priority,
+              status: 'pending'
+            }) // .insert sans upsert échouera si duplicate key (si contrainte unique existe), ou ajoutera.
+               // Idéalement on utilise upsert avec ignoreDuplicates si on a une contrainte unique sur URL.
+               // Ici on suppose qu'on veut éviter les doublons de crawl en attente.
+          
+          if (!queueError) addedCount++;
+        } catch (err) {}
+      }
+      if (addedCount > 0) {
+        await logToDb(queueId, `Added ${addedCount} new pages to queue`, 'DISCOVERY', 'success');
       }
     }
 
-    await logToDb(queueId, 'Done', 'COMPLETE', 'success');
+    await logToDb(queueId, 'Page indexed successfully', 'COMPLETE', 'success');
 
+    // Mise à jour des stats
     try {
       await supabase.rpc('increment_crawl_stats')
-    } catch (rpcError) {
-      console.error('Stats update failed', rpcError)
-    }
+    } catch (e) {}
 
     return new Response(
       JSON.stringify({ success: true }),
@@ -346,6 +267,7 @@ serve(async (req) => {
     console.error('[CRAWL ERROR]', error)
     await logToDb(queueId, `Error: ${error.message}`, 'ERROR', 'error');
 
+    // Nettoyage si échec
     if (currentUrl && cryptoService) {
       try {
         const encryptedUrlToDelete = await cryptoService.encrypt(currentUrl, true);
