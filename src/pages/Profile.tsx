@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3 } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, FileText } from 'lucide-react';
 
 interface Profile {
   first_name: string;
@@ -209,14 +209,20 @@ const Profile = () => {
             <Grid3x3 className="h-6 w-6 text-gray-700" />
             <h2 className="text-2xl font-light text-gray-900">Mes application(s)</h2>
           </div>
-          <div className="border-2 border-dashed border-gray-200 rounded-lg p-12 text-center">
-            <div className="max-w-md mx-auto">
-              <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Grid3x3 className="h-8 w-8 text-gray-400" />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Carte Docs */}
+            <button className="group relative bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-gray-300 hover:shadow-md transition-all duration-300 text-left">
+              <div className="flex flex-col items-center gap-4">
+                <div className="h-16 w-16 bg-gray-100 rounded-2xl flex items-center justify-center group-hover:bg-gray-200 transition-colors">
+                  <FileText className="h-8 w-8 text-gray-700" strokeWidth={1.5} />
+                </div>
+                <div className="text-center">
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Docs</h3>
+                  <p className="text-sm text-gray-500">Documentation</p>
+                </div>
               </div>
-              <p className="text-gray-500 text-lg mb-2">Aucune application pour le moment</p>
-              <p className="text-gray-400 text-sm">Vos applications apparaîtront ici</p>
-            </div>
+            </button>
           </div>
         </div>
 
