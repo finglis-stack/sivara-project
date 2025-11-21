@@ -17,7 +17,27 @@ import {
   Trash2,
   Copy,
   Shield,
-  Lock
+  Lock,
+  FileText,
+  Briefcase,
+  FolderOpen,
+  BookOpen,
+  Lightbulb,
+  Target,
+  TrendingUp,
+  Users as UsersIcon,
+  Calendar,
+  CheckSquare,
+  MessageSquare,
+  Mail,
+  Phone,
+  Globe,
+  Settings,
+  Heart,
+  Zap,
+  Award,
+  BarChart,
+  PieChart
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -26,6 +46,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface Document {
   id: string;
@@ -35,7 +62,49 @@ interface Document {
   is_starred: boolean;
   updated_at: string;
   encryption_iv: string;
+  icon?: string;
+  color?: string;
 }
+
+// Bibliothèque d'icônes disponibles
+const AVAILABLE_ICONS = [
+  { name: 'FileText', icon: FileText, label: 'Document' },
+  { name: 'Briefcase', icon: Briefcase, label: 'Business' },
+  { name: 'FolderOpen', icon: FolderOpen, label: 'Dossier' },
+  { name: 'BookOpen', icon: BookOpen, label: 'Livre' },
+  { name: 'Lightbulb', icon: Lightbulb, label: 'Idée' },
+  { name: 'Target', icon: Target, label: 'Objectif' },
+  { name: 'TrendingUp', icon: TrendingUp, label: 'Croissance' },
+  { name: 'UsersIcon', icon: UsersIcon, label: 'Équipe' },
+  { name: 'Calendar', icon: Calendar, label: 'Calendrier' },
+  { name: 'CheckSquare', icon: CheckSquare, label: 'Tâches' },
+  { name: 'MessageSquare', icon: MessageSquare, label: 'Messages' },
+  { name: 'Mail', icon: Mail, label: 'Email' },
+  { name: 'Phone', icon: Phone, label: 'Téléphone' },
+  { name: 'Globe', icon: Globe, label: 'Web' },
+  { name: 'Settings', icon: Settings, label: 'Paramètres' },
+  { name: 'Heart', icon: Heart, label: 'Favori' },
+  { name: 'Zap', icon: Zap, label: 'Énergie' },
+  { name: 'Award', icon: Award, label: 'Récompense' },
+  { name: 'BarChart', icon: BarChart, label: 'Graphique' },
+  { name: 'PieChart', icon: PieChart, label: 'Statistiques' },
+];
+
+// Palette de couleurs
+const COLOR_PALETTE = [
+  { name: 'Bleu', value: '#3B82F6' },
+  { name: 'Indigo', value: '#6366F1' },
+  { name: 'Violet', value: '#8B5CF6' },
+  { name: 'Rose', value: '#EC4899' },
+  { name: 'Rouge', value: '#EF4444' },
+  { name: 'Orange', value: '#F97316' },
+  { name: 'Jaune', value: '#EAB308' },
+  { name: 'Vert', value: '#10B981' },
+  { name: 'Émeraude', value: '#059669' },
+  { name: 'Cyan', value: '#06B6D4' },
+  { name: 'Gris', value: '#6B7280' },
+  { name: 'Ardoise', value: '#475569' },
+];
 
 const DocEditor = () => {
   const { id } = useParams<{ id: string }>();
@@ -47,6 +116,9 @@ const DocEditor = () => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [encryptionIV, setEncryptionIV] = useState('');
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [selectedIcon, setSelectedIcon] = useState('FileText');
+  const [selectedColor, setSelectedColor] = useState('#3B82F6');
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const contentRef = useRef<HTMLDivElement>(null);
   const isUpdatingFromRemoteRef = useRef(false);
@@ -81,6 +153,8 @@ const DocEditor = () => {
             
             setTitle(decryptedTitle);
             setContent(decryptedContent);
+            setSelectedIcon(updated.icon || 'FileText');
+            setSelectedColor(updated.color || '#3B82F6');
             if (contentRef.current) {
               contentRef.current.innerHTML = decryptedContent;
             }
@@ -117,7 +191,6 @@ const DocEditor = () => {
     }
   };
 
-  // Effet séparé pour charger le contenu dans l'éditeur
   useEffect(() => {
     if (content && contentRef.current && !hasLoadedContentRef.current) {
       contentRef.current.innerHTML = content;
@@ -145,6 +218,8 @@ const DocEditor = () => {
       setTitle(decryptedTitle);
       setContent(decryptedContent);
       setEncryptionIV(data.encryption_iv);
+      setSelectedIcon(data.icon || 'FileText');
+      setSelectedColor(data.color || '#3B82F6');
       
       // Charger le contenu dans l'éditeur
       if (contentRef.current && decryptedContent) {
@@ -160,7 +235,7 @@ const DocEditor = () => {
     }
   };
 
-  const saveDocument = async (newTitle: string, newContent: string) => {
+  const saveDocument = async (newTitle: string, newContent: string, newIcon?: string, newColor?: string) => {
     if (!id) return;
 
     try {
@@ -171,14 +246,24 @@ const DocEditor = () => {
       // Utiliser le MÊME IV pour le contenu
       const { encrypted: encryptedContent } = await encryptionService.encrypt(newContent, newIV);
 
+      const updateData: any = {
+        title: encryptedTitle,
+        content: encryptedContent,
+        encryption_iv: newIV,
+        updated_at: new Date().toISOString()
+      };
+
+      if (newIcon !== undefined) {
+        updateData.icon = newIcon;
+      }
+
+      if (newColor !== undefined) {
+        updateData.color = newColor;
+      }
+
       const { error } = await supabase
         .from('documents')
-        .update({
-          title: encryptedTitle,
-          content: encryptedContent,
-          encryption_iv: newIV,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
@@ -219,6 +304,15 @@ const DocEditor = () => {
       saveDocument(title, newContent);
       saveTimeoutRef.current = undefined;
     }, 1000);
+  };
+
+  const handleIconColorChange = async (icon: string, color: string) => {
+    setSelectedIcon(icon);
+    setSelectedColor(color);
+    setShowIconPicker(false);
+    
+    await saveDocument(title, content, icon, color);
+    showSuccess('Icône et couleur mises à jour');
   };
 
   const toggleStar = async () => {
@@ -273,7 +367,9 @@ const DocEditor = () => {
           content: encryptedContent,
           owner_id: user.id,
           is_starred: false,
-          encryption_iv: iv
+          encryption_iv: iv,
+          icon: selectedIcon,
+          color: selectedColor
         });
 
       if (error) throw error;
@@ -299,6 +395,17 @@ const DocEditor = () => {
     contentRef.current?.focus();
     handleContentChange();
   };
+
+  const getIconTextColor = (bgColor: string) => {
+    const hex = bgColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness > 155 ? '#1F2937' : '#FFFFFF';
+  };
+
+  const CurrentIcon = AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || FileText;
 
   if (isLoading) {
     return (
@@ -330,7 +437,15 @@ const DocEditor = () => {
               </Button>
 
               <div className="flex items-center gap-3">
-                <img src="/docs-icon.png" alt="Docs" className="h-8 w-8" />
+                {/* Icône cliquable */}
+                <button
+                  onClick={() => setShowIconPicker(true)}
+                  className="h-10 w-10 rounded-lg flex items-center justify-center hover:opacity-80 transition-opacity"
+                  style={{ backgroundColor: selectedColor }}
+                >
+                  <CurrentIcon className="h-5 w-5" style={{ color: getIconTextColor(selectedColor) }} />
+                </button>
+
                 <Input
                   value={title}
                   onChange={(e) => handleTitleChange(e.target.value)}
@@ -498,6 +613,97 @@ const DocEditor = () => {
           />
         </div>
       </div>
+
+      {/* Dialog de sélection d'icône et couleur */}
+      <Dialog open={showIconPicker} onOpenChange={setShowIconPicker}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Personnaliser l'icône et la couleur</DialogTitle>
+            <DialogDescription>
+              Choisissez une icône et une couleur pour votre document
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Sélection de couleur */}
+            <div>
+              <h3 className="text-sm font-medium mb-3">Couleur de fond</h3>
+              <div className="grid grid-cols-6 gap-2">
+                {COLOR_PALETTE.map((color) => (
+                  <button
+                    key={color.value}
+                    onClick={() => setSelectedColor(color.value)}
+                    className={`h-12 rounded-lg transition-all ${
+                      selectedColor === color.value
+                        ? 'ring-2 ring-offset-2 ring-gray-900 scale-110'
+                        : 'hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: color.value }}
+                    title={color.name}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Sélection d'icône */}
+            <div>
+              <h3 className="text-sm font-medium mb-3">Icône</h3>
+              <div className="grid grid-cols-5 gap-2 max-h-[300px] overflow-y-auto">
+                {AVAILABLE_ICONS.map((iconItem) => {
+                  const IconComponent = iconItem.icon;
+                  return (
+                    <button
+                      key={iconItem.name}
+                      onClick={() => setSelectedIcon(iconItem.name)}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                        selectedIcon === iconItem.name
+                          ? 'border-gray-900 bg-gray-50'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <IconComponent className="h-6 w-6 text-gray-700" />
+                      <span className="text-xs text-gray-600">{iconItem.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Aperçu */}
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-medium mb-3">Aperçu</h3>
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-16 w-16 rounded-lg flex items-center justify-center"
+                  style={{ backgroundColor: selectedColor }}
+                >
+                  <CurrentIcon className="h-8 w-8" style={{ color: getIconTextColor(selectedColor) }} />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">{title || 'Document sans titre'}</p>
+                  <p className="text-sm text-gray-500">Votre document apparaîtra ainsi</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Boutons d'action */}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowIconPicker(false)}
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={() => handleIconColorChange(selectedIcon, selectedColor)}
+                className="bg-gray-700 hover:bg-gray-800"
+              >
+                Appliquer
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
