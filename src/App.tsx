@@ -9,6 +9,8 @@ import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import Monitor from "./pages/Monitor";
 import Profile from "./pages/Profile";
+import Docs from "./pages/Docs";
+import DocEditor from "./pages/DocEditor";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +28,8 @@ const App = () => (
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/monitor" element={<Monitor />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/docs" element={<Docs />} />
+            <Route path="/docs/:id" element={<DocEditor />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

@@ -212,7 +212,10 @@ const Profile = () => {
           
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {/* Carte Docs */}
-            <button className="group relative bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left">
+            <button 
+              onClick={() => navigate('/docs')}
+              className="group relative bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left"
+            >
               <div className="flex flex-col items-center gap-2">
                 <div className="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center group-hover:bg-blue-100 transition-colors">
                   <img src="/docs-icon.png" alt="Docs" className="h-7 w-7" />
