@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import DocsLanding from './DocsLanding';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,20 +85,31 @@ const ICON_MAP: { [key: string]: any } = {
 
 const Docs = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [documents, setDocuments] = useState<DecryptedDocument[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filter, setFilter] = useState<'all' | 'recent' | 'starred'>('all');
   const [profile, setProfile] = useState<Profile | null>(null);
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
+  // --- GESTION AUTH / LANDING ---
+  
+  if (loading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
+      </div>
+    );
+  }
 
+  if (!user) {
+    return <DocsLanding />;
+  }
+
+  // --- LOGIQUE DASHBOARD (Connecté) ---
+
+  useEffect(() => {
     const initializeAndFetch = async () => {
       await initializeEncryption();
       await fetchDocuments();
@@ -134,7 +146,7 @@ const Docs = () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(profileChannel);
     };
-  }, [user, navigate]);
+  }, [user]);
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -151,7 +163,6 @@ const Docs = () => {
   const initializeEncryption = async () => {
     if (!user) return;
     try {
-      // CORRECTION: On n'utilise plus le token de session pour éviter la perte de données au logout
       await encryptionService.initialize(user.id);
     } catch (error) {
       console.error('Encryption initialization error:', error);
@@ -183,7 +194,6 @@ const Docs = () => {
               decryptedContent
             };
           } catch (error) {
-            // Si on ne peut pas déchiffrer (anciens docs avec mauvaise clé), on affiche un message
             return {
               ...doc,
               decryptedTitle: '🔒 Données illisibles (Ancienne clé)',
@@ -198,7 +208,7 @@ const Docs = () => {
       console.error('Error fetching documents:', error);
       showError('Erreur lors du chargement des documents');
     } finally {
-      setIsLoading(false);
+      setIsLoadingDocs(false);
     }
   };
 
@@ -268,7 +278,6 @@ const Docs = () => {
     if (!user) return;
 
     try {
-      // Attention: si le doc source est illisible, on ne peut pas le dupliquer correctement
       const titleToUse = doc.decryptedTitle.startsWith('🔒') ? 'Copie de document illisible' : `${doc.decryptedTitle} (copie)`;
       const contentToUse = doc.decryptedTitle.startsWith('🔒') ? '' : doc.decryptedContent;
 
@@ -349,7 +358,7 @@ const Docs = () => {
       doc.decryptedTitle.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-  if (isLoading) {
+  if (isLoadingDocs) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -372,11 +381,11 @@ const Docs = () => {
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
-                onClick={() => navigate('/profile')}
+                onClick={() => navigate('/')} // On retourne à la Home de Docs, qui redirigera vers l'index si on est connecté ? Non, ici on est dans le Dashboard. Si on clique retour on va vers le moteur de recherche.
                 className="text-gray-600 hover:text-gray-900"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Retour
+                Sivara
               </Button>
               <div className="h-6 w-px bg-gray-200"></div>
               <div className="flex items-center gap-3">
@@ -417,7 +426,7 @@ const Docs = () => {
                     Mon profil
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/')}>
-                    Retour à l'accueil
+                    Retour au moteur de recherche
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

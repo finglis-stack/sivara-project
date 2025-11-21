@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,8 +24,12 @@ const countryCodes = [
 
 const Onboarding = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  
+  const returnTo = searchParams.get('returnTo') || '/';
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -93,7 +97,7 @@ const Onboarding = () => {
         if (profileError) throw profileError;
 
         showSuccess('Compte créé avec succès ! Vérifiez votre email pour confirmer votre compte.');
-        navigate('/');
+        navigate(returnTo);
       }
     } catch (error: any) {
       console.error('Error creating account:', error);
@@ -380,7 +384,7 @@ const Onboarding = () => {
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
                 Vous avez déjà un compte ?{' '}
-                <a href="/login" className="text-gray-700 font-semibold hover:text-gray-900 underline">
+                <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="text-gray-700 font-semibold hover:text-gray-900 underline">
                   Se connecter
                 </a>
               </p>

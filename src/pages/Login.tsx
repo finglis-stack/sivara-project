@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [step, setStep] = useState<'email' | 'password'>('email');
   const [isChecking, setIsChecking] = useState(false);
@@ -19,11 +20,14 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
 
+  // Récupérer l'URL de retour (par défaut /)
+  const returnTo = searchParams.get('returnTo') || '/';
+
   useEffect(() => {
     if (user) {
-      navigate('/');
+      navigate(returnTo);
     }
-  }, [user, navigate]);
+  }, [user, navigate, returnTo]);
 
   useEffect(() => {
     if (blockedUntil) {
@@ -53,36 +57,26 @@ const Login = () => {
     setIsChecking(true);
 
     try {
-      console.log('Vérification de l\'email:', email);
-
       // Essayer de se connecter avec un mot de passe invalide pour vérifier si l'email existe
       const testResult = await supabase.auth.signInWithPassword({
         email: email,
         password: '___TEST_INVALID_PASSWORD___' + Date.now(),
       });
 
-      console.log('Résultat du test:', testResult);
-      console.log('Message d\'erreur:', testResult.error?.message);
-
       if (testResult.error) {
         const errorMessage = testResult.error.message.toLowerCase();
-        console.log('Message d\'erreur en minuscules:', errorMessage);
         
         // Si l'erreur contient "invalid login credentials", l'email existe
         if (errorMessage.includes('invalid login credentials') || 
             errorMessage.includes('invalid') ||
             errorMessage.includes('credentials')) {
-          console.log('✅ Email trouvé - passage à l\'étape mot de passe');
           setStep('password');
         } else {
           // Email n'existe pas
-          console.log('❌ Email non trouvé - blocage de 4 secondes');
           showError('Aucun compte trouvé avec cet email');
           setBlockedUntil(Date.now() + 4000);
         }
       } else {
-        // Ne devrait pas arriver, mais au cas où
-        console.log('⚠️ Pas d\'erreur (inattendu) - passage à l\'étape mot de passe');
         setStep('password');
       }
     } catch (error: any) {
@@ -112,7 +106,7 @@ const Login = () => {
       if (error) throw error;
 
       showSuccess('Connexion réussie !');
-      navigate('/');
+      navigate(returnTo);
     } catch (error: any) {
       console.error('Login error:', error);
       showError(error.message || 'Mot de passe incorrect');
@@ -288,19 +282,13 @@ const Login = () => {
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
                 Vous n'avez pas de compte ?{' '}
-                <a href="/onboarding" className="text-gray-700 font-semibold hover:text-gray-900 underline">
+                <a href={`/onboarding?returnTo=${encodeURIComponent(returnTo)}`} className="text-gray-700 font-semibold hover:text-gray-900 underline">
                   Créer un compte
                 </a>
               </p>
             </div>
           </CardContent>
         </Card>
-
-        <div className="text-center mt-6">
-          <a href="/" className="text-sm text-white/90 hover:text-white font-medium drop-shadow">
-            ← Retour à l'accueil
-          </a>
-        </div>
       </div>
     </div>
   );
