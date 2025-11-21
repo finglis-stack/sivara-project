@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, FileText } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3 } from 'lucide-react';
 
 interface Profile {
   first_name: string;
@@ -210,16 +210,15 @@ const Profile = () => {
             <h2 className="text-2xl font-light text-gray-900">Mes application(s)</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {/* Carte Docs */}
-            <button className="group relative bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-gray-300 hover:shadow-md transition-all duration-300 text-left">
-              <div className="flex flex-col items-center gap-4">
-                <div className="h-16 w-16 bg-gray-100 rounded-2xl flex items-center justify-center group-hover:bg-gray-200 transition-colors">
-                  <FileText className="h-8 w-8 text-gray-700" strokeWidth={1.5} />
+            <button className="group relative bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                  <img src="/docs-icon.png" alt="Docs" className="h-7 w-7" />
                 </div>
-                <div className="text-center">
-                  <h3 className="text-lg font-medium text-gray-900 mb-1">Docs</h3>
-                  <p className="text-sm text-gray-500">Documentation</p>
+                <div className="text-center w-full">
+                  <h3 className="text-sm font-medium text-gray-900 truncate">Docs</h3>
                 </div>
               </div>
             </button>
