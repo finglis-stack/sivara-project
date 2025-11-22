@@ -6,7 +6,7 @@ import { encryptionService } from '@/lib/encryption';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, Extension } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -19,7 +19,8 @@ import {
   FileText, Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
-  AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Quote, Type, Check
+  AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
+  File, FileJson, Minus, Plus, Monitor
 } from 'lucide-react';
 
 import {
@@ -29,6 +30,40 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Toggle } from '@/components/ui/toggle';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+
+// --- EXTENSION TAILLE DE POLICE ---
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addOptions() {
+    return {
+      types: ['textStyle'],
+    };
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: (element) => element.style.fontSize.replace('px', ''),
+            renderHTML: (attributes) => {
+              if (!attributes.fontSize) {
+                return {};
+              }
+              return {
+                style: `font-size: ${attributes.fontSize}px`,
+              };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
 
 interface Document {
   id: string;
@@ -42,10 +77,9 @@ interface Document {
   color?: string;
 }
 
-// --- CONFIGURATION DES POLICES ---
 const FONT_FAMILIES = [
   { name: 'Inter', value: 'Inter', type: 'sans-serif' },
-  { name: 'Serif (Par défaut)', value: '', type: 'serif' }, // Fallback standard
+  { name: 'Serif (Par défaut)', value: '', type: 'serif' },
   { name: 'Roboto', value: 'Roboto', type: 'sans-serif' },
   { name: 'Open Sans', value: '"Open Sans"', type: 'sans-serif' },
   { name: 'Lato', value: 'Lato', type: 'sans-serif' },
@@ -56,7 +90,10 @@ const FONT_FAMILIES = [
   { name: 'Courier Prime', value: '"Courier Prime"', type: 'monospace' },
 ];
 
-// --- CONFIGURATION DES ICÔNES ---
+const FONT_SIZES = [
+  '12', '14', '16', '18', '20', '24', '30', '36', '48', '60', '72'
+];
+
 const AVAILABLE_ICONS = [
   { name: 'FileText', icon: FileText, label: 'Document' },
   { name: 'Briefcase', icon: Briefcase, label: 'Business' },
@@ -108,6 +145,7 @@ const DocEditor = () => {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [selectedIcon, setSelectedIcon] = useState('FileText');
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
+  const [viewMode, setViewMode] = useState<'pageless' | 'paged'>('pageless');
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const isUpdatingFromRemoteRef = useRef(false);
 
@@ -115,18 +153,33 @@ const DocEditor = () => {
     titleRef.current = title;
   }, [title]);
 
-  // --- CHARGEMENT DES GOOGLE FONTS ---
   useEffect(() => {
     const linkId = 'sivara-google-fonts';
     if (!window.document.getElementById(linkId)) {
       const link = window.document.createElement('link');
       link.id = linkId;
       link.rel = 'stylesheet';
-      // Chargement de toutes les polices supportées
       link.href = 'https://fonts.googleapis.com/css2?family=Courier+Prime&family=Inter:wght@300;400;500;600&family=Lato:wght@300;400;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&family=Montserrat:wght@300;400;600&family=Open+Sans:wght@300;400;600&family=Playfair+Display:wght@400;600&family=Roboto:wght@300;400;500&display=swap';
       window.document.head.appendChild(link);
     }
   }, []);
+
+  // Définition des styles pour les deux modes
+  const pagelessStyle = `
+    min-height: 1123px;
+    background-color: white;
+    padding: 2.5cm;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  `;
+
+  const pagedStyle = `
+    min-height: 1123px;
+    background-color: white;
+    padding: 2.5cm;
+    background-image: linear-gradient(#ffffff calc(1123px - 10px), #E5E7EB calc(1123px - 10px), #E5E7EB 1123px);
+    background-size: 100% 1123px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  `;
 
   const editor = useEditor({
     extensions: [
@@ -134,6 +187,7 @@ const DocEditor = () => {
       Underline,
       TextStyle,
       FontFamily,
+      FontSize,
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
@@ -144,10 +198,8 @@ const DocEditor = () => {
     content: '',
     editorProps: {
       attributes: {
-        // --- MODE PAGE CONTINUE (FIXÉ) ---
-        // On retire le gradient qui simulait les pages car il causait des chevauchements.
-        // On utilise un style "Feuille Continue" propre avec une ombre.
-        class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[1123px] bg-white py-16 px-[2.5cm] shadow-lg mb-8',
+        class: 'prose prose-lg max-w-none outline-none focus:outline-none',
+        style: viewMode === 'pageless' ? pagelessStyle : pagedStyle
       },
     },
     onUpdate: ({ editor }) => {
@@ -156,6 +208,23 @@ const DocEditor = () => {
       }
     },
   });
+
+  // Mettre à jour les attributs quand le viewMode change
+  useEffect(() => {
+    if (editor && editor.view) {
+       // On force la mise à jour des attributs du DOM
+       // Note: editor.setOptions ne met pas toujours à jour editorProps dynamiquement de façon fiable pour 'style'
+       // On manipule directement l'élément racine de l'éditeur pour un effet immédiat
+       const dom = editor.view.dom;
+       if (viewMode === 'pageless') {
+         dom.style.backgroundImage = 'none';
+         dom.style.backgroundSize = 'auto';
+       } else {
+         dom.style.backgroundImage = 'linear-gradient(#ffffff calc(1123px - 10px), #E5E7EB calc(1123px - 10px), #E5E7EB 1123px)';
+         dom.style.backgroundSize = '100% 1123px';
+       }
+    }
+  }, [viewMode, editor]);
 
   useEffect(() => {
     if (!user || !id) return;
@@ -438,13 +507,36 @@ const DocEditor = () => {
           </div>
         </div>
 
-        {/* Toolbar avec Selecteur de Police */}
+        {/* Toolbar */}
         <div className="border-t border-gray-200 bg-[#F8F9FA] px-4 py-2 flex justify-center items-center gap-1 flex-wrap shadow-inner">
             <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 py-1 gap-1">
+                {/* Mode d'affichage */}
+                <DropdownMenu>
+                   <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="w-[120px] justify-between font-normal px-2 text-xs">
+                          {viewMode === 'pageless' ? (
+                              <><File className="h-3 w-3 mr-2" /> Continu</>
+                          ) : (
+                              <><FileJson className="h-3 w-3 mr-2" /> Pages A4</>
+                          )}
+                      </Button>
+                   </DropdownMenuTrigger>
+                   <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => setViewMode('pageless')}>
+                          <File className="mr-2 h-4 w-4" /> Page Continue
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setViewMode('paged')}>
+                          <FileJson className="mr-2 h-4 w-4" /> Pages Séparées
+                      </DropdownMenuItem>
+                   </DropdownMenuContent>
+                </DropdownMenu>
+
+                <div className="h-6 w-px bg-gray-200 mx-1" />
+
                 {/* Sélecteur de Police */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="w-[140px] justify-between font-normal px-2">
+                    <Button variant="ghost" size="sm" className="w-[130px] justify-between font-normal px-2">
                       <span className="truncate">
                         {FONT_FAMILIES.find(f => editor?.isActive('textStyle', { fontFamily: f.value }))?.name || 'Police'}
                       </span>
@@ -463,6 +555,27 @@ const DocEditor = () => {
                         {editor?.isActive('textStyle', { fontFamily: font.value }) && <Check className="h-3 w-3" />}
                       </DropdownMenuItem>
                     ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                 {/* Sélecteur de Taille */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-[60px] justify-between font-normal px-2">
+                       <span className="truncate">
+                          {editor?.getAttributes('textStyle').fontSize?.replace('px', '') || '16'}
+                       </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[80px] max-h-[200px] overflow-y-auto">
+                     {FONT_SIZES.map(size => (
+                        <DropdownMenuItem 
+                           key={size}
+                           onClick={() => editor?.chain().focus().setMark('textStyle', { fontSize: size + 'px' }).run()}
+                        >
+                           {size}
+                        </DropdownMenuItem>
+                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
 
