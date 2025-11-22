@@ -144,14 +144,10 @@ const DocEditor = () => {
     content: '',
     editorProps: {
       attributes: {
-        // --- MAGIE DU MULTIPAGE CSS ---
-        // On enlève les sauts de ligne pour éviter l'erreur InvalidCharacterError sur la classe
-        class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[1123px] bg-white py-[2.5cm] px-[2.5cm]',
-        style: `
-          background-image: linear-gradient(#ffffff 1080px, #e5e7eb 1080px, #e5e7eb 1123px);
-          background-size: 100% 1123px;
-          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        `
+        // --- MODE PAGE CONTINUE (FIXÉ) ---
+        // On retire le gradient qui simulait les pages car il causait des chevauchements.
+        // On utilise un style "Feuille Continue" propre avec une ombre.
+        class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[1123px] bg-white py-16 px-[2.5cm] shadow-lg mb-8',
       },
     },
     onUpdate: ({ editor }) => {
