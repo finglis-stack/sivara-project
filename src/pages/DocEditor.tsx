@@ -344,7 +344,9 @@ const DocEditor = () => {
 
       // 2. Initialisation Crypto
       const hashKey = window.location.hash.replace('#key=', '');
-      if (!hashKey) {
+      
+      // FIX: Si pas de hashKey OU si c'est le hashKey par défaut "share"
+      if (!hashKey || hashKey === 'share') {
         // Important: On utilise l'ID du propriétaire pour dériver la clé
         await encryptionService.initialize(doc.owner_id);
       }
@@ -472,7 +474,8 @@ const DocEditor = () => {
   };
 
   const copyShareLink = () => {
-      const link = `${window.location.origin}/${id}#key=share`;
+      // FIX: Ne plus ajouter #key=share pour éviter les erreurs d'initialisation
+      const link = `${window.location.origin}/${id}`;
       navigator.clipboard.writeText(link);
       showSuccess("Lien copié !");
   };
