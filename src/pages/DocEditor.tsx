@@ -449,7 +449,7 @@ const DocEditor = () => {
       if (!newInviteEmail) return;
       const { error } = await supabase.from('document_access').insert({
           document_id: id,
-          email: newInviteEmail,
+          email: newInviteEmail.toLowerCase().trim(),
           permission: invitePermission
       });
       if (error) showError("Erreur lors de l'invitation");
