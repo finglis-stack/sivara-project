@@ -20,7 +20,7 @@ import {
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
-  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2
+  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud
 } from 'lucide-react';
 
 import {
@@ -470,6 +470,21 @@ const DocEditor = () => {
                  {document?.visibility === 'public' ? <Globe2 className="h-3 w-3" /> : document?.visibility === 'limited' ? <Users className="h-3 w-3" /> : <LockKeyhole className="h-3 w-3" />}
                  {document?.visibility === 'public' ? 'Public' : document?.visibility === 'limited' ? 'Limité' : 'Barré'}
               </Badge>
+
+              {/* Status Indicator */}
+              <div className="flex items-center gap-1.5 text-xs text-gray-400 min-w-[120px]">
+                {isSaving ? (
+                    <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Enregistrement...</span>
+                    </>
+                ) : (
+                    <>
+                        <Cloud className="h-3 w-3" />
+                        <span>Synchronisé</span>
+                    </>
+                )}
+              </div>
             </div>
 
             {/* Right: Actions & Avatars */}
