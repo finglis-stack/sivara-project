@@ -135,6 +135,7 @@ const DocEditor = () => {
   const [title, setTitle] = useState('');
   const [permission, setPermission] = useState<'read' | 'write'>('read');
   const [isOwner, setIsOwner] = useState(false);
+  const [decryptionError, setDecryptionError] = useState(false);
 
   // State User & Profile
   const [userProfile, setUserProfile] = useState<{avatar_url: string | null} | null>(null);
@@ -229,12 +230,11 @@ const DocEditor = () => {
   }, [id, user, editor, authLoading]);
 
   // --- REALTIME & COLLAB ---
-  // On déclenche le setupRealtime une fois que le document et le profil sont chargés
   useEffect(() => {
-      if (id && user && !isLoading) {
+      if (id && user && !isLoading && !decryptionError) {
           setupRealtime();
       }
-  }, [id, user, isLoading, userProfile]); // Dépendance userProfile pour mettre à jour l'avatar
+  }, [id, user, isLoading, userProfile, decryptionError]);
 
   const setupRealtime = () => {
     if (!id || !user) return;
@@ -345,6 +345,7 @@ const DocEditor = () => {
       // 2. Initialisation Crypto
       const hashKey = window.location.hash.replace('#key=', '');
       if (!hashKey) {
+        // Important: On utilise l'ID du propriétaire pour dériver la clé
         await encryptionService.initialize(doc.owner_id);
       }
 
@@ -379,7 +380,12 @@ const DocEditor = () => {
           decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
       } catch (e) { 
           console.error("Decryption fail", e);
-          if (!isDocOwner) decryptedTitle = "Document chiffré (Accès limité)";
+          setDecryptionError(true);
+          decryptedTitle = "Document sécurisé";
+          decryptedContent = ""; // On vide le contenu pour ne pas montrer le ciphertext
+          if (isDocOwner) {
+             showError("Erreur de déchiffrement. Votre clé a peut-être changé.");
+          }
       }
 
       setDocument(doc);
@@ -493,6 +499,26 @@ const DocEditor = () => {
   };
 
   if (isLoading || authLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
+
+  if (decryptionError) {
+      return (
+          <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
+              <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full border border-gray-200">
+                  <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <LockKeyhole className="h-8 w-8 text-red-600" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-2">Contenu sécurisé inaccessible</h1>
+                  <p className="text-gray-500 mb-6">
+                      Ce document est chiffré et la clé de déchiffrement n'a pas pu être générée correctement pour votre session. Cela peut arriver si le document a été partagé sans les mécanismes de sécurité appropriés.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <Button onClick={() => window.location.reload()} className="w-full">Réessayer</Button>
+                    <Button variant="outline" onClick={() => navigate('/')} className="w-full">Retourner à l'accueil</Button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F3F4F6]">

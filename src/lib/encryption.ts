@@ -28,15 +28,16 @@ export class EncryptionService {
 
   /**
    * Initialise la clé maître à partir de l'ID utilisateur unique.
-   * CORRECTION: On n'utilise plus le sessionToken car il change à chaque connexion,
-   * ce qui rendait les données indéchiffrables après un logout.
+   * CORRECTION: Normalisation de l'ID en minuscules pour éviter les incohérences de génération de clé.
    */
   async initialize(userId: string): Promise<void> {
     const encoder = new TextEncoder();
     
+    // Force l'ID en minuscules pour garantir la cohérence
+    const normalizedUserId = userId.toLowerCase().trim();
+    
     // Utilisation d'une graine stable basée sur l'ID utilisateur
-    // Cela garantit que la clé sera la même à chaque reconnexion de cet utilisateur
-    const saltData = encoder.encode(`${userId}:sivara-docs-persistent-key-v2`);
+    const saltData = encoder.encode(`${normalizedUserId}:sivara-docs-persistent-key-v2`);
     
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
