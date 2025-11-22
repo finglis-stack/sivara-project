@@ -155,11 +155,12 @@ const UserMenu = () => {
         <DropdownMenuItem 
           onSelect={(e) => {
             e.preventDefault();
-            // Redirection vers le sous-domaine account
+            const currentUrl = window.location.href;
+            // Redirection vers le sous-domaine account avec paramètre de retour
             if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                 window.location.href = `/?app=account#/profile`; // Hack pour localhost, mais idéalement on gère le routing interne
+                 window.location.href = `/profile?app=account&returnTo=${encodeURIComponent(currentUrl)}`;
             } else {
-                window.location.href = 'https://account.sivara.ca/profile';
+                window.location.href = `https://account.sivara.ca/profile?returnTo=${encodeURIComponent(currentUrl)}`;
             }
           }}
         >

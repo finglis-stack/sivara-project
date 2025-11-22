@@ -23,11 +23,20 @@ const Login = () => {
   // Récupérer l'URL de retour (par défaut /)
   const returnTo = searchParams.get('returnTo') || '/';
 
+  // Fonction sécurisée pour rediriger (interne ou externe)
+  const handleRedirect = (url: string) => {
+    if (url.startsWith('http') || url.startsWith('//')) {
+      window.location.href = url;
+    } else {
+      navigate(url);
+    }
+  };
+
   useEffect(() => {
     if (user) {
-      navigate(returnTo);
+      handleRedirect(returnTo);
     }
-  }, [user, navigate, returnTo]);
+  }, [user, returnTo]);
 
   useEffect(() => {
     if (blockedUntil) {
@@ -106,7 +115,7 @@ const Login = () => {
       if (error) throw error;
 
       showSuccess('Connexion réussie !');
-      navigate(returnTo);
+      handleRedirect(returnTo);
     } catch (error: any) {
       console.error('Login error:', error);
       showError(error.message || 'Mot de passe incorrect');

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +41,7 @@ const countryCodes = [
 
 const Profile = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -93,6 +94,14 @@ const Profile = () => {
   }, [user, navigate]);
 
   const handleReturn = () => {
+    // Priorité : paramètre returnTo
+    const returnTo = searchParams.get('returnTo');
+    if (returnTo) {
+      window.location.href = returnTo;
+      return;
+    }
+
+    // Sinon fallback standard
     const hostname = window.location.hostname;
     const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
     
@@ -317,7 +326,7 @@ const Profile = () => {
                 className="text-gray-600 hover:text-gray-900"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Sivara
+                Retour à l'application
               </Button>
               <div className="h-6 w-px bg-gray-200"></div>
               <h1 className="text-2xl font-light text-gray-900">Mon Profil</h1>

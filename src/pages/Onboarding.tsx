@@ -41,6 +41,15 @@ const Onboarding = () => {
     password: '',
   });
 
+  // Fonction sécurisée pour rediriger (interne ou externe)
+  const handleRedirect = (url: string) => {
+    if (url.startsWith('http') || url.startsWith('//')) {
+      window.location.href = url;
+    } else {
+      navigate(url);
+    }
+  };
+
   const handleNextStep = () => {
     if (step === 1) {
       if (!formData.firstName || !formData.lastName) {
@@ -96,8 +105,11 @@ const Onboarding = () => {
 
         if (profileError) throw profileError;
 
-        showSuccess('Compte créé avec succès ! Vérifiez votre email pour confirmer votre compte.');
-        navigate(returnTo);
+        showSuccess('Compte créé avec succès !');
+        // On attend un peu pour que l'utilisateur voie le message
+        setTimeout(() => {
+          handleRedirect(returnTo);
+        }, 1500);
       }
     } catch (error: any) {
       console.error('Error creating account:', error);
