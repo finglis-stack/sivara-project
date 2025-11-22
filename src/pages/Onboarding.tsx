@@ -124,7 +124,7 @@ const Onboarding = () => {
       {/* Image de fond */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: 'url(/auth-background.jpg)' }}
+        style={{ backgroundImage: 'url(/auth-bg-v2.jpg)' }}
       >
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
       </div>
