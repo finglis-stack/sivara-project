@@ -84,6 +84,7 @@ interface Collaborator {
   id: string;
   email: string;
   color: string;
+  avatar_url?: string | null;
   x: number;
   y: number;
   name: string;
@@ -135,6 +136,9 @@ const DocEditor = () => {
   const [permission, setPermission] = useState<'read' | 'write'>('read');
   const [isOwner, setIsOwner] = useState(false);
 
+  // State User & Profile
+  const [userProfile, setUserProfile] = useState<{avatar_url: string | null} | null>(null);
+
   // State UI
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
@@ -153,6 +157,7 @@ const DocEditor = () => {
   const isUpdatingFromRemoteRef = useRef(false);
   const channelRef = useRef<any>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef(''); // Pour le cleanup
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
@@ -170,18 +175,21 @@ const DocEditor = () => {
       },
     },
     onUpdate: ({ editor }) => {
+      const html = editor.getHTML();
+      contentRef.current = html;
+      
       if (!isUpdatingFromRemoteRef.current) {
         // Broadcast changes
         if (channelRef.current && user) {
           channelRef.current.send({
             type: 'broadcast',
             event: 'content_update',
-            payload: { content: editor.getHTML(), sender: user.id }
+            payload: { content: html, sender: user.id }
           });
         }
-        // Save DB
+        // Save DB - Temps réel
         if (permission === 'write') {
-          handleContentChange(editor.getHTML());
+          handleContentChange(html);
         }
       }
     },
@@ -189,7 +197,7 @@ const DocEditor = () => {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    if (!id || authLoading) return; // Attendre que le statut auth soit connu
+    if (!id || authLoading) return;
 
     const init = async () => {
       // 1. Charger la police
@@ -201,24 +209,49 @@ const DocEditor = () => {
         window.document.head.appendChild(link);
       }
 
-      // 2. Charger le document et la clé
-      await fetchDocumentAndInitCrypto();
+      // 2. Charger le profil utilisateur (si connecté)
+      if (user) {
+        const { data } = await supabase.from('profiles').select('avatar_url').eq('id', user.id).single();
+        setUserProfile(data);
+      }
 
-      // 3. Setup Realtime (seulement si connecté)
-      if (user) setupRealtime();
+      // 3. Charger le document et la clé
+      await fetchDocumentAndInitCrypto();
     };
 
     init();
 
     return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      // Cleanup
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
   }, [id, user, editor, authLoading]);
 
   // --- REALTIME & COLLAB ---
+  // On déclenche le setupRealtime une fois que le document et le profil sont chargés
+  useEffect(() => {
+      if (id && user && !isLoading) {
+          setupRealtime();
+      }
+  }, [id, user, isLoading, userProfile]); // Dépendance userProfile pour mettre à jour l'avatar
+
   const setupRealtime = () => {
     if (!id || !user) return;
+
+    // Si déjà connecté, on met juste à jour le track state
+    if (channelRef.current) {
+        const myColor = CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)];
+        channelRef.current.track({
+            user_id: user.id,
+            email: user.email,
+            color: myColor,
+            avatar_url: userProfile?.avatar_url,
+            x: 0,
+            y: 0
+        });
+        return;
+    }
 
     const myColor = CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)];
     
@@ -234,6 +267,7 @@ const DocEditor = () => {
                 id: presence.user_id,
                 email: presence.email,
                 color: presence.color,
+                avatar_url: presence.avatar_url,
                 x: presence.x,
                 y: presence.y,
                 name: presence.email.split('@')[0]
@@ -246,10 +280,8 @@ const DocEditor = () => {
       .on('broadcast', { event: 'content_update' }, ({ payload }) => {
         if (payload.sender !== user.id && editor) {
            isUpdatingFromRemoteRef.current = true;
-           // Save cursor pos
            const { from, to } = editor.state.selection;
            editor.commands.setContent(payload.content);
-           // Restore cursor (best effort)
            editor.commands.setTextSelection({ from, to });
            setTimeout(() => isUpdatingFromRemoteRef.current = false, 50);
         }
@@ -260,6 +292,7 @@ const DocEditor = () => {
             user_id: user.id,
             email: user.email,
             color: myColor,
+            avatar_url: userProfile?.avatar_url,
             x: 0,
             y: 0
           });
@@ -267,19 +300,18 @@ const DocEditor = () => {
       });
   };
 
-  // Mouse Tracking for cursors
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!channelRef.current || !editorRef.current || !user) return;
     const rect = editorRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top + editorRef.current.scrollTop;
     
-    // Throttle updates
     if (Math.random() > 0.8) { 
         channelRef.current.track({
             user_id: user.id,
             email: user.email,
-            color: CURSOR_COLORS[0], // Just update coordinates
+            color: CURSOR_COLORS[0], 
+            avatar_url: userProfile?.avatar_url,
             x, y
         });
     }
@@ -288,24 +320,18 @@ const DocEditor = () => {
   // --- DATA LOADING & CRYPTO ---
   const fetchDocumentAndInitCrypto = async () => {
     try {
-      // A. Check si une clé est dans l'URL (Partage Zero-Knowledge)
-      const hashKey = window.location.hash.replace('#key=', '');
-      
+      // 1. Récupérer le document D'ABORD
       const { data: doc, error } = await supabase
         .from('documents')
         .select('*')
         .eq('id', id)
         .single();
 
-      // SI DOCUMENT INTROUVABLE (ou accès refusé par RLS)
       if (error || !doc) {
-        // Si non connecté, on redirige vers la bonne page de login
         if (!user) {
            const hostname = window.location.hostname;
            const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
            const currentUrl = window.location.href;
-           
-           // Force la redirection vers le serveur d'auth centralisé
            if (isLocal) {
              window.location.href = `/?app=account&path=/login&returnTo=${encodeURIComponent(currentUrl)}`;
            } else {
@@ -316,10 +342,11 @@ const DocEditor = () => {
         throw new Error("Document inaccessible");
       }
 
-      // B. Initialisation Crypto
-      // On utilise toujours l'ID du propriétaire pour dériver la clé
-      // Cela marche car l'algo est déterministe et "public" si on a l'ID
-      await encryptionService.initialize(doc.owner_id);
+      // 2. Initialisation Crypto
+      const hashKey = window.location.hash.replace('#key=', '');
+      if (!hashKey) {
+        await encryptionService.initialize(doc.owner_id);
+      }
 
       // Détermination des droits
       const isDocOwner = user?.id === doc.owner_id;
@@ -330,7 +357,6 @@ const DocEditor = () => {
       else if (doc.visibility === 'public') {
           userPermission = doc.public_permission;
       } else {
-          // Check limited access si connecté
           if (user) {
             const { data: access } = await supabase
                .from('document_access')
@@ -342,7 +368,7 @@ const DocEditor = () => {
           }
       }
       setPermission(userPermission);
-      editor?.setEditable(userPermission === 'write');
+      if (userPermission === 'read') editor?.setEditable(false);
 
       // Déchiffrement
       let decryptedTitle = doc.title;
@@ -353,12 +379,12 @@ const DocEditor = () => {
           decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
       } catch (e) { 
           console.error("Decryption fail", e);
-          decryptedTitle = "Document verrouillé ou illisible";
-          decryptedContent = "<p>Impossible de déchiffrer le contenu avec votre clé actuelle.</p>";
+          if (!isDocOwner) decryptedTitle = "Document chiffré (Accès limité)";
       }
 
       setDocument(doc);
       setTitle(decryptedTitle);
+      contentRef.current = decryptedContent;
       setSelectedIcon(doc.icon || 'FileText');
       setSelectedColor(doc.color || '#3B82F6');
       editor?.commands.setContent(decryptedContent);
@@ -381,7 +407,6 @@ const DocEditor = () => {
 
   // --- ACTIONS ---
   const handleSave = async (key: string, value: string) => {
-      // On sauvegarde si on a la permission WRITE (peu importe qui on est)
       if (!id || permission !== 'write') return;
       
       try {
@@ -522,6 +547,9 @@ const DocEditor = () => {
                   {collaborators.map(collab => (
                       <div key={collab.id} className="relative group">
                           <Avatar className="h-8 w-8 border-2 border-white ring-2" style={{ '--tw-ring-color': collab.color } as any}>
+                              {collab.avatar_url ? (
+                                  <AvatarImage src={collab.avatar_url} alt={collab.name} />
+                              ) : null}
                               <AvatarFallback style={{ backgroundColor: collab.color }} className="text-white text-xs">
                                   {collab.name.substring(0,2).toUpperCase()}
                               </AvatarFallback>
