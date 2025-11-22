@@ -11,8 +11,8 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
-import TextStyle from '@tiptap/extension-text-style';
-import FontFamily from '@tiptap/extension-font-family';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { FontFamily } from '@tiptap/extension-font-family';
 
 import {
   ArrowLeft, Download, Share2, Users, Loader2, Star, MoreVertical, Trash2, Copy, Shield, Lock,
@@ -118,7 +118,7 @@ const DocEditor = () => {
   // --- CHARGEMENT DES GOOGLE FONTS ---
   useEffect(() => {
     const linkId = 'sivara-google-fonts';
-    if (!document.getElementById(linkId)) {
+    if (!window.document.getElementById(linkId)) {
       const link = window.document.createElement('link');
       link.id = linkId;
       link.rel = 'stylesheet';
