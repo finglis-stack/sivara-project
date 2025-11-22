@@ -145,15 +145,8 @@ const DocEditor = () => {
     editorProps: {
       attributes: {
         // --- MAGIE DU MULTIPAGE CSS ---
-        // On simule des pages A4 via un background gradient qui se répète
-        // 1123px est environ la hauteur d'une page A4 à 96DPI
-        // On alterne blanc (page) et gris (séparateur)
-        class: `
-          prose prose-lg max-w-none outline-none focus:outline-none 
-          min-h-[1123px]
-          bg-white
-          py-[2.5cm] px-[2.5cm]
-        `,
+        // On enlève les sauts de ligne pour éviter l'erreur InvalidCharacterError sur la classe
+        class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[1123px] bg-white py-[2.5cm] px-[2.5cm]',
         style: `
           background-image: linear-gradient(#ffffff 1080px, #e5e7eb 1080px, #e5e7eb 1123px);
           background-size: 100% 1123px;
