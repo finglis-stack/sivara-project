@@ -70,11 +70,8 @@ const App = () => {
               {currentApp === 'docs' && (
                 <>
                   <Route path="/" element={<Docs />} />
-                  <Route path="/:id" element={
-                    <ProtectedRoute>
-                      <DocEditor />
-                    </ProtectedRoute>
-                  } />
+                  {/* La route /:id n'est plus protégée globalement, DocEditor gère la sécu */}
+                  <Route path="/:id" element={<DocEditor />} />
                   <Route path="*" element={<NotFound />} />
                 </>
               )}

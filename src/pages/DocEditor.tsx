@@ -20,7 +20,7 @@ import {
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
-  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud
+  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn
 } from 'lucide-react';
 
 import {
@@ -125,7 +125,7 @@ const COLOR_PALETTE = [
 const DocEditor = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   
   // State Document
   const [document, setDocument] = useState<Document | null>(null);
@@ -153,7 +153,6 @@ const DocEditor = () => {
   const isUpdatingFromRemoteRef = useRef(false);
   const channelRef = useRef<any>(null);
   const editorRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef(''); // Pour le cleanup
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
@@ -171,21 +170,18 @@ const DocEditor = () => {
       },
     },
     onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
-      contentRef.current = html;
-      
       if (!isUpdatingFromRemoteRef.current) {
         // Broadcast changes
-        if (channelRef.current) {
+        if (channelRef.current && user) {
           channelRef.current.send({
             type: 'broadcast',
             event: 'content_update',
-            payload: { content: html, sender: user?.id }
+            payload: { content: editor.getHTML(), sender: user.id }
           });
         }
-        // Save DB - Temps réel
+        // Save DB
         if (permission === 'write') {
-          handleContentChange(html);
+          handleContentChange(editor.getHTML());
         }
       }
     },
@@ -193,7 +189,7 @@ const DocEditor = () => {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    if (!id) return;
+    if (!id || authLoading) return; // Attendre que le statut auth soit connu
 
     const init = async () => {
       // 1. Charger la police
@@ -208,18 +204,17 @@ const DocEditor = () => {
       // 2. Charger le document et la clé
       await fetchDocumentAndInitCrypto();
 
-      // 3. Setup Realtime
-      setupRealtime();
+      // 3. Setup Realtime (seulement si connecté)
+      if (user) setupRealtime();
     };
 
     init();
 
     return () => {
-      // Cleanup: Sauvegarde finale si nécessaire
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [id, user, editor]);
+  }, [id, user, editor, authLoading]);
 
   // --- REALTIME & COLLAB ---
   const setupRealtime = () => {
@@ -251,8 +246,10 @@ const DocEditor = () => {
       .on('broadcast', { event: 'content_update' }, ({ payload }) => {
         if (payload.sender !== user.id && editor) {
            isUpdatingFromRemoteRef.current = true;
+           // Save cursor pos
            const { from, to } = editor.state.selection;
            editor.commands.setContent(payload.content);
+           // Restore cursor (best effort)
            editor.commands.setTextSelection({ from, to });
            setTimeout(() => isUpdatingFromRemoteRef.current = false, 50);
         }
@@ -270,17 +267,19 @@ const DocEditor = () => {
       });
   };
 
+  // Mouse Tracking for cursors
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!channelRef.current || !editorRef.current) return;
+    if (!channelRef.current || !editorRef.current || !user) return;
     const rect = editorRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top + editorRef.current.scrollTop;
     
+    // Throttle updates
     if (Math.random() > 0.8) { 
         channelRef.current.track({
-            user_id: user?.id,
-            email: user?.email,
-            color: CURSOR_COLORS[0], 
+            user_id: user.id,
+            email: user.email,
+            color: CURSOR_COLORS[0], // Just update coordinates
             x, y
         });
     }
@@ -289,23 +288,38 @@ const DocEditor = () => {
   // --- DATA LOADING & CRYPTO ---
   const fetchDocumentAndInitCrypto = async () => {
     try {
-      // 1. Récupérer le document D'ABORD pour avoir le owner_id
+      // A. Check si une clé est dans l'URL (Partage Zero-Knowledge)
+      const hashKey = window.location.hash.replace('#key=', '');
+      
       const { data: doc, error } = await supabase
         .from('documents')
         .select('*')
         .eq('id', id)
         .single();
 
-      if (error) throw error;
-
-      // 2. Initialisation Crypto avec l'ID du PROPRIÉTAIRE
-      // Cela permet à tous les collaborateurs d'utiliser la même clé dérivée
-      const hashKey = window.location.hash.replace('#key=', '');
-      
-      if (!hashKey) {
-        // On utilise l'ID du owner, pas du user courant
-        await encryptionService.initialize(doc.owner_id);
+      // SI DOCUMENT INTROUVABLE (ou accès refusé par RLS)
+      if (error || !doc) {
+        // Si non connecté, on redirige vers la bonne page de login
+        if (!user) {
+           const hostname = window.location.hostname;
+           const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+           const currentUrl = window.location.href;
+           
+           // Force la redirection vers le serveur d'auth centralisé
+           if (isLocal) {
+             window.location.href = `/?app=account&path=/login&returnTo=${encodeURIComponent(currentUrl)}`;
+           } else {
+             window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`;
+           }
+           return;
+        }
+        throw new Error("Document inaccessible");
       }
+
+      // B. Initialisation Crypto
+      // On utilise toujours l'ID du propriétaire pour dériver la clé
+      // Cela marche car l'algo est déterministe et "public" si on a l'ID
+      await encryptionService.initialize(doc.owner_id);
 
       // Détermination des droits
       const isDocOwner = user?.id === doc.owner_id;
@@ -316,43 +330,44 @@ const DocEditor = () => {
       else if (doc.visibility === 'public') {
           userPermission = doc.public_permission;
       } else {
-          const { data: access } = await supabase
-             .from('document_access')
-             .select('permission')
-             .eq('document_id', id)
-             .eq('email', user?.email)
-             .single();
-          if (access) userPermission = access.permission;
+          // Check limited access si connecté
+          if (user) {
+            const { data: access } = await supabase
+               .from('document_access')
+               .select('permission')
+               .eq('document_id', id)
+               .eq('email', user.email)
+               .single();
+            if (access) userPermission = access.permission;
+          }
       }
       setPermission(userPermission);
-      if (userPermission === 'read') editor?.setEditable(false);
+      editor?.setEditable(userPermission === 'write');
 
       // Déchiffrement
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
 
       try {
-          // Tout le monde essaie de déchiffrer avec la clé du owner
           decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
           decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
       } catch (e) { 
           console.error("Decryption fail", e);
-          if (!isDocOwner) decryptedTitle = "Document chiffré (Accès limité)";
+          decryptedTitle = "Document verrouillé ou illisible";
+          decryptedContent = "<p>Impossible de déchiffrer le contenu avec votre clé actuelle.</p>";
       }
 
       setDocument(doc);
       setTitle(decryptedTitle);
-      contentRef.current = decryptedContent; // Init ref
       setSelectedIcon(doc.icon || 'FileText');
       setSelectedColor(doc.color || '#3B82F6');
       editor?.commands.setContent(decryptedContent);
       
-      // Charger la liste d'accès pour tout le monde (pour voir qui est là)
-      fetchAccessList();
+      if (isDocOwner) fetchAccessList();
 
     } catch (error) {
       console.error('Load error:', error);
-      showError("Document inaccessible ou introuvable");
+      showError("Document inaccessible ou privé");
       navigate('/');
     } finally {
       setIsLoading(false);
@@ -366,7 +381,7 @@ const DocEditor = () => {
 
   // --- ACTIONS ---
   const handleSave = async (key: string, value: string) => {
-      // Autoriser si on a la permission write (Owner ou Collaborateur)
+      // On sauvegarde si on a la permission WRITE (peu importe qui on est)
       if (!id || permission !== 'write') return;
       
       try {
@@ -388,7 +403,6 @@ const DocEditor = () => {
 
   const handleContentChange = (content: string) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    // Délai réduit à 500ms pour sauvegarde quasi-instantanée
     saveTimeoutRef.current = setTimeout(() => handleSave('content', content), 500);
   };
 
@@ -432,6 +446,17 @@ const DocEditor = () => {
       showSuccess("Lien copié !");
   };
 
+  const handleLogin = () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const currentUrl = window.location.href;
+    if (isLocal) {
+      window.location.href = `/?app=account&path=/login&returnTo=${encodeURIComponent(currentUrl)}`;
+    } else {
+      window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`;
+    }
+  };
+
   // --- RENDER HELPERS ---
   const CurrentIcon = AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || FileText;
   const getIconTextColor = (bgColor: string) => {
@@ -442,7 +467,7 @@ const DocEditor = () => {
     return ((r * 299 + g * 587 + b * 114) / 1000) > 155 ? '#1F2937' : '#FFFFFF';
   };
 
-  if (isLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
+  if (isLoading || authLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F3F4F6]">
@@ -512,6 +537,14 @@ const DocEditor = () => {
                       </div>
                   )}
               </div>
+
+              {/* Si anonyme, bouton de connexion */}
+              {!user && (
+                 <Button variant="outline" size="sm" onClick={handleLogin} className="gap-2">
+                    <LogIn className="h-4 w-4" />
+                    Se connecter
+                 </Button>
+              )}
 
               {isOwner && (
                 <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2" onClick={() => setShowShareDialog(true)}>
