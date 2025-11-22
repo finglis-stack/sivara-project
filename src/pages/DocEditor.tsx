@@ -6,7 +6,7 @@ import { encryptionService } from '@/lib/encryption';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
-import { useEditor, EditorContent, Extension } from '@tiptap/react';
+import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, NodeViewWrapper, Node, mergeAttributes } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -20,7 +20,7 @@ import {
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
-  File, FileJson, Minus, Plus, Monitor
+  File, FileJson, Scissors
 } from 'lucide-react';
 
 import {
@@ -62,6 +62,45 @@ const FontSize = Extension.create({
         },
       },
     ];
+  },
+});
+
+// --- EXTENSION SAUT DE PAGE (Page Break) ---
+const PageBreakComponent = () => {
+  return (
+    <NodeViewWrapper className="page-break-node py-4 select-none">
+      <div className="relative w-full h-8 flex items-center justify-center group">
+        <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t-2 border-dashed border-gray-300"></div>
+        </div>
+        <div className="relative bg-gray-100 px-3 py-1 rounded-full text-xs font-medium text-gray-500 flex items-center gap-2 border border-gray-200">
+            <Scissors className="h-3 w-3" />
+            Saut de page
+        </div>
+      </div>
+    </NodeViewWrapper>
+  );
+};
+
+const PageBreak = Node.create({
+  name: 'pageBreak',
+  group: 'block',
+  atom: true,
+  parseHTML() {
+    return [{ tag: 'div[data-type="page-break"]' }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'page-break' })]
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(PageBreakComponent)
+  },
+  addCommands() {
+    return {
+      setPageBreak: () => ({ chain }) => {
+        return chain().insertContent({ type: this.name }).run()
+      },
+    }
   },
 });
 
@@ -164,7 +203,7 @@ const DocEditor = () => {
     }
   }, []);
 
-  // Définition des styles pour les deux modes
+  // MODE "CONTINU": Simple feuille blanche infinie
   const pagelessStyle = `
     min-height: 1123px;
     background-color: white;
@@ -172,11 +211,16 @@ const DocEditor = () => {
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   `;
 
+  // MODE "MISE EN PAGE" (Visual Guide):
+  // Au lieu de "trous" gris, on affiche une ligne pointillée subtile tous les 1123px (hauteur A4).
+  // Cela indique la fin de la page sans empêcher d'écrire par dessus si besoin.
+  // Pour de vrais sauts, l'utilisateur utilisera le bouton "Saut de page".
   const pagedStyle = `
     min-height: 1123px;
     background-color: white;
     padding: 2.5cm;
-    background-image: linear-gradient(#ffffff calc(1123px - 10px), #E5E7EB calc(1123px - 10px), #E5E7EB 1123px);
+    /* Ligne pointillée bleue pâle tous les 1123px pour marquer la limite de page A4 */
+    background-image: linear-gradient(to bottom, transparent 1122px, #E5E7EB 1122px, #E5E7EB 1123px);
     background-size: 100% 1123px;
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   `;
@@ -188,6 +232,7 @@ const DocEditor = () => {
       TextStyle,
       FontFamily,
       FontSize,
+      PageBreak, // Ajout de notre extension personnalisée
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
@@ -198,7 +243,7 @@ const DocEditor = () => {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-lg max-w-none outline-none focus:outline-none',
+        class: 'prose prose-lg max-w-none outline-none focus:outline-none transition-all duration-300',
         style: viewMode === 'pageless' ? pagelessStyle : pagedStyle
       },
     },
@@ -209,18 +254,16 @@ const DocEditor = () => {
     },
   });
 
-  // Mettre à jour les attributs quand le viewMode change
+  // Mise à jour dynamique du style de fond
   useEffect(() => {
     if (editor && editor.view) {
-       // On force la mise à jour des attributs du DOM
-       // Note: editor.setOptions ne met pas toujours à jour editorProps dynamiquement de façon fiable pour 'style'
-       // On manipule directement l'élément racine de l'éditeur pour un effet immédiat
        const dom = editor.view.dom;
        if (viewMode === 'pageless') {
          dom.style.backgroundImage = 'none';
          dom.style.backgroundSize = 'auto';
        } else {
-         dom.style.backgroundImage = 'linear-gradient(#ffffff calc(1123px - 10px), #E5E7EB calc(1123px - 10px), #E5E7EB 1123px)';
+         // Repère visuel de fin de page
+         dom.style.backgroundImage = 'linear-gradient(to bottom, transparent 1122px, #9CA3AF 1122px, #9CA3AF 1123px)';
          dom.style.backgroundSize = '100% 1123px';
        }
     }
@@ -416,7 +459,18 @@ const DocEditor = () => {
     }
   };
 
-  const exportToPDF = () => showError('Fonctionnalité PDF en cours de développement');
+  const insertPageBreak = () => {
+    if (editor) {
+      // @ts-ignore
+      editor.commands.setPageBreak();
+    }
+  };
+
+  const exportToPDF = () => {
+    // Une version simple d'impression qui utilise la feuille de style du navigateur
+    window.print();
+  };
+  
   const shareDocument = () => showError('Fonctionnalité de partage en cours de développement');
 
   const getIconTextColor = (bgColor: string) => {
@@ -493,7 +547,7 @@ const DocEditor = () => {
                 <Star className={`h-5 w-5 ${document?.is_starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
               </Button>
               <Button variant="ghost" size="icon" onClick={shareDocument}><Users className="h-5 w-5" /></Button>
-              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex"><Download className="mr-2 h-4 w-4" /> PDF</Button>
+              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex"><Download className="mr-2 h-4 w-4" /> PDF / Print</Button>
               <Button onClick={shareDocument} className="bg-gray-700 hover:bg-gray-800 hidden sm:flex"><Share2 className="mr-2 h-4 w-4" /> Partager</Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-5 w-5" /></Button></DropdownMenuTrigger>
@@ -513,20 +567,20 @@ const DocEditor = () => {
                 {/* Mode d'affichage */}
                 <DropdownMenu>
                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="w-[120px] justify-between font-normal px-2 text-xs">
+                      <Button variant="ghost" size="sm" className="w-[130px] justify-between font-normal px-2 text-xs">
                           {viewMode === 'pageless' ? (
-                              <><File className="h-3 w-3 mr-2" /> Continu</>
+                              <><File className="h-3 w-3 mr-2" /> Page Continue</>
                           ) : (
-                              <><FileJson className="h-3 w-3 mr-2" /> Pages A4</>
+                              <><FileJson className="h-3 w-3 mr-2" /> Guides A4</>
                           )}
                       </Button>
                    </DropdownMenuTrigger>
                    <DropdownMenuContent>
                       <DropdownMenuItem onClick={() => setViewMode('pageless')}>
-                          <File className="mr-2 h-4 w-4" /> Page Continue
+                          <File className="mr-2 h-4 w-4" /> Page Continue (Web)
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setViewMode('paged')}>
-                          <FileJson className="mr-2 h-4 w-4" /> Pages Séparées
+                          <FileJson className="mr-2 h-4 w-4" /> Guides d'impression A4
                       </DropdownMenuItem>
                    </DropdownMenuContent>
                 </DropdownMenu>
@@ -601,6 +655,13 @@ const DocEditor = () => {
                 <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'left' })} onPressedChange={() => editor?.chain().focus().setTextAlign('left').run()} className="data-[state=on]:bg-gray-100"><AlignLeft className="h-4 w-4" /></Toggle>
                 <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'center' })} onPressedChange={() => editor?.chain().focus().setTextAlign('center').run()} className="data-[state=on]:bg-gray-100"><AlignCenter className="h-4 w-4" /></Toggle>
                 <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'right' })} onPressedChange={() => editor?.chain().focus().setTextAlign('right').run()} className="data-[state=on]:bg-gray-100"><AlignRight className="h-4 w-4" /></Toggle>
+                
+                <div className="h-6 w-px bg-gray-200 mx-1" />
+
+                {/* Saut de page */}
+                <Button variant="ghost" size="sm" onClick={insertPageBreak} title="Insérer un saut de page" className="px-2">
+                    <Scissors className="h-4 w-4 text-gray-500" />
+                </Button>
             </div>
         </div>
       </header>

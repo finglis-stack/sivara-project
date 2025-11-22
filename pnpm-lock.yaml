@@ -104,6 +104,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.56.2
         version: 5.74.4(react@18.3.1)
+      '@tiptap/core':
+        specifier: ^3.11.0
+        version: 3.11.0(@tiptap/pm@3.11.0)
       '@tiptap/extension-font-family':
         specifier: ^3.11.0
         version: 3.11.0(@tiptap/extension-text-style@3.11.0(@tiptap/core@3.11.0(@tiptap/pm@3.11.0)))
