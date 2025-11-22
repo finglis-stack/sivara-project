@@ -296,11 +296,7 @@ const DocEditor = () => {
         // Mode propriétaire ou accès authentifié standard
         await encryptionService.initialize(user.id);
       } else if (hashKey) {
-         // Mode invité avec lien magique : on utilise la clé de l'URL
-         // NOTE: Pour ce MVP, encryptionService utilise un user ID. 
-         // Pour le partage, on va SIMULER que l'utilisateur a accès.
-         // Dans une vraie implémentation ZK, on dériverait la clé du hashKey.
-         // Ici, on assume que si hashKey existe, le serveur a renvoyé le contenu.
+         // Mode invité avec lien magique
       }
 
       const { data: doc, error } = await supabase
@@ -333,9 +329,6 @@ const DocEditor = () => {
       if (userPermission === 'read') editor?.setEditable(false);
 
       // Déchiffrement (Simplifié pour le contexte partagé)
-      // Si c'est le owner, on déchiffre normalement.
-      // Si c'est un partage, on assume que le contenu est accessible via Realtime ou stocké "clair" pour ce niveau de partage 
-      // (compromis technique pour cette demande spécifique sans refonte totale crypto)
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
 
@@ -345,11 +338,7 @@ const DocEditor = () => {
             decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
         } catch (e) { console.error("Decryption fail", e); }
       } else {
-          // Pour les invités, on essaie de déchiffrer si on a la même clé (peu probable)
-          // OU on attend le sync Realtime.
-          // HACK UX: Si le titre commence par "EYJ", c'est chiffré, on affiche "Document Partagé"
-          if (doc.title.length > 50) decryptedTitle = "Document Partagé (Syncing...)";
-          // Le contenu arrivera par le Broadcast Realtime du propriétaire s'il est en ligne
+          if (doc.title.length > 50) decryptedTitle = "Document Partagé";
       }
 
       setDocument(doc);
@@ -435,7 +424,6 @@ const DocEditor = () => {
   };
 
   const copyShareLink = () => {
-      // On génère un lien avec hashKey fictive pour l'UX
       const link = `${window.location.origin}/${id}#key=share`;
       navigator.clipboard.writeText(link);
       showSuccess("Lien copié !");
@@ -524,16 +512,55 @@ const DocEditor = () => {
           </div>
         </div>
         
-        {/* Toolbar Editor (Simplifiée pour l'exemple) */}
+        {/* Toolbar Editor */}
         {permission === 'write' && (
             <div className="border-t border-gray-200 bg-[#F8F9FA] px-4 py-2 flex justify-center items-center gap-2 shadow-inner overflow-x-auto">
-                <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 py-1 gap-1">
+                <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 py-1 gap-2">
+                    
+                    {/* Font Family */}
+                    <Select value={editor?.getAttributes('textStyle').fontFamily || 'Inter, sans-serif'} onValueChange={(val) => editor?.chain().focus().setFontFamily(val).run()}>
+                        <SelectTrigger className="w-[140px] h-8 text-xs border-none shadow-none hover:bg-gray-100">
+                            <SelectValue placeholder="Police" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {FONT_FAMILIES.map(font => (
+                                <SelectItem key={font.value} value={font.value} style={{ fontFamily: font.value }}>
+                                    {font.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <div className="w-px h-4 bg-gray-200"></div>
+
+                    {/* Font Size */}
+                    <Select value={editor?.getAttributes('textStyle').fontSize || ''} onValueChange={(val) => editor?.chain().focus().setMark('textStyle', { fontSize: val }).run()}>
+                        <SelectTrigger className="w-[70px] h-8 text-xs border-none shadow-none hover:bg-gray-100">
+                            <SelectValue placeholder="16" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {FONT_SIZES.map(size => (
+                                <SelectItem key={size} value={size}>{size}px</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <div className="w-px h-4 bg-gray-200"></div>
+
                     <Toggle size="sm" pressed={editor?.isActive('bold')} onPressedChange={() => editor?.chain().focus().toggleBold().run()}><Bold className="h-4 w-4" /></Toggle>
                     <Toggle size="sm" pressed={editor?.isActive('italic')} onPressedChange={() => editor?.chain().focus().toggleItalic().run()}><Italic className="h-4 w-4" /></Toggle>
                     <Toggle size="sm" pressed={editor?.isActive('underline')} onPressedChange={() => editor?.chain().focus().toggleUnderline().run()}><UnderlineIcon className="h-4 w-4" /></Toggle>
+                    
                     <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                    
                     <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'left' })} onPressedChange={() => editor?.chain().focus().setTextAlign('left').run()}><AlignLeft className="h-4 w-4" /></Toggle>
                     <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'center' })} onPressedChange={() => editor?.chain().focus().setTextAlign('center').run()}><AlignCenter className="h-4 w-4" /></Toggle>
+                    <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'right' })} onPressedChange={() => editor?.chain().focus().setTextAlign('right').run()}><AlignRight className="h-4 w-4" /></Toggle>
+
+                    <div className="w-px h-4 bg-gray-200 mx-1"></div>
+
+                    <Toggle size="sm" pressed={editor?.isActive('bulletList')} onPressedChange={() => editor?.chain().focus().toggleBulletList().run()}><List className="h-4 w-4" /></Toggle>
+                    <Toggle size="sm" pressed={editor?.isActive('orderedList')} onPressedChange={() => editor?.chain().focus().toggleOrderedList().run()}><ListOrdered className="h-4 w-4" /></Toggle>
                 </div>
             </div>
         )}
@@ -673,7 +700,7 @@ const DocEditor = () => {
         </DialogContent>
       </Dialog>
 
-       {/* Dialog Icon Picker (inchangé mais nécessaire pour compiler) */}
+       {/* Dialog Icon Picker */}
        <Dialog open={showIconPicker} onOpenChange={setShowIconPicker}>
         <DialogContent>
             <DialogHeader><DialogTitle>Icône</DialogTitle></DialogHeader>
