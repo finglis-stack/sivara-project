@@ -93,60 +93,7 @@ const Docs = () => {
   const [filter, setFilter] = useState<'all' | 'recent' | 'starred'>('all');
   const [profile, setProfile] = useState<Profile | null>(null);
 
-  // --- GESTION AUTH / LANDING ---
-  
-  if (loading) {
-    return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-white">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <DocsLanding />;
-  }
-
-  // --- LOGIQUE DASHBOARD (Connecté) ---
-
-  useEffect(() => {
-    const initializeAndFetch = async () => {
-      await initializeEncryption();
-      await fetchDocuments();
-    };
-
-    initializeAndFetch();
-    fetchProfile();
-
-    const channel = supabase
-      .channel('documents_changes')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'documents',
-        filter: `owner_id=eq.${user.id}`
-      }, () => {
-        fetchDocuments();
-      })
-      .subscribe();
-
-    const profileChannel = supabase
-      .channel('profile_changes')
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'profiles',
-        filter: `id=eq.${user.id}`,
-      }, (payload) => {
-        setProfile(payload.new as Profile);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      supabase.removeChannel(profileChannel);
-    };
-  }, [user]);
+  // --- DEFINITION DES FONCTIONS (Avant les effets) ---
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -306,6 +253,51 @@ const Docs = () => {
     }
   };
 
+  // --- EFFETS (Doivent être exécutés avant tout return) ---
+
+  useEffect(() => {
+    if (!user) return; // Ne rien faire si pas connecté, mais le hook est quand même appelé
+
+    const initializeAndFetch = async () => {
+      await initializeEncryption();
+      await fetchDocuments();
+    };
+
+    initializeAndFetch();
+    fetchProfile();
+
+    const channel = supabase
+      .channel('documents_changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'documents',
+        filter: `owner_id=eq.${user.id}`
+      }, () => {
+        fetchDocuments();
+      })
+      .subscribe();
+
+    const profileChannel = supabase
+      .channel('profile_changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${user.id}`,
+      }, (payload) => {
+        setProfile(payload.new as Profile);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(profileChannel);
+    };
+  }, [user]); // Dépendance correcte
+
+  // --- HELPERS ---
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -357,6 +349,20 @@ const Docs = () => {
     .filter(doc => 
       doc.decryptedTitle.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+  // --- AFFICHAGE CONDITIONNEL (À la fin) ---
+
+  if (loading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <DocsLanding />;
+  }
 
   if (isLoadingDocs) {
     return (
