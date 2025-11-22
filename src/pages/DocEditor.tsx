@@ -90,6 +90,16 @@ interface Collaborator {
   name: string;
 }
 
+interface Presence {
+  user_id: string;
+  email: string;
+  color: string;
+  avatar_url?: string | null;
+  x: number;
+  y: number;
+  presence_ref: string;
+}
+
 // --- CONSTANTS ---
 const CURSOR_COLORS = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899'];
 const FONT_FAMILIES = [
@@ -158,7 +168,9 @@ const DocEditor = () => {
   const isUpdatingFromRemoteRef = useRef(false);
   const channelRef = useRef<any>(null);
   const editorRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef(''); // Pour le cleanup
+  const contentRef = useRef(''); 
+  // Stable color for this session
+  const myColorRef = useRef(CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)]);
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
@@ -229,8 +241,19 @@ const DocEditor = () => {
     };
   }, [id, user, editor, authLoading]);
 
+  // --- PROFILE LOADING ---
+  useEffect(() => {
+    if (user) {
+        supabase.from('profiles').select('avatar_url').eq('id', user.id).single()
+            .then(({ data }) => {
+                if (data) setUserProfile(data);
+            });
+    }
+  }, [user]);
+
   // --- REALTIME & COLLAB ---
   useEffect(() => {
+      // On lance le realtime si document chargé ET utilisateur connecté
       if (id && user && !isLoading && !decryptionError) {
           setupRealtime();
       }
@@ -239,29 +262,28 @@ const DocEditor = () => {
   const setupRealtime = () => {
     if (!id || !user) return;
 
-    // Si déjà connecté, on met juste à jour le track state
+    const presenceData = {
+        user_id: user.id,
+        email: user.email,
+        color: myColorRef.current,
+        avatar_url: userProfile?.avatar_url,
+        x: 0,
+        y: 0
+    };
+
+    // Si le channel existe déjà, on met à jour notre présence (ex: avatar chargé tardivement)
     if (channelRef.current) {
-        const myColor = CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)];
-        channelRef.current.track({
-            user_id: user.id,
-            email: user.email,
-            color: myColor,
-            avatar_url: userProfile?.avatar_url,
-            x: 0,
-            y: 0
-        });
+        channelRef.current.track(presenceData);
         return;
     }
 
-    const myColor = CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)];
-    
-    channelRef.current = supabase.channel(`doc:${id}`)
+    // Sinon, on initialise
+    const channel = supabase.channel(`doc:${id}`)
       .on('presence', { event: 'sync' }, () => {
-        const newState = channelRef.current.presenceState();
+        const newState = channel.presenceState();
         const users: Collaborator[] = [];
         for (const key in newState) {
-          // @ts-ignore
-          newState[key].forEach(presence => {
+          (newState[key] as unknown as Presence[]).forEach(presence => {
             if (presence.user_id !== user.id) {
               users.push({
                 id: presence.user_id,
@@ -288,16 +310,11 @@ const DocEditor = () => {
       })
       .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
-          await channelRef.current.track({
-            user_id: user.id,
-            email: user.email,
-            color: myColor,
-            avatar_url: userProfile?.avatar_url,
-            x: 0,
-            y: 0
-          });
+          await channel.track(presenceData);
         }
       });
+    
+    channelRef.current = channel;
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -306,11 +323,12 @@ const DocEditor = () => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top + editorRef.current.scrollTop;
     
+    // Throttling basic: only update randomly to save bandwidth, or use lodash throttle in production
     if (Math.random() > 0.8) { 
         channelRef.current.track({
             user_id: user.id,
             email: user.email,
-            color: CURSOR_COLORS[0], 
+            color: myColorRef.current,
             avatar_url: userProfile?.avatar_url,
             x, y
         });
