@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
 import { showSuccess, showError } from '@/utils/toast';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,10 +21,34 @@ interface Profile {
 }
 
 const UserMenu = () => {
-  const navigate = useNavigate();
   const { user, signOut: authSignOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
+
+  // Helpers pour générer les liens corrects (Prod vs Localhost)
+  const getAccountUrl = (path: string) => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    if (isLocal) {
+      return `/?app=account&path=${encodeURIComponent(path)}`; // Simulation locale
+    }
+    return `https://account.sivara.ca${path}`;
+  };
+
+  // En localhost, pour aller sur "login", on doit simuler le changement d'app
+  const handleLoginClick = () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const currentUrl = window.location.href; // URL de retour
+
+    if (isLocal) {
+      // On ajoute le paramètre de retour
+      window.location.href = `/?app=account&path=/login&returnTo=${encodeURIComponent(currentUrl)}`;
+    } else {
+      window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`;
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -67,12 +90,10 @@ const UserMenu = () => {
     
     try {
       setIsSigningOut(true);
-      console.log('Starting sign out...');
-      
       await authSignOut();
-      
       showSuccess('Déconnexion réussie');
-      navigate('/');
+      // Rechargement pour que le cookie soit bien nettoyé partout
+      window.location.reload();
     } catch (error: any) {
       console.error('Sign out error:', error);
       showError('Erreur lors de la déconnexion');
@@ -84,7 +105,7 @@ const UserMenu = () => {
   if (!user) {
     return (
       <Button
-        onClick={() => navigate('/login')}
+        onClick={handleLoginClick}
         className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-800 transition-all duration-300 text-white"
       >
         <User size={18} />
@@ -134,11 +155,16 @@ const UserMenu = () => {
         <DropdownMenuItem 
           onSelect={(e) => {
             e.preventDefault();
-            navigate('/profile');
+            // Redirection vers le sous-domaine account
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                 window.location.href = `/?app=account#/profile`; // Hack pour localhost, mais idéalement on gère le routing interne
+            } else {
+                window.location.href = 'https://account.sivara.ca/profile';
+            }
           }}
         >
           <UserCircle className="mr-2 h-4 w-4" />
-          <span>Mon profil</span>
+          <span>Mon profil (Sivara Account)</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem 
