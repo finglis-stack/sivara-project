@@ -6,7 +6,7 @@ import { encryptionService } from '@/lib/encryption';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
-import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, NodeViewWrapper, Node, mergeAttributes } from '@tiptap/react';
+import { useEditor, EditorContent, Extension } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -20,7 +20,7 @@ import {
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
-  File, FileJson, Scissors
+  Minus, Plus
 } from 'lucide-react';
 
 import {
@@ -30,9 +30,6 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Toggle } from '@/components/ui/toggle';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 
 // --- EXTENSION TAILLE DE POLICE ---
 const FontSize = Extension.create({
@@ -65,45 +62,6 @@ const FontSize = Extension.create({
   },
 });
 
-// --- EXTENSION SAUT DE PAGE (Page Break) ---
-const PageBreakComponent = () => {
-  return (
-    <NodeViewWrapper className="page-break-node py-4 select-none">
-      <div className="relative w-full h-8 flex items-center justify-center group">
-        <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t-2 border-dashed border-gray-300"></div>
-        </div>
-        <div className="relative bg-gray-100 px-3 py-1 rounded-full text-xs font-medium text-gray-500 flex items-center gap-2 border border-gray-200">
-            <Scissors className="h-3 w-3" />
-            Saut de page
-        </div>
-      </div>
-    </NodeViewWrapper>
-  );
-};
-
-const PageBreak = Node.create({
-  name: 'pageBreak',
-  group: 'block',
-  atom: true,
-  parseHTML() {
-    return [{ tag: 'div[data-type="page-break"]' }]
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'page-break' })]
-  },
-  addNodeView() {
-    return ReactNodeViewRenderer(PageBreakComponent)
-  },
-  addCommands() {
-    return {
-      setPageBreak: () => ({ chain }) => {
-        return chain().insertContent({ type: this.name }).run()
-      },
-    }
-  },
-});
-
 interface Document {
   id: string;
   title: string;
@@ -116,17 +74,18 @@ interface Document {
   color?: string;
 }
 
+// Correction des valeurs de police pour garantir la compatibilité CSS
 const FONT_FAMILIES = [
-  { name: 'Inter', value: 'Inter', type: 'sans-serif' },
-  { name: 'Serif (Par défaut)', value: '', type: 'serif' },
-  { name: 'Roboto', value: 'Roboto', type: 'sans-serif' },
-  { name: 'Open Sans', value: '"Open Sans"', type: 'sans-serif' },
-  { name: 'Lato', value: 'Lato', type: 'sans-serif' },
-  { name: 'Montserrat', value: 'Montserrat', type: 'sans-serif' },
-  { name: 'Playfair Display', value: '"Playfair Display"', type: 'serif' },
-  { name: 'Merriweather', value: 'Merriweather', type: 'serif' },
-  { name: 'Lora', value: 'Lora', type: 'serif' },
-  { name: 'Courier Prime', value: '"Courier Prime"', type: 'monospace' },
+  { name: 'Inter (Sans)', value: 'Inter, sans-serif' },
+  { name: 'Roboto', value: 'Roboto, sans-serif' },
+  { name: 'Open Sans', value: '"Open Sans", sans-serif' },
+  { name: 'Lato', value: 'Lato, sans-serif' },
+  { name: 'Montserrat', value: 'Montserrat, sans-serif' },
+  { name: 'Serif (Par défaut)', value: 'serif' },
+  { name: 'Playfair Display', value: '"Playfair Display", serif' },
+  { name: 'Merriweather', value: 'Merriweather, serif' },
+  { name: 'Lora', value: 'Lora, serif' },
+  { name: 'Courier Prime', value: '"Courier Prime", monospace' },
 ];
 
 const FONT_SIZES = [
@@ -184,7 +143,6 @@ const DocEditor = () => {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [selectedIcon, setSelectedIcon] = useState('FileText');
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
-  const [viewMode, setViewMode] = useState<'pageless' | 'paged'>('pageless');
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const isUpdatingFromRemoteRef = useRef(false);
 
@@ -192,6 +150,7 @@ const DocEditor = () => {
     titleRef.current = title;
   }, [title]);
 
+  // Chargement des polices Google Fonts
   useEffect(() => {
     const linkId = 'sivara-google-fonts';
     if (!window.document.getElementById(linkId)) {
@@ -203,28 +162,6 @@ const DocEditor = () => {
     }
   }, []);
 
-  // MODE "CONTINU": Simple feuille blanche infinie
-  const pagelessStyle = `
-    min-height: 1123px;
-    background-color: white;
-    padding: 2.5cm;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  `;
-
-  // MODE "MISE EN PAGE" (Visual Guide):
-  // Au lieu de "trous" gris, on affiche une ligne pointillée subtile tous les 1123px (hauteur A4).
-  // Cela indique la fin de la page sans empêcher d'écrire par dessus si besoin.
-  // Pour de vrais sauts, l'utilisateur utilisera le bouton "Saut de page".
-  const pagedStyle = `
-    min-height: 1123px;
-    background-color: white;
-    padding: 2.5cm;
-    /* Ligne pointillée bleue pâle tous les 1123px pour marquer la limite de page A4 */
-    background-image: linear-gradient(to bottom, transparent 1122px, #E5E7EB 1122px, #E5E7EB 1123px);
-    background-size: 100% 1123px;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  `;
-
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -232,7 +169,6 @@ const DocEditor = () => {
       TextStyle,
       FontFamily,
       FontSize,
-      PageBreak, // Ajout de notre extension personnalisée
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
@@ -243,8 +179,7 @@ const DocEditor = () => {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-lg max-w-none outline-none focus:outline-none transition-all duration-300',
-        style: viewMode === 'pageless' ? pagelessStyle : pagedStyle
+        class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[90vh] bg-white py-12 px-8 sm:px-12 md:px-16 shadow-sm mb-8 rounded-lg',
       },
     },
     onUpdate: ({ editor }) => {
@@ -253,21 +188,6 @@ const DocEditor = () => {
       }
     },
   });
-
-  // Mise à jour dynamique du style de fond
-  useEffect(() => {
-    if (editor && editor.view) {
-       const dom = editor.view.dom;
-       if (viewMode === 'pageless') {
-         dom.style.backgroundImage = 'none';
-         dom.style.backgroundSize = 'auto';
-       } else {
-         // Repère visuel de fin de page
-         dom.style.backgroundImage = 'linear-gradient(to bottom, transparent 1122px, #9CA3AF 1122px, #9CA3AF 1123px)';
-         dom.style.backgroundSize = '100% 1123px';
-       }
-    }
-  }, [viewMode, editor]);
 
   useEffect(() => {
     if (!user || !id) return;
@@ -459,18 +379,7 @@ const DocEditor = () => {
     }
   };
 
-  const insertPageBreak = () => {
-    if (editor) {
-      // @ts-ignore
-      editor.commands.setPageBreak();
-    }
-  };
-
-  const exportToPDF = () => {
-    // Une version simple d'impression qui utilise la feuille de style du navigateur
-    window.print();
-  };
-  
+  const exportToPDF = () => showError('Fonctionnalité PDF en cours de développement');
   const shareDocument = () => showError('Fonctionnalité de partage en cours de développement');
 
   const getIconTextColor = (bgColor: string) => {
@@ -547,7 +456,7 @@ const DocEditor = () => {
                 <Star className={`h-5 w-5 ${document?.is_starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
               </Button>
               <Button variant="ghost" size="icon" onClick={shareDocument}><Users className="h-5 w-5" /></Button>
-              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex"><Download className="mr-2 h-4 w-4" /> PDF / Print</Button>
+              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex"><Download className="mr-2 h-4 w-4" /> PDF</Button>
               <Button onClick={shareDocument} className="bg-gray-700 hover:bg-gray-800 hidden sm:flex"><Share2 className="mr-2 h-4 w-4" /> Partager</Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-5 w-5" /></Button></DropdownMenuTrigger>
@@ -564,35 +473,12 @@ const DocEditor = () => {
         {/* Toolbar */}
         <div className="border-t border-gray-200 bg-[#F8F9FA] px-4 py-2 flex justify-center items-center gap-1 flex-wrap shadow-inner">
             <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 py-1 gap-1">
-                {/* Mode d'affichage */}
-                <DropdownMenu>
-                   <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="w-[130px] justify-between font-normal px-2 text-xs">
-                          {viewMode === 'pageless' ? (
-                              <><File className="h-3 w-3 mr-2" /> Page Continue</>
-                          ) : (
-                              <><FileJson className="h-3 w-3 mr-2" /> Guides A4</>
-                          )}
-                      </Button>
-                   </DropdownMenuTrigger>
-                   <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => setViewMode('pageless')}>
-                          <File className="mr-2 h-4 w-4" /> Page Continue (Web)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setViewMode('paged')}>
-                          <FileJson className="mr-2 h-4 w-4" /> Guides d'impression A4
-                      </DropdownMenuItem>
-                   </DropdownMenuContent>
-                </DropdownMenu>
-
-                <div className="h-6 w-px bg-gray-200 mx-1" />
-
                 {/* Sélecteur de Police */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="w-[130px] justify-between font-normal px-2">
+                    <Button variant="ghost" size="sm" className="w-[150px] justify-between font-normal px-2">
                       <span className="truncate">
-                        {FONT_FAMILIES.find(f => editor?.isActive('textStyle', { fontFamily: f.value }))?.name || 'Police'}
+                        {FONT_FAMILIES.find(f => editor?.isActive('textStyle', { fontFamily: f.value }))?.name || 'Inter (Sans)'}
                       </span>
                       <Type className="h-3 w-3 opacity-50 ml-2" />
                     </Button>
@@ -655,13 +541,6 @@ const DocEditor = () => {
                 <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'left' })} onPressedChange={() => editor?.chain().focus().setTextAlign('left').run()} className="data-[state=on]:bg-gray-100"><AlignLeft className="h-4 w-4" /></Toggle>
                 <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'center' })} onPressedChange={() => editor?.chain().focus().setTextAlign('center').run()} className="data-[state=on]:bg-gray-100"><AlignCenter className="h-4 w-4" /></Toggle>
                 <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'right' })} onPressedChange={() => editor?.chain().focus().setTextAlign('right').run()} className="data-[state=on]:bg-gray-100"><AlignRight className="h-4 w-4" /></Toggle>
-                
-                <div className="h-6 w-px bg-gray-200 mx-1" />
-
-                {/* Saut de page */}
-                <Button variant="ghost" size="sm" onClick={insertPageBreak} title="Insérer un saut de page" className="px-2">
-                    <Scissors className="h-4 w-4 text-gray-500" />
-                </Button>
             </div>
         </div>
       </header>
