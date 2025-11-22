@@ -153,6 +153,7 @@ const DocEditor = () => {
   const isUpdatingFromRemoteRef = useRef(false);
   const channelRef = useRef<any>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef(''); // Pour le cleanup
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
@@ -170,18 +171,21 @@ const DocEditor = () => {
       },
     },
     onUpdate: ({ editor }) => {
+      const html = editor.getHTML();
+      contentRef.current = html;
+      
       if (!isUpdatingFromRemoteRef.current) {
         // Broadcast changes
         if (channelRef.current) {
           channelRef.current.send({
             type: 'broadcast',
             event: 'content_update',
-            payload: { content: editor.getHTML(), sender: user?.id }
+            payload: { content: html, sender: user?.id }
           });
         }
-        // Save DB
+        // Save DB - Temps réel
         if (permission === 'write') {
-          handleContentChange(editor.getHTML());
+          handleContentChange(html);
         }
       }
     },
@@ -211,8 +215,9 @@ const DocEditor = () => {
     init();
 
     return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      // Cleanup: Sauvegarde finale si nécessaire
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
   }, [id, user, editor]);
 
@@ -246,10 +251,8 @@ const DocEditor = () => {
       .on('broadcast', { event: 'content_update' }, ({ payload }) => {
         if (payload.sender !== user.id && editor) {
            isUpdatingFromRemoteRef.current = true;
-           // Save cursor pos
            const { from, to } = editor.state.selection;
            editor.commands.setContent(payload.content);
-           // Restore cursor (best effort)
            editor.commands.setTextSelection({ from, to });
            setTimeout(() => isUpdatingFromRemoteRef.current = false, 50);
         }
@@ -267,19 +270,17 @@ const DocEditor = () => {
       });
   };
 
-  // Mouse Tracking for cursors
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!channelRef.current || !editorRef.current) return;
     const rect = editorRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top + editorRef.current.scrollTop;
     
-    // Throttle updates
     if (Math.random() > 0.8) { 
         channelRef.current.track({
             user_id: user?.id,
             email: user?.email,
-            color: CURSOR_COLORS[0], // Just update coordinates
+            color: CURSOR_COLORS[0], 
             x, y
         });
     }
@@ -288,17 +289,7 @@ const DocEditor = () => {
   // --- DATA LOADING & CRYPTO ---
   const fetchDocumentAndInitCrypto = async () => {
     try {
-      // A. Check si une clé est dans l'URL (Partage Zero-Knowledge)
-      const hashKey = window.location.hash.replace('#key=', '');
-      
-      // B. Initialisation Crypto
-      if (user && !hashKey) {
-        // Mode propriétaire ou accès authentifié standard
-        await encryptionService.initialize(user.id);
-      } else if (hashKey) {
-         // Mode invité avec lien magique
-      }
-
+      // 1. Récupérer le document D'ABORD pour avoir le owner_id
       const { data: doc, error } = await supabase
         .from('documents')
         .select('*')
@@ -306,6 +297,15 @@ const DocEditor = () => {
         .single();
 
       if (error) throw error;
+
+      // 2. Initialisation Crypto avec l'ID du PROPRIÉTAIRE
+      // Cela permet à tous les collaborateurs d'utiliser la même clé dérivée
+      const hashKey = window.location.hash.replace('#key=', '');
+      
+      if (!hashKey) {
+        // On utilise l'ID du owner, pas du user courant
+        await encryptionService.initialize(doc.owner_id);
+      }
 
       // Détermination des droits
       const isDocOwner = user?.id === doc.owner_id;
@@ -316,7 +316,6 @@ const DocEditor = () => {
       else if (doc.visibility === 'public') {
           userPermission = doc.public_permission;
       } else {
-          // Check limited access
           const { data: access } = await supabase
              .from('document_access')
              .select('permission')
@@ -328,26 +327,28 @@ const DocEditor = () => {
       setPermission(userPermission);
       if (userPermission === 'read') editor?.setEditable(false);
 
-      // Déchiffrement (Simplifié pour le contexte partagé)
+      // Déchiffrement
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
 
-      if (isDocOwner) {
-        try {
-            decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
-            decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
-        } catch (e) { console.error("Decryption fail", e); }
-      } else {
-          if (doc.title.length > 50) decryptedTitle = "Document Partagé";
+      try {
+          // Tout le monde essaie de déchiffrer avec la clé du owner
+          decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
+          decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
+      } catch (e) { 
+          console.error("Decryption fail", e);
+          if (!isDocOwner) decryptedTitle = "Document chiffré (Accès limité)";
       }
 
       setDocument(doc);
       setTitle(decryptedTitle);
+      contentRef.current = decryptedContent; // Init ref
       setSelectedIcon(doc.icon || 'FileText');
       setSelectedColor(doc.color || '#3B82F6');
       editor?.commands.setContent(decryptedContent);
       
-      if (isDocOwner) fetchAccessList();
+      // Charger la liste d'accès pour tout le monde (pour voir qui est là)
+      fetchAccessList();
 
     } catch (error) {
       console.error('Load error:', error);
@@ -365,7 +366,8 @@ const DocEditor = () => {
 
   // --- ACTIONS ---
   const handleSave = async (key: string, value: string) => {
-      if (!id || !isOwner) return; // Seul le owner sauvegarde en DB chiffrée pour l'instant
+      // Autoriser si on a la permission write (Owner ou Collaborateur)
+      if (!id || permission !== 'write') return;
       
       try {
           setIsSaving(true);
@@ -386,7 +388,8 @@ const DocEditor = () => {
 
   const handleContentChange = (content: string) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => handleSave('content', content), 2000);
+    // Délai réduit à 500ms pour sauvegarde quasi-instantanée
+    saveTimeoutRef.current = setTimeout(() => handleSave('content', content), 500);
   };
 
   // --- SHARING LOGIC ---
