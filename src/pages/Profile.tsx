@@ -92,6 +92,28 @@ const Profile = () => {
     fetchProfile();
   }, [user, navigate]);
 
+  const handleReturn = () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    if (isLocal) {
+      window.location.href = '/?app=www';
+    } else {
+      window.location.href = 'https://sivara.ca';
+    }
+  };
+
+  const navigateToApp = (app: string) => {
+     const hostname = window.location.hostname;
+     const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+
+     if (app === 'docs') {
+         if (isLocal) window.location.href = '/?app=docs';
+         else window.location.href = 'https://docs.sivara.ca';
+     }
+     // Ajouter d'autres apps ici
+  };
+
   const handleSave = async () => {
     if (!user) return;
 
@@ -291,11 +313,11 @@ const Profile = () => {
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
-                onClick={() => navigate('/')}
+                onClick={handleReturn}
                 className="text-gray-600 hover:text-gray-900"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Retour
+                Sivara
               </Button>
               <div className="h-6 w-px bg-gray-200"></div>
               <h1 className="text-2xl font-light text-gray-900">Mon Profil</h1>
@@ -387,7 +409,7 @@ const Profile = () => {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {/* Carte Docs */}
             <button 
-              onClick={() => navigate('/docs')}
+              onClick={() => navigateToApp('docs')}
               className="group relative bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left"
             >
               <div className="flex flex-col items-center gap-2">

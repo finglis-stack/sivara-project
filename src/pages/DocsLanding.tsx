@@ -1,9 +1,22 @@
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Feather, Layout, Smartphone } from 'lucide-react';
 
 const DocsLanding = () => {
-  const navigate = useNavigate();
+  
+  const navigateToAuth = (path: string) => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    // URL où l'utilisateur sera renvoyé après connexion
+    const returnUrl = isLocal ? 'http://localhost:8080/?app=docs' : 'https://docs.sivara.ca';
+    
+    if (isLocal) {
+      // Simulation localhost
+      window.location.href = `/?app=account&path=${path}&returnTo=${encodeURIComponent(returnUrl)}`;
+    } else {
+      // Production SSO
+      window.location.href = `https://account.sivara.ca${path}?returnTo=${encodeURIComponent(returnUrl)}`;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white font-sans selection:bg-purple-500 selection:text-white">
@@ -20,13 +33,13 @@ const DocsLanding = () => {
           <div className="flex items-center gap-4 sm:gap-6">
             <Button 
               variant="ghost" 
-              onClick={() => navigate('/login?returnTo=/docs')}
+              onClick={() => navigateToAuth('/login')}
               className="text-white hover:text-white hover:bg-white/20 font-medium tracking-wide rounded-full px-6"
             >
               Connexion
             </Button>
             <Button 
-              onClick={() => navigate('/onboarding?returnTo=/docs')}
+              onClick={() => navigateToAuth('/onboarding')}
               className="bg-white text-black hover:bg-gray-100 font-semibold rounded-full px-8 py-6 transition-all hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.3)] border-2 border-transparent hover:border-white/50"
             >
               Commencer
@@ -69,7 +82,7 @@ const DocsLanding = () => {
 
             <div className="pt-8 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
               <Button 
-                onClick={() => navigate('/onboarding?returnTo=/docs')}
+                onClick={() => navigateToAuth('/onboarding')}
                 className="h-16 px-12 bg-white text-black hover:bg-gray-50 text-lg rounded-full shadow-2xl transition-all duration-300 hover:-translate-y-1 font-bold group w-full sm:w-auto"
               >
                 Créer mon espace
@@ -136,7 +149,7 @@ const DocsLanding = () => {
             Prêt à organiser vos pensées ?
           </h2>
           <Button 
-            onClick={() => navigate('/onboarding?returnTo=/docs')}
+            onClick={() => navigateToAuth('/onboarding')}
             className="h-14 px-10 bg-black hover:bg-gray-800 text-white text-lg rounded-full shadow-lg transition-all hover:scale-105"
           >
             Commencer gratuitement
