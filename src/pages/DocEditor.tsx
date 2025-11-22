@@ -11,13 +11,15 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
+import TextStyle from '@tiptap/extension-text-style';
+import FontFamily from '@tiptap/extension-font-family';
 
 import {
   ArrowLeft, Download, Share2, Users, Loader2, Star, MoreVertical, Trash2, Copy, Shield, Lock,
   FileText, Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
-  AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Quote
+  AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Quote, Type, Check
 } from 'lucide-react';
 
 import {
@@ -40,7 +42,21 @@ interface Document {
   color?: string;
 }
 
-// Bibliothèque d'icônes disponibles
+// --- CONFIGURATION DES POLICES ---
+const FONT_FAMILIES = [
+  { name: 'Inter', value: 'Inter', type: 'sans-serif' },
+  { name: 'Serif (Par défaut)', value: '', type: 'serif' }, // Fallback standard
+  { name: 'Roboto', value: 'Roboto', type: 'sans-serif' },
+  { name: 'Open Sans', value: '"Open Sans"', type: 'sans-serif' },
+  { name: 'Lato', value: 'Lato', type: 'sans-serif' },
+  { name: 'Montserrat', value: 'Montserrat', type: 'sans-serif' },
+  { name: 'Playfair Display', value: '"Playfair Display"', type: 'serif' },
+  { name: 'Merriweather', value: 'Merriweather', type: 'serif' },
+  { name: 'Lora', value: 'Lora', type: 'serif' },
+  { name: 'Courier Prime', value: '"Courier Prime"', type: 'monospace' },
+];
+
+// --- CONFIGURATION DES ICÔNES ---
 const AVAILABLE_ICONS = [
   { name: 'FileText', icon: FileText, label: 'Document' },
   { name: 'Briefcase', icon: Briefcase, label: 'Business' },
@@ -64,7 +80,6 @@ const AVAILABLE_ICONS = [
   { name: 'PieChart', icon: PieChart, label: 'Statistiques' },
 ];
 
-// Palette de couleurs
 const COLOR_PALETTE = [
   { name: 'Bleu', value: '#3B82F6' },
   { name: 'Indigo', value: '#6366F1' },
@@ -88,10 +103,7 @@ const DocEditor = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [title, setTitle] = useState('');
-  
-  // FIX: Utilisation d'une ref pour garantir que l'éditeur accède toujours au titre le plus récent
   const titleRef = useRef(title);
-
   const [encryptionIV, setEncryptionIV] = useState('');
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [selectedIcon, setSelectedIcon] = useState('FileText');
@@ -99,16 +111,29 @@ const DocEditor = () => {
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const isUpdatingFromRemoteRef = useRef(false);
 
-  // Mettre à jour la ref quand le titre change
   useEffect(() => {
     titleRef.current = title;
   }, [title]);
 
-  // Initialisation de l'éditeur Tiptap
+  // --- CHARGEMENT DES GOOGLE FONTS ---
+  useEffect(() => {
+    const linkId = 'sivara-google-fonts';
+    if (!document.getElementById(linkId)) {
+      const link = window.document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      // Chargement de toutes les polices supportées
+      link.href = 'https://fonts.googleapis.com/css2?family=Courier+Prime&family=Inter:wght@300;400;500;600&family=Lato:wght@300;400;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&family=Montserrat:wght@300;400;600&family=Open+Sans:wght@300;400;600&family=Playfair+Display:wght@400;600&family=Roboto:wght@300;400;500&display=swap';
+      window.document.head.appendChild(link);
+    }
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
       Underline,
+      TextStyle,
+      FontFamily,
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
@@ -119,7 +144,21 @@ const DocEditor = () => {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-lg max-w-none outline-none focus:outline-none',
+        // --- MAGIE DU MULTIPAGE CSS ---
+        // On simule des pages A4 via un background gradient qui se répète
+        // 1123px est environ la hauteur d'une page A4 à 96DPI
+        // On alterne blanc (page) et gris (séparateur)
+        class: `
+          prose prose-lg max-w-none outline-none focus:outline-none 
+          min-h-[1123px]
+          bg-white
+          py-[2.5cm] px-[2.5cm]
+        `,
+        style: `
+          background-image: linear-gradient(#ffffff 1080px, #e5e7eb 1080px, #e5e7eb 1123px);
+          background-size: 100% 1123px;
+          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        `
       },
     },
     onUpdate: ({ editor }) => {
@@ -130,12 +169,7 @@ const DocEditor = () => {
   });
 
   useEffect(() => {
-    if (!user || !id) {
-      // Si pas connecté, on redirige. En prod, on devrait rediriger vers account.sivara.ca
-      // Mais ici, ProtectedRoute gère déjà ça normalement.
-      return;
-    }
-
+    if (!user || !id) return;
     initializeEncryption();
     fetchDocument();
 
@@ -224,10 +258,8 @@ const DocEditor = () => {
 
   const saveDocument = async (newTitle: string, newContent: string, newIcon?: string, newColor?: string) => {
     if (!id) return;
-
     try {
       setIsSaving(true);
-
       const { encrypted: encryptedTitle, iv: newIV } = await encryptionService.encrypt(newTitle);
       const { encrypted: encryptedContent } = await encryptionService.encrypt(newContent, newIV);
 
@@ -237,15 +269,10 @@ const DocEditor = () => {
         encryption_iv: newIV,
         updated_at: new Date().toISOString()
       };
-
       if (newIcon !== undefined) updateData.icon = newIcon;
       if (newColor !== undefined) updateData.color = newColor;
 
-      const { error } = await supabase
-        .from('documents')
-        .update(updateData)
-        .eq('id', id);
-
+      const { error } = await supabase.from('documents').update(updateData).eq('id', id);
       if (error) throw error;
       setEncryptionIV(newIV);
     } catch (error: any) {
@@ -268,7 +295,6 @@ const DocEditor = () => {
   const handleContentChange = (newContent: string) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      // FIX: Utilisation de titleRef.current au lieu de title pour avoir la valeur à jour
       saveDocument(titleRef.current, newContent);
       saveTimeoutRef.current = undefined;
     }, 1000);
@@ -278,7 +304,6 @@ const DocEditor = () => {
     setSelectedIcon(icon);
     setSelectedColor(color);
     setShowIconPicker(false);
-    // Utilisation de titleRef ici aussi par sécurité
     await saveDocument(titleRef.current, editor?.getHTML() || '', icon, color);
     showSuccess('Apparence mise à jour');
   };
@@ -333,13 +358,8 @@ const DocEditor = () => {
     }
   };
 
-  const exportToPDF = () => {
-    showError('Fonctionnalité PDF en cours de développement');
-  };
-
-  const shareDocument = () => {
-    showError('Fonctionnalité de partage en cours de développement');
-  };
+  const exportToPDF = () => showError('Fonctionnalité PDF en cours de développement');
+  const shareDocument = () => showError('Fonctionnalité de partage en cours de développement');
 
   const getIconTextColor = (bgColor: string) => {
     const hex = bgColor.replace('#', '');
@@ -366,10 +386,9 @@ const DocEditor = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8F9FA]">
+    <div className="min-h-screen flex flex-col bg-[#F3F4F6]">
       {/* Header (Sticky) */}
-      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
-        {/* Top Bar */}
+      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm print:hidden">
         <div className="px-6 py-3">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
             <div className="flex items-center gap-4 flex-1">
@@ -415,27 +434,11 @@ const DocEditor = () => {
               <Button variant="ghost" size="icon" onClick={toggleStar}>
                 <Star className={`h-5 w-5 ${document?.is_starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
               </Button>
-
-              <Button variant="ghost" size="icon" onClick={shareDocument}>
-                <Users className="h-5 w-5" />
-              </Button>
-
-              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex">
-                <Download className="mr-2 h-4 w-4" />
-                PDF
-              </Button>
-
-              <Button onClick={shareDocument} className="bg-gray-700 hover:bg-gray-800 hidden sm:flex">
-                <Share2 className="mr-2 h-4 w-4" />
-                Partager
-              </Button>
-
+              <Button variant="ghost" size="icon" onClick={shareDocument}><Users className="h-5 w-5" /></Button>
+              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex"><Download className="mr-2 h-4 w-4" /> PDF</Button>
+              <Button onClick={shareDocument} className="bg-gray-700 hover:bg-gray-800 hidden sm:flex"><Share2 className="mr-2 h-4 w-4" /> Partager</Button>
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <MoreVertical className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
+                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-5 w-5" /></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={duplicateDocument}><Copy className="mr-2 h-4 w-4" /> Dupliquer</DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -446,136 +449,72 @@ const DocEditor = () => {
           </div>
         </div>
 
-        {/* Toolbar de l'éditeur (Centrée) */}
+        {/* Toolbar avec Selecteur de Police */}
         <div className="border-t border-gray-200 bg-[#F8F9FA] px-4 py-2 flex justify-center items-center gap-1 flex-wrap shadow-inner">
             <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 py-1 gap-1">
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('heading', { level: 1 })}
-                    onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-                    aria-label="Titre 1"
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <Heading1 className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('heading', { level: 2 })}
-                    onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-                    aria-label="Titre 2"
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <Heading2 className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('heading', { level: 3 })}
-                    onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-                    aria-label="Titre 3"
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <Heading3 className="h-4 w-4" />
-                </Toggle>
+                {/* Sélecteur de Police */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-[140px] justify-between font-normal px-2">
+                      <span className="truncate">
+                        {FONT_FAMILIES.find(f => editor?.isActive('textStyle', { fontFamily: f.value }))?.name || 'Police'}
+                      </span>
+                      <Type className="h-3 w-3 opacity-50 ml-2" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[200px] max-h-[300px] overflow-y-auto">
+                    {FONT_FAMILIES.map((font) => (
+                      <DropdownMenuItem
+                        key={font.name}
+                        onClick={() => editor?.chain().focus().setFontFamily(font.value).run()}
+                        className="flex items-center justify-between"
+                        style={{ fontFamily: font.value || 'inherit' }}
+                      >
+                        {font.name}
+                        {editor?.isActive('textStyle', { fontFamily: font.value }) && <Check className="h-3 w-3" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <div className="h-6 w-px bg-gray-200 mx-1" />
+
+                {/* Headings */}
+                <Toggle size="sm" pressed={editor?.isActive('heading', { level: 1 })} onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} className="data-[state=on]:bg-gray-100"><Heading1 className="h-4 w-4" /></Toggle>
+                <Toggle size="sm" pressed={editor?.isActive('heading', { level: 2 })} onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} className="data-[state=on]:bg-gray-100"><Heading2 className="h-4 w-4" /></Toggle>
+                <Toggle size="sm" pressed={editor?.isActive('heading', { level: 3 })} onPressedChange={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} className="data-[state=on]:bg-gray-100"><Heading3 className="h-4 w-4" /></Toggle>
                 
                 <div className="h-6 w-px bg-gray-200 mx-1" />
 
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('bold')}
-                    onPressedChange={() => editor?.chain().focus().toggleBold().run()}
-                    aria-label="Gras"
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <Bold className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('italic')}
-                    onPressedChange={() => editor?.chain().focus().toggleItalic().run()}
-                    aria-label="Italique"
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <Italic className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('underline')}
-                    onPressedChange={() => editor?.chain().focus().toggleUnderline().run()}
-                    aria-label="Souligné"
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <UnderlineIcon className="h-4 w-4" />
-                </Toggle>
+                {/* Styling */}
+                <Toggle size="sm" pressed={editor?.isActive('bold')} onPressedChange={() => editor?.chain().focus().toggleBold().run()} className="data-[state=on]:bg-gray-100"><Bold className="h-4 w-4" /></Toggle>
+                <Toggle size="sm" pressed={editor?.isActive('italic')} onPressedChange={() => editor?.chain().focus().toggleItalic().run()} className="data-[state=on]:bg-gray-100"><Italic className="h-4 w-4" /></Toggle>
+                <Toggle size="sm" pressed={editor?.isActive('underline')} onPressedChange={() => editor?.chain().focus().toggleUnderline().run()} className="data-[state=on]:bg-gray-100"><UnderlineIcon className="h-4 w-4" /></Toggle>
 
                 <div className="h-6 w-px bg-gray-200 mx-1" />
 
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('bulletList')}
-                    onPressedChange={() => editor?.chain().focus().toggleBulletList().run()}
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <List className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('orderedList')}
-                    onPressedChange={() => editor?.chain().focus().toggleOrderedList().run()}
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <ListOrdered className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive('blockquote')}
-                    onPressedChange={() => editor?.chain().focus().toggleBlockquote().run()}
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <Quote className="h-4 w-4" />
-                </Toggle>
-
-                <div className="h-6 w-px bg-gray-200 mx-1" />
-
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive({ textAlign: 'left' })}
-                    onPressedChange={() => editor?.chain().focus().setTextAlign('left').run()}
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <AlignLeft className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive({ textAlign: 'center' })}
-                    onPressedChange={() => editor?.chain().focus().setTextAlign('center').run()}
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <AlignCenter className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                    size="sm"
-                    pressed={editor?.isActive({ textAlign: 'right' })}
-                    onPressedChange={() => editor?.chain().focus().setTextAlign('right').run()}
-                    className="data-[state=on]:bg-gray-100"
-                >
-                    <AlignRight className="h-4 w-4" />
-                </Toggle>
+                {/* Lists & Alignment */}
+                <Toggle size="sm" pressed={editor?.isActive('bulletList')} onPressedChange={() => editor?.chain().focus().toggleBulletList().run()} className="data-[state=on]:bg-gray-100"><List className="h-4 w-4" /></Toggle>
+                <Toggle size="sm" pressed={editor?.isActive('orderedList')} onPressedChange={() => editor?.chain().focus().toggleOrderedList().run()} className="data-[state=on]:bg-gray-100"><ListOrdered className="h-4 w-4" /></Toggle>
+                <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'left' })} onPressedChange={() => editor?.chain().focus().setTextAlign('left').run()} className="data-[state=on]:bg-gray-100"><AlignLeft className="h-4 w-4" /></Toggle>
+                <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'center' })} onPressedChange={() => editor?.chain().focus().setTextAlign('center').run()} className="data-[state=on]:bg-gray-100"><AlignCenter className="h-4 w-4" /></Toggle>
+                <Toggle size="sm" pressed={editor?.isActive({ textAlign: 'right' })} onPressedChange={() => editor?.chain().focus().setTextAlign('right').run()} className="data-[state=on]:bg-gray-100"><AlignRight className="h-4 w-4" /></Toggle>
             </div>
         </div>
       </header>
 
       {/* Zone de contenu (Fond Gris) */}
-      <div className="flex-1 bg-[#F8F9FA] py-8 px-4 overflow-y-auto cursor-text" onClick={() => editor?.commands.focus()}>
-        {/* Page A4 */}
+      <div className="flex-1 bg-[#F3F4F6] py-8 px-4 overflow-y-auto cursor-text print:bg-white print:p-0" onClick={() => editor?.commands.focus()}>
+        {/* Page A4 Simulée */}
         <div 
-            className="max-w-[21cm] w-full mx-auto bg-white shadow-md border border-gray-200 min-h-[29.7cm] p-[2.5cm] cursor-text transition-shadow hover:shadow-lg"
+            className="max-w-[21cm] w-full mx-auto print:shadow-none transition-shadow"
             onClick={(e) => e.stopPropagation()}
         >
           <EditorContent editor={editor} />
         </div>
       </div>
 
-      {/* Dialog Personnalisation */}
+      {/* Dialog Personnalisation (inchangé) */}
       <Dialog open={showIconPicker} onOpenChange={setShowIconPicker}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
