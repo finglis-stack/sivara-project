@@ -131,7 +131,8 @@ const DocEditor = () => {
 
   useEffect(() => {
     if (!user || !id) {
-      navigate('/login');
+      // Si pas connecté, on redirige. En prod, on devrait rediriger vers account.sivara.ca
+      // Mais ici, ProtectedRoute gère déjà ça normalement.
       return;
     }
 
@@ -214,8 +215,8 @@ const DocEditor = () => {
       
     } catch (error: any) {
       console.error('Error fetching document:', error);
-      showError('Impossible de lire ce document (Ancienne clé)');
-      navigate('/docs');
+      showError('Impossible de lire ce document (Ancienne clé ou document introuvable)');
+      navigate('/');
     } finally {
       setIsLoading(false);
     }
@@ -302,7 +303,7 @@ const DocEditor = () => {
       const { error } = await supabase.from('documents').delete().eq('id', id);
       if (error) throw error;
       showSuccess('Document supprimé');
-      navigate('/docs');
+      navigate('/');
     } catch (error: any) {
       showError('Erreur lors de la suppression');
     }
@@ -326,7 +327,7 @@ const DocEditor = () => {
 
       if (error) throw error;
       showSuccess('Document dupliqué');
-      navigate('/docs');
+      navigate('/');
     } catch (error: any) {
       showError('Erreur lors de la duplication');
     }
@@ -372,7 +373,7 @@ const DocEditor = () => {
         <div className="px-6 py-3">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
             <div className="flex items-center gap-4 flex-1">
-              <Button variant="ghost" size="icon" onClick={() => navigate('/docs')}>
+              <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
                 <ArrowLeft className="h-5 w-5" />
               </Button>
 

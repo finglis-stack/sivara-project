@@ -51,7 +51,9 @@ import {
   Award,
   BarChart,
   PieChart,
-  Shield
+  Shield,
+  LogOut,
+  UserCircle
 } from 'lucide-react';
 
 interface Document {
@@ -74,6 +76,8 @@ interface DecryptedDocument extends Document {
 
 interface Profile {
   avatar_url: string | null;
+  first_name: string | null;
+  last_name: string | null;
 }
 
 // Mapping des icônes pour l'affichage
@@ -85,13 +89,38 @@ const ICON_MAP: { [key: string]: any } = {
 
 const Docs = () => {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const [documents, setDocuments] = useState<DecryptedDocument[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filter, setFilter] = useState<'all' | 'recent' | 'starred'>('all');
   const [profile, setProfile] = useState<Profile | null>(null);
+
+  // --- NAVIGATION HELPERS ---
+
+  const navigateToSearch = () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    if (isLocal) {
+      window.location.href = '/?app=www';
+    } else {
+      window.location.href = 'https://sivara.ca';
+    }
+  };
+
+  const navigateToProfile = () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const currentUrl = window.location.href;
+    
+    if (isLocal) {
+      window.location.href = `/?app=account&path=/profile&returnTo=${encodeURIComponent(currentUrl)}`;
+    } else {
+      window.location.href = `https://account.sivara.ca/profile?returnTo=${encodeURIComponent(currentUrl)}`;
+    }
+  };
 
   // --- DEFINITION DES FONCTIONS (Avant les effets) ---
 
@@ -100,7 +129,7 @@ const Docs = () => {
 
     const { data } = await supabase
       .from('profiles')
-      .select('avatar_url')
+      .select('avatar_url, first_name, last_name')
       .eq('id', user.id)
       .single();
 
@@ -183,7 +212,8 @@ const Docs = () => {
       if (error) throw error;
 
       showSuccess('Document créé');
-      navigate(`/docs/${data.id}`);
+      // CORRECTION: Sur docs.sivara.ca, la route est /:id, pas /docs/:id
+      navigate(`/${data.id}`);
     } catch (error: any) {
       console.error('Error creating document:', error);
       showError('Erreur lors de la création du document');
@@ -253,10 +283,19 @@ const Docs = () => {
     }
   };
 
-  // --- EFFETS (Doivent être exécutés avant tout return) ---
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      window.location.reload();
+    } catch (error) {
+      console.error("Error signing out", error);
+    }
+  };
+
+  // --- EFFETS ---
 
   useEffect(() => {
-    if (!user) return; // Ne rien faire si pas connecté, mais le hook est quand même appelé
+    if (!user) return; 
 
     const initializeAndFetch = async () => {
       await initializeEncryption();
@@ -294,7 +333,7 @@ const Docs = () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(profileChannel);
     };
-  }, [user]); // Dépendance correcte
+  }, [user]);
 
   // --- HELPERS ---
 
@@ -319,6 +358,9 @@ const Docs = () => {
   };
 
   const getInitials = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
+    }
     return user?.email?.substring(0, 2).toUpperCase() || 'U';
   };
 
@@ -350,7 +392,7 @@ const Docs = () => {
       doc.decryptedTitle.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-  // --- AFFICHAGE CONDITIONNEL (À la fin) ---
+  // --- AFFICHAGE CONDITIONNEL ---
 
   if (loading) {
     return (
@@ -387,11 +429,11 @@ const Docs = () => {
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
-                onClick={() => navigate('/')} // On retourne à la Home de Docs, qui redirigera vers l'index si on est connecté ? Non, ici on est dans le Dashboard. Si on clique retour on va vers le moteur de recherche.
+                onClick={navigateToSearch}
                 className="text-gray-600 hover:text-gray-900"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Sivara
+                Sivara Search
               </Button>
               <div className="h-6 w-px bg-gray-200"></div>
               <div className="flex items-center gap-3">
@@ -401,7 +443,7 @@ const Docs = () => {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="relative w-96">
+              <div className="relative w-96 hidden md:block">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                 <Input
                   type="text"
@@ -425,14 +467,26 @@ const Docs = () => {
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                     <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">{profile?.first_name} {profile?.last_name}</p>
+                        <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                     </div>
+                  </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate('/profile')}>
-                    Mon profil
+                  <DropdownMenuItem onClick={navigateToProfile}>
+                    <UserCircle className="mr-2 h-4 w-4" />
+                    Mon profil (Sivara Account)
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/')}>
-                    Retour au moteur de recherche
+                  <DropdownMenuItem onClick={navigateToSearch}>
+                     <Globe className="mr-2 h-4 w-4" />
+                    Aller sur Sivara Search
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="text-red-600 focus:text-red-600">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Se déconnecter
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -534,7 +588,7 @@ const Docs = () => {
                     <Card
                       key={doc.id}
                       className="group relative p-6 hover:shadow-lg transition-all duration-200 cursor-pointer border border-gray-200"
-                      onClick={() => navigate(`/docs/${doc.id}`)}
+                      onClick={() => navigate(`/${doc.id}`)}
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div 
@@ -560,7 +614,7 @@ const Docs = () => {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/docs/${doc.id}`);
+                                navigate(`/${doc.id}`);
                               }}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 Ouvrir
@@ -628,7 +682,7 @@ const Docs = () => {
                     <div
                       key={doc.id}
                       className="group flex items-center justify-between p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => navigate(`/docs/${doc.id}`)}
+                      onClick={() => navigate(`/${doc.id}`)}
                     >
                       <div className="flex items-center gap-4 flex-1">
                         <div 
