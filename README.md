@@ -27,10 +27,17 @@ Un pipeline de recherche nouvelle génération combinant analyse lexicale et sé
 *   **Algorithme de Ranking Hybride :** Combinaison de scores de similarité cosinus (Cosine Similarity) et de pondération par métadonnées pour des résultats d'une pertinence chirurgicale.
 
 ### 3. Coffre-fort Numérique "Zero-Knowledge" - `docs.sivara.ca`
-Une suite collaborative où le serveur agit comme un simple stockage aveugle (Blind Storage).
-*   **Client-Side Encryption (E2EE) :** Chiffrement **AES-256-GCM** (Galois/Counter Mode) exécuté exclusivement dans le navigateur via l'API Web Crypto W3C.
-*   **Dérivation de Clés (PBKDF2) :** Les clés de chiffrement sont dérivées localement à partir d'identifiants utilisateur uniques et salés, garantissant que les clés ne transitent jamais en clair sur le réseau.
-*   **Intégrité des Données :** Chaque document est encapsulé avec son vecteur d'initialisation (IV) unique, prévenant les attaques par analyse de motifs chiffrés.
+Une suite collaborative temps réel où le serveur agit comme un simple stockage aveugle (Blind Storage).
+
+*   **Synchronisation Temps Réel (Architecture Bi-Canal) :**
+    *   **Canal "Présence" (Stateful) :** Utilise les WebSockets pour synchroniser les états lents (avatars dans le header, statut en ligne).
+    *   **Canal "Broadcast" (Stateless) :** Transmission éphémère haute fréquence (60fps) pour les curseurs et la sélection de texte. Ces données ne touchent jamais la base de données (latence < 50ms).
+*   **Autorisation & Sécurité (The Bouncer) :**
+    *   Utilisation stricte des politiques **Row Level Security (RLS)**. L'application ne valide pas les accès, c'est le moteur SQL qui le fait. Si l'ID utilisateur n'est pas dans la table `document_access` ou n'est pas `owner_id`, la donnée n'existe tout simplement pas pour le requérant.
+*   **Client-Side Encryption (E2EE) :**
+    *   Chiffrement **AES-256-GCM** exécuté exclusivement dans le navigateur via l'API Web Crypto. Le serveur ne voit que des chaînes de caractères aléatoires.
+*   **Dérivation de Clés (PBKDF2) :**
+    *   Les clés de chiffrement sont dérivées localement garantissant que les clés ne transitent jamais en clair sur le réseau.
 
 ---
 
