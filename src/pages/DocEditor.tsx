@@ -19,8 +19,7 @@ import {
   FileText, Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
-  AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
-  Minus, Plus
+  AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check
 } from 'lucide-react';
 
 import {
@@ -31,7 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import { Toggle } from '@/components/ui/toggle';
 
-// --- EXTENSION TAILLE DE POLICE ---
+// --- EXTENSION TAILLE DE POLICE ROBUSTE ---
 const FontSize = Extension.create({
   name: 'fontSize',
   addOptions() {
@@ -46,13 +45,15 @@ const FontSize = Extension.create({
         attributes: {
           fontSize: {
             default: null,
-            parseHTML: (element) => element.style.fontSize.replace('px', ''),
+            // Lit la valeur exacte du style CSS (ex: "24px")
+            parseHTML: (element) => element.style.fontSize || null,
+            // Écrit la valeur telle quelle
             renderHTML: (attributes) => {
               if (!attributes.fontSize) {
                 return {};
               }
               return {
-                style: `font-size: ${attributes.fontSize}px`,
+                style: `font-size: ${attributes.fontSize}`,
               };
             },
           },
@@ -74,14 +75,13 @@ interface Document {
   color?: string;
 }
 
-// Correction des valeurs de police pour garantir la compatibilité CSS
 const FONT_FAMILIES = [
-  { name: 'Inter (Sans)', value: 'Inter, sans-serif' },
+  { name: 'Inter', value: 'Inter, sans-serif' },
+  { name: 'Serif (Par défaut)', value: 'serif' },
   { name: 'Roboto', value: 'Roboto, sans-serif' },
   { name: 'Open Sans', value: '"Open Sans", sans-serif' },
   { name: 'Lato', value: 'Lato, sans-serif' },
   { name: 'Montserrat', value: 'Montserrat, sans-serif' },
-  { name: 'Serif (Par défaut)', value: 'serif' },
   { name: 'Playfair Display', value: '"Playfair Display", serif' },
   { name: 'Merriweather', value: 'Merriweather, serif' },
   { name: 'Lora', value: 'Lora, serif' },
@@ -150,7 +150,6 @@ const DocEditor = () => {
     titleRef.current = title;
   }, [title]);
 
-  // Chargement des polices Google Fonts
   useEffect(() => {
     const linkId = 'sivara-google-fonts';
     if (!window.document.getElementById(linkId)) {
@@ -379,7 +378,10 @@ const DocEditor = () => {
     }
   };
 
-  const exportToPDF = () => showError('Fonctionnalité PDF en cours de développement');
+  const exportToPDF = () => {
+    window.print();
+  };
+  
   const shareDocument = () => showError('Fonctionnalité de partage en cours de développement');
 
   const getIconTextColor = (bgColor: string) => {
@@ -456,7 +458,7 @@ const DocEditor = () => {
                 <Star className={`h-5 w-5 ${document?.is_starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
               </Button>
               <Button variant="ghost" size="icon" onClick={shareDocument}><Users className="h-5 w-5" /></Button>
-              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex"><Download className="mr-2 h-4 w-4" /> PDF</Button>
+              <Button variant="ghost" onClick={exportToPDF} className="hidden sm:flex"><Download className="mr-2 h-4 w-4" /> PDF / Print</Button>
               <Button onClick={shareDocument} className="bg-gray-700 hover:bg-gray-800 hidden sm:flex"><Share2 className="mr-2 h-4 w-4" /> Partager</Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-5 w-5" /></Button></DropdownMenuTrigger>
@@ -473,12 +475,13 @@ const DocEditor = () => {
         {/* Toolbar */}
         <div className="border-t border-gray-200 bg-[#F8F9FA] px-4 py-2 flex justify-center items-center gap-1 flex-wrap shadow-inner">
             <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 py-1 gap-1">
+                
                 {/* Sélecteur de Police */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="w-[150px] justify-between font-normal px-2">
                       <span className="truncate">
-                        {FONT_FAMILIES.find(f => editor?.isActive('textStyle', { fontFamily: f.value }))?.name || 'Inter (Sans)'}
+                        {FONT_FAMILIES.find(f => editor?.isActive('textStyle', { fontFamily: f.value }))?.name || 'Police'}
                       </span>
                       <Type className="h-3 w-3 opacity-50 ml-2" />
                     </Button>
