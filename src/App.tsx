@@ -133,6 +133,7 @@ const AppRoutes = () => {
 
 const App = () => {
   useEffect(() => {
+    // 1. Gestion Deep Link Mobile
     if (Capacitor.isNativePlatform()) {
       const setupListener = async () => {
         await CapacitorApp.addListener('appUrlOpen', async (data) => {
@@ -156,6 +157,35 @@ const App = () => {
         });
       };
       setupListener();
+    } else {
+      // 2. Gestion Cross-Domain Web (Fallback Hash)
+      // Si on arrive sur un sous-domaine avec des tokens dans le hash, on force la session
+      const handleHashSession = async () => {
+        const hash = window.location.hash;
+        if (hash && hash.includes('access_token')) {
+          try {
+            const params = new URLSearchParams(hash.substring(1)); // Enlève le #
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+
+            if (accessToken && refreshToken) {
+              console.log("Session detectée dans l'URL, restauration...");
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              
+              if (!error) {
+                // Nettoyage de l'URL pour faire propre
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+              }
+            }
+          } catch (e) {
+            console.error("Erreur restauration session via hash", e);
+          }
+        }
+      };
+      handleHashSession();
     }
   }, []);
 
