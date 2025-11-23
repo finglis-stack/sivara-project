@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Globe, FileText, UserCircle, ShieldCheck } from "lucide-react";
+import { Globe, FileText, UserCircle, ShieldCheck, Mail } from "lucide-react";
 
 const DevPortal = () => {
   const navigateToApp = (app: string) => {
@@ -11,13 +11,13 @@ const DevPortal = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-4xl w-full space-y-8">
+      <div className="max-w-5xl w-full space-y-8">
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold text-gray-900">Sivara Dev Portal</h1>
           <p className="text-gray-500">Environnement de développement local. Choisissez une application à simuler.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Search Engine */}
           <Card className="hover:shadow-lg transition-all cursor-pointer border-t-4 border-t-gray-800" onClick={() => navigateToApp('www')}>
             <CardHeader>
@@ -40,6 +40,20 @@ const DevPortal = () => {
               </div>
               <CardTitle>Sivara Docs</CardTitle>
               <CardDescription>L'éditeur de documents (docs.sivara.ca)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" className="w-full">Lancer</Button>
+            </CardContent>
+          </Card>
+
+          {/* Mail */}
+          <Card className="hover:shadow-lg transition-all cursor-pointer border-t-4 border-t-orange-500" onClick={() => navigateToApp('mail')}>
+            <CardHeader>
+              <div className="h-12 w-12 bg-orange-50 rounded-lg flex items-center justify-center mb-2">
+                <Mail className="h-6 w-6 text-orange-600" />
+              </div>
+              <CardTitle>Sivara Mail</CardTitle>
+              <CardDescription>Messagerie sécurisée (mail.sivara.ca)</CardDescription>
             </CardHeader>
             <CardContent>
               <Button variant="outline" className="w-full">Lancer</Button>

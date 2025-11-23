@@ -19,6 +19,7 @@ import DevPortal from "./pages/DevPortal";
 import Pricing from "./pages/Pricing";
 import Checkout from "./pages/Checkout";
 import ProOnboarding from "./pages/ProOnboarding";
+import Mail from "./pages/Mail";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const getCurrentApp = () => {
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     if (simulatedApp === 'docs') return 'docs';
     if (simulatedApp === 'account') return 'account';
+    if (simulatedApp === 'mail') return 'mail';
     if (simulatedApp === 'www') return 'www';
     return 'dev-portal'; // Par défaut en localhost
   }
@@ -39,6 +41,7 @@ const getCurrentApp = () => {
   // Mode Production (Sous-domaines réels)
   if (hostname.startsWith('docs.')) return 'docs';
   if (hostname.startsWith('account.')) return 'account';
+  if (hostname.startsWith('mail.')) return 'mail';
   return 'www'; // sivara.ca par défaut
 };
 
@@ -80,8 +83,15 @@ const App = () => {
               {currentApp === 'docs' && (
                 <>
                   <Route path="/" element={<Docs />} />
-                  {/* La route /:id n'est plus protégée globalement, DocEditor gère la sécu */}
                   <Route path="/:id" element={<DocEditor />} />
+                  <Route path="*" element={<NotFound />} />
+                </>
+              )}
+
+              {/* --- APPLICATION: MAIL (mail.sivara.ca) --- */}
+              {currentApp === 'mail' && (
+                <>
+                  <Route path="/" element={<Mail />} />
                   <Route path="*" element={<NotFound />} />
                 </>
               )}
@@ -95,7 +105,6 @@ const App = () => {
                       <Monitor />
                     </ProtectedRoute>
                   } />
-                  {/* Si on essaie d'aller sur /docs ou /login depuis le search, on redirige vers l'index */}
                   <Route path="*" element={<NotFound />} />
                 </>
               )}
