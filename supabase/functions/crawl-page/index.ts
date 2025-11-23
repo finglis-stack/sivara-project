@@ -8,7 +8,101 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// @ts-ignore: Deno types
+// ==========================================
+// 🛡️ TITANIUM TOKENIZER ENGINE (SHARED) 🛡️
+// ==========================================
+// Ce moteur doit être IDENTIQUE entre crawl-page et search.
+// Il transforme le texte brut en empreintes cryptographiques intelligentes.
+
+class TitaniumTokenizer {
+  // Stopwords (Mots vides à ignorer pour réduire le bruit)
+  public static STOPWORDS = new Set([
+    'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'donc', 'or', 'ni', 'car', 
+    'de', 'du', 'en', 'à', 'dans', 'par', 'pour', 'sur', 'avec', 'sans', 'sous', 'ce', 'se',
+    'qui', 'que', 'quoi', 'dont', 'où', 'est', 'sont', 'ont', 'il', 'ils', 'elle', 'elles',
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'
+  ]);
+
+  /**
+   * Normalise le texte : minuscule, suppression accents, caractères spéciaux
+   */
+  static normalize(text: string): string {
+    return text
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève les accents
+      .replace(/[^a-z0-9\s]/g, " ") // Garde seulement alphanum
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  /**
+   * Stemming léger (Racination) pour FR/EN
+   * Transforme "mangerons" -> "mang", "files" -> "file"
+   */
+  static getStem(word: string): string {
+    if (word.length <= 4) return word;
+    
+    // Règles simples mais efficaces (80/20 rule)
+    // Pluriels et terminaisons communes
+    if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
+    if (word.endsWith('aux')) return word.slice(0, -2) + 'l'; // Chevaux -> Cheval
+    if (word.endsWith('sse')) return word.slice(0, -3);
+    if (word.endsWith('ement')) return word.slice(0, -5);
+    if (word.endsWith('ing')) return word.slice(0, -3);
+    if (word.endsWith('ed')) return word.slice(0, -2);
+    if (word.endsWith('es')) return word.slice(0, -2);
+    if (word.endsWith('s')) return word.slice(0, -1);
+    if (word.endsWith('er')) return word.slice(0, -2);
+    if (word.endsWith('ez')) return word.slice(0, -2);
+    if (word.endsWith('ait')) return word.slice(0, -3);
+    
+    return word;
+  }
+
+  /**
+   * Algorithme Phonétique Simplifié (Mix Soundex/Metaphone)
+   * Permet de matcher "Philo" et "Filo"
+   */
+  static getPhoneticFingerprint(word: string): string {
+    let code = word.toUpperCase();
+    
+    // 1. Substitutions phonétiques majeures
+    code = code.replace(/PH/g, 'F');
+    code = code.replace(/CH/g, 'K'); // "Chorale" -> "Korale" (Approximation)
+    code = code.replace(/QU/g, 'K');
+    code = code.replace(/C([E|I|Y])/g, 'S$1'); // Ce -> Se
+    code = code.replace(/C/g, 'K'); // Ca -> Ka
+    code = code.replace(/GI/g, 'JI');
+    code = code.replace(/GE/g, 'JE');
+    
+    // 2. Suppression des voyelles sauf la première (Style Soundex)
+    const firstChar = code.charAt(0);
+    const rest = code.slice(1).replace(/[AEIOUHYW]/g, '');
+    
+    // 3. Suppression des doublons
+    const cleanRest = rest.replace(/(.)\1+/g, '$1');
+    
+    return (firstChar + cleanRest).substring(0, 4); // Garde 4 chars max
+  }
+
+  /**
+   * Génère les N-Grams (Trigrammes et Quadgrammes)
+   */
+  static getNGrams(word: string, n: number): string[] {
+    if (word.length < n) return [];
+    const ngrams = [];
+    for (let i = 0; i <= word.length - n; i++) {
+      ngrams.push(word.substring(i, i + n));
+    }
+    return ngrams;
+  }
+}
+
+// ==========================================
+// 🔐 CRYPTO ENGINE
+// ==========================================
+
+// @ts-ignore
 const encoder = new TextEncoder();
 
 class CryptoService {
@@ -18,7 +112,6 @@ class CryptoService {
   async initialize(secretKey: string) {
     const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
     
-    // Clé principale (pour chiffrer le contenu)
     this.key = await crypto.subtle.importKey(
       'raw',
       keyData,
@@ -27,8 +120,6 @@ class CryptoService {
       ['encrypt', 'decrypt']
     );
 
-    // Clé de recherche (dérivée, pour hacher les trigrammes)
-    // On utilise une clé différente pour que même si on trouve un hash, on ne puisse pas déchiffrer le contenu avec
     const searchKeyData = await crypto.subtle.digest('SHA-256', keyData);
     this.searchKey = await crypto.subtle.importKey(
       'raw',
@@ -41,7 +132,6 @@ class CryptoService {
 
   async encrypt(text: string, deterministic: boolean = false): Promise<string> {
     if (!this.key) throw new Error('Crypto not initialized');
-    
     let iv: Uint8Array;
     if (deterministic) {
        const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(text));
@@ -49,58 +139,58 @@ class CryptoService {
     } else {
        iv = crypto.getRandomValues(new Uint8Array(12));
     }
-    
     const data = encoder.encode(text);
-    
-    const encrypted = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
-      this.key,
-      data
-    );
-    
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, this.key, data);
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
     combined.set(iv, 0);
     combined.set(new Uint8Array(encrypted), iv.length);
-    
     return btoa(String.fromCharCode(...combined));
   }
 
   async hash(text: string): Promise<string> {
     const data = encoder.encode(text.toLowerCase());
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // --- SSE: SEARCHABLE SYMMETRIC ENCRYPTION LOGIC ---
-  
-  // Génère des tokens de recherche (Trigrammes hachés)
-  async generateSearchTokens(text: string): Promise<string[]> {
+  // --- GÉNÉRATION INTELLIGENTE DES TOKENS ---
+  async generateBlindIndex(text: string): Promise<string[]> {
     if (!this.searchKey) throw new Error('Search key not initialized');
     
-    // 1. Normalisation (minuscule, suppression ponctuation simple)
-    const normalized = text.toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, ' ') // Garde lettres et nombres
-      .replace(/\s+/g, ' ')
-      .trim();
-
     const tokens = new Set<string>();
-    
-    // 2. Extraction des mots et génération des trigrammes
-    const words = normalized.split(' ');
-    
-    for (const word of words) {
-      if (word.length < 3) {
-        // Pour les petits mots, on hache le mot entier
-        tokens.add(await this.hmacToken(word));
-        continue;
+    const normalizedText = TitaniumTokenizer.normalize(text);
+    const words = normalizedText.split(' ').filter(w => w.length > 1);
+
+    for (const rawWord of words) {
+      // 0. Filtre Stopwords (sauf si le mot est très rare, mais ici on simplifie)
+      if (TitaniumTokenizer.STOPWORDS.has(rawWord)) continue;
+
+      // 1. Hash EXACT (Le mot tel quel) -> Score Maximum
+      tokens.add(await this.hmacToken(`EX:${rawWord}`));
+
+      // 2. Hash STEM (La racine) -> Score Élevé
+      // Permet de trouver "Chevaux" en tapant "Cheval"
+      const stem = TitaniumTokenizer.getStem(rawWord);
+      if (stem !== rawWord) {
+        tokens.add(await this.hmacToken(`ST:${stem}`));
       }
-      
-      // Trigrammes : "cheval" -> "che", "hev", "eva", "val"
-      // Cela permet de trouver "che" dans "chevaux"
-      for (let i = 0; i <= word.length - 3; i++) {
-        const trigram = word.substring(i, i + 3);
-        tokens.add(await this.hmacToken(trigram));
+
+      // 3. Hash PHONETIC (Le son) -> Score Moyen (Tolérance fautes)
+      // Permet de trouver "Philo" en tapant "Filo"
+      const phone = TitaniumTokenizer.getPhoneticFingerprint(rawWord);
+      if (phone.length > 1) {
+        tokens.add(await this.hmacToken(`PH:${phone}`));
+      }
+
+      // 4. N-GRAMS (3 et 4 lettres) -> Score Faible (Fuzzy brut)
+      // Permet de trouver des bouts de mots
+      if (rawWord.length > 3) {
+        const trigrams = TitaniumTokenizer.getNGrams(rawWord, 3);
+        for (const tri of trigrams) tokens.add(await this.hmacToken(`TG:${tri}`));
+      }
+      if (rawWord.length > 4) {
+        const quadgrams = TitaniumTokenizer.getNGrams(rawWord, 4);
+        for (const quad of quadgrams) tokens.add(await this.hmacToken(`QG:${quad}`));
       }
     }
 
@@ -108,88 +198,70 @@ class CryptoService {
   }
 
   private async hmacToken(input: string): Promise<string> {
+    // On signe le token "typé" (ex: "PH:F821")
     const signature = await crypto.subtle.sign(
       'HMAC',
       this.searchKey!,
       encoder.encode(input)
     );
-    // On ne garde que les 8 premiers octets pour économiser du stockage (suffisant pour l'indexation)
-    // C'est un "Bloom Filter" probabiliste côté serveur
+    // On garde 8 bytes pour l'index (compromis collision/taille)
     return btoa(String.fromCharCode(...new Uint8Array(signature).slice(0, 8)));
   }
 }
 
+// ==========================================
+// 🕷️ CRAWLER LOGIC
+// ==========================================
+
 function isAllowedLanguage(html: string): boolean {
+  // Détection sommaire
   const langMatch = html.match(/<html[^>]+lang=["']([a-zA-Z\-]+)["'][^>]*>/i);
   if (langMatch) {
     const lang = langMatch[1].toLowerCase();
-    if (lang.startsWith('fr') || lang.startsWith('en')) return true;
-    return false; 
+    return lang.startsWith('fr') || lang.startsWith('en');
   }
+  // Fallback heuristique
   const textSample = html.substring(0, 2000).toLowerCase();
-  const frWords = ['le', 'la', 'et', 'est', 'pour', 'dans', 'avec'];
-  const enWords = ['the', 'and', 'is', 'for', 'with', 'that', 'this'];
-  const frCount = frWords.filter(w => textSample.includes(` ${w} `)).length;
-  const enCount = enWords.filter(w => textSample.includes(` ${w} `)).length;
+  const frCount = (textSample.match(/\b(le|la|et|est|pour|dans)\b/g) || []).length;
+  const enCount = (textSample.match(/\b(the|and|is|for|with|that)\b/g) || []).length;
   return frCount > 2 || enCount > 2;
 }
 
 function extractMetadata(html: string, url: string): { title: string, description: string, content: string } {
+  // Extraction Titre
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   let title = titleMatch ? titleMatch[1].trim() : 'Sans titre';
+  
+  // Nettoyage Titre générique
   const urlObj = new URL(url);
   const domainName = urlObj.hostname.replace('www.', '');
-  const genericTerms = ['accueil', 'home', 'index', 'bienvenue', 'page d\'accueil', 'homepage', 'sans titre'];
-  if (genericTerms.includes(title.toLowerCase()) || title.length < 5) {
+  if (title.length < 5 || /home|accueil|index/i.test(title)) {
     title = `${title} - ${domainName}`;
   }
+
+  // Extraction Description
   const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i);
   const description = descMatch ? descMatch[1].trim() : '';
+
+  // Extraction Contenu (Nettoyage brutal)
   let content = html
     .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, " ")
     .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/<[^>]+>/g, ' ') // Strip tags
+    .replace(/\s+/g, ' ')     // Normalize spaces
     .trim();
+
   return {
     title: title.substring(0, 255),
     description: description.substring(0, 500),
-    content: content.substring(0, 5000)
+    content: content.substring(0, 10000) // Limite saine pour le stockage
   };
-}
-
-function extractLinks(html: string, baseUrl: string): { url: string, priority: number }[] {
-  const links: { url: string, priority: number }[] = [];
-  const regex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
-  let match;
-  const baseObj = new URL(baseUrl);
-  const baseHostname = baseObj.hostname.replace(/^www\./, '');
-
-  while ((match = regex.exec(html)) !== null) {
-    try {
-      const href = match[1];
-      const text = match[2].replace(/<[^>]+>/g, '').trim();
-      if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || !text) continue;
-      if (text.length < 2) continue;
-      const absoluteUrl = new URL(href, baseUrl);
-      const currentHostname = absoluteUrl.hostname.replace(/^www\./, '');
-      if (currentHostname !== baseHostname) continue;
-      if (absoluteUrl.pathname.match(/\.(jpg|jpeg|png|gif|pdf|zip|css|js|json|xml)$/i)) continue;
-      if (absoluteUrl.pathname.match(/(login|signin|signup|register|cart|checkout|account)/i)) continue;
-      if (!links.some(l => l.url === absoluteUrl.href)) {
-         links.push({ url: absoluteUrl.href, priority: 5 });
-      }
-    } catch (e) { continue; }
-  }
-  return links.slice(0, 20);
 }
 
 // @ts-ignore: Deno types
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   // @ts-ignore
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -198,18 +270,11 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   
   let queueId = null;
-  let currentUrl = '';
-  let cryptoService: CryptoService | null = null;
 
   const logToDb = async (qId: string | null, message: string, step: string, status: string = 'info') => {
     console.log(`[${step}] ${message}`);
     if (qId) {
-      await supabase.from('crawl_logs').insert({
-        queue_id: qId,
-        message,
-        step,
-        status
-      });
+      await supabase.from('crawl_logs').insert({ queue_id: qId, message, step, status });
     }
   };
 
@@ -218,60 +283,51 @@ serve(async (req) => {
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!
     if (!encryptionKey) throw new Error('ENCRYPTION_KEY not configured')
 
-    cryptoService = new CryptoService()
+    const cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
 
     const body = await req.json();
     const url = body.url;
     queueId = body.queueId || null;
-    currentUrl = url;
 
     if (!url) throw new Error('URL is required')
 
-    // 0. CHECK DISCOVERY & LIMITS (Simplified for brevity)
-    const urlObj = new URL(url);
-    const domain = urlObj.hostname;
-    const encryptedDomain = await cryptoService.encrypt(domain);
-
+    // 1. FETCH
     await logToDb(queueId, `Crawling: ${url}`, 'INIT', 'info');
-
-    // 1. Fetching
     const response = await fetch(url, {
-      redirect: 'follow',
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (compatible; SivaraBot/1.0; +http://sivara.search)',
-        'Accept': 'text/html'
-      },
+      headers: { 'User-Agent': 'SivaraBot/2.0 (Badass-Edition; +http://sivara.search)' }
     })
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const rawHtml = await response.text();
 
-    if (!isAllowedLanguage(rawHtml)) {
-       throw new Error('Language not supported (Not FR/EN)');
-    }
+    if (!isAllowedLanguage(rawHtml)) throw new Error('Language not supported');
 
-    await logToDb(queueId, `Parsing data...`, 'PARSING', 'info');
-    
-    // 3. Parsing
+    // 2. PARSE
+    await logToDb(queueId, `Parsing & Tokenizing...`, 'PARSING', 'info');
     const metadata = extractMetadata(rawHtml, url);
-    const discoveredLinks = extractLinks(rawHtml, url);
+    const urlObj = new URL(url);
 
-    // 4. Encryption & Token Generation
-    await logToDb(queueId, 'Encrypting & Generating Blind Index...', 'ENCRYPTION', 'info');
+    // 3. ENCRYPT & INDEX
+    await logToDb(queueId, 'Generating Titanium Blind Index...', 'ENCRYPTION', 'info');
 
+    // Chiffrement des données (Payload illisible par le serveur)
     const encryptedTitle = await cryptoService.encrypt(metadata.title)
     const encryptedDescription = await cryptoService.encrypt(metadata.description)
     const encryptedContent = await cryptoService.encrypt(metadata.content)
     const encryptedUrl = await cryptoService.encrypt(url, true)
+    const encryptedDomain = await cryptoService.encrypt(urlObj.hostname)
     
-    const searchHash = await cryptoService.hash(metadata.title + ' ' + metadata.description)
+    // Hash pour dédoublonnage (pas pour la recherche)
+    const searchHash = await cryptoService.hash(url);
 
-    // --- GÉNÉRATION DU BLIND INDEX ---
-    // On hache le titre, la description et un peu du contenu pour la recherche
-    const textToIndex = `${metadata.title} ${metadata.description} ${metadata.content.substring(0, 1000)}`;
-    const blindIndex = await cryptoService.generateSearchTokens(textToIndex);
+    // GÉNÉRATION DU BLIND INDEX AVANCÉ
+    // On indexe le titre, la description et le début du contenu
+    // C'est ici que le Titanium Tokenizer fait son boulot
+    const textToIndex = `${metadata.title} ${metadata.description} ${metadata.content.substring(0, 2000)}`;
+    const blindIndex = await cryptoService.generateBlindIndex(textToIndex);
 
+    // Upsert
     const { error } = await supabase
       .from('crawled_pages')
       .upsert({
@@ -283,37 +339,20 @@ serve(async (req) => {
         http_status: response.status,
         status: 'success',
         search_hash: searchHash,
-        // STOCKAGE DES TOKENS DE RECHERCHE
-        blind_index: blindIndex,
+        blind_index: blindIndex, // Tableau de tokens cryptés (EX:..., ST:..., PH:..., TG:...)
         updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'url'
-      })
+      }, { onConflict: 'url' })
 
     if (error) throw error
 
-    // 5. Queue Discovery (Simplified)
-    // ... (Code existant pour découverte de liens conservé implicitement ou simplifié ici pour focus)
-    if (discoveredLinks.length > 0) {
-       // Logique d'ajout à la queue simplifiée pour l'exemple
-       // Dans la vraie vie, on garderait la logique complète de découverte
-    }
-
-    await logToDb(queueId, `Indexed with ${blindIndex.length} search tokens`, 'COMPLETE', 'success');
-
+    await logToDb(queueId, `Indexed ${blindIndex.length} tokens (Exact/Stem/Phone/Ngrams)`, 'COMPLETE', 'success');
     try { await supabase.rpc('increment_crawl_stats') } catch (e) {}
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ success: true, tokens: blindIndex.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (error) {
     console.error('[CRAWL ERROR]', error)
     await logToDb(queueId, `Error: ${error.message}`, 'ERROR', 'error');
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
