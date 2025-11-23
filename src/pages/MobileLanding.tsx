@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Globe, FileText, Mail, UserCircle, LogOut, 
-  Shield, ChevronRight, Search, Bell
+  Shield, Search, ArrowRight
 } from 'lucide-react';
 
 const MobileLanding = () => {
@@ -33,50 +33,56 @@ const MobileLanding = () => {
   };
 
   const handleLogin = () => {
-    // On redirige vers le VRAI site externe, en demandant un retour sur l'app native
-    // Si on est en dev local, on utilise localhost, sinon prod
-    const isLocal = window.location.hostname === 'localhost';
-    const baseUrl = isLocal ? 'http://localhost:8080' : 'https://account.sivara.ca';
+    // FORCE PRODUCTION URL : On utilise toujours le vrai serveur d'auth pour le deep link
+    const baseUrl = 'https://account.sivara.ca';
     
     // Callback vers l'app native
     const callbackUrl = 'com.example.sivara://login-callback';
     
+    // Redirection vers le navigateur système
     window.location.href = `${baseUrl}/login?returnTo=${encodeURIComponent(callbackUrl)}`;
   };
 
-  // --- ÉCRAN NON CONNECTÉ ---
+  // --- ÉCRAN NON CONNECTÉ (LANDING) ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col justify-between p-6 relative overflow-hidden">
-        {/* Fond animé subtil */}
-        <div className="absolute top-0 left-0 w-full h-full z-0">
-           <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-purple-600/30 rounded-full blur-[80px]"></div>
-           <div className="absolute bottom-[-10%] left-[-10%] w-64 h-64 bg-blue-600/30 rounded-full blur-[80px]"></div>
+      <div className="min-h-screen relative flex flex-col justify-end pb-12 px-6 overflow-hidden">
+        {/* Image de fond */}
+        <div className="absolute inset-0 z-0">
+           <img 
+             src="/mobile-login.jpg" 
+             alt="Background" 
+             className="w-full h-full object-cover"
+           />
+           {/* Gradient overlay pour la lisibilité */}
+           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90"></div>
         </div>
 
-        <div className="z-10 mt-10">
-          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-6">
-            <span className="text-black font-bold text-2xl">S</span>
+        {/* Contenu */}
+        <div className="relative z-10 space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <div>
+            <h1 className="text-6xl font-thin text-white tracking-tighter mb-2 drop-shadow-lg">
+              Sivara
+            </h1>
+            <div className="h-1 w-12 bg-white/50 rounded-full mb-6"></div>
+            <p className="text-xl text-white/90 font-light leading-relaxed max-w-[80%] drop-shadow-md">
+              Retrouvez la liberté. <br/>
+              <span className="text-white/60">Vos données, vos règles.</span>
+            </p>
           </div>
-          <h1 className="text-4xl font-light leading-tight mb-4">
-            Votre univers numérique, <br/>
-            <span className="font-bold">sécurisé.</span>
-          </h1>
-          <p className="text-gray-400 text-lg">
-            Accédez à vos emails, documents et recherches dans un environnement chiffré unique.
-          </p>
-        </div>
 
-        <div className="z-10 space-y-4 mb-8">
-          <Button 
-            onClick={handleLogin}
-            className="w-full h-14 text-lg bg-white text-black hover:bg-gray-200 rounded-full font-semibold"
-          >
-            Se connecter
-          </Button>
-          <div className="flex justify-center gap-6 text-sm text-gray-500 mt-6">
-             <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Privé</span>
-             <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> Rapide</span>
+          <div className="space-y-4">
+            <Button 
+              onClick={handleLogin}
+              className="w-full h-16 text-lg bg-white/10 hover:bg-white/20 text-white border border-white/30 backdrop-blur-md rounded-2xl font-medium transition-all duration-300 active:scale-95 shadow-xl"
+            >
+              Se connecter
+              <ArrowRight className="ml-2 h-5 w-5 opacity-70" />
+            </Button>
+            
+            <p className="text-center text-white/40 text-xs font-light">
+              Protégé par chiffrement de bout en bout.
+            </p>
           </div>
         </div>
       </div>
@@ -92,7 +98,7 @@ const MobileLanding = () => {
           <p className="text-gray-500 text-sm font-medium">Bonjour,</p>
           <h1 className="text-2xl font-bold text-gray-900">{profile?.first_name || user.email?.split('@')[0]}</h1>
         </div>
-        <Avatar onClick={() => openApp('account')} className="cursor-pointer border-2 border-white shadow-sm">
+        <Avatar onClick={() => openApp('account')} className="cursor-pointer border-2 border-white shadow-sm h-10 w-10">
           {profile?.avatar_url && <AvatarImage src={profile.avatar_url} />}
           <AvatarFallback className="bg-gray-900 text-white">{user.email?.substring(0,2).toUpperCase()}</AvatarFallback>
         </Avatar>
@@ -173,7 +179,7 @@ const MobileLanding = () => {
         </div>
 
         {/* Logout */}
-        <Button variant="ghost" onClick={() => signOut()} className="w-full text-red-500 hover:text-red-600 hover:bg-red-50">
+        <Button variant="ghost" onClick={() => signOut()} className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 h-12">
            <LogOut className="w-4 h-4 mr-2" /> Se déconnecter
         </Button>
       </div>
