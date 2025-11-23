@@ -87,13 +87,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
+      // On essaie de déconnecter côté serveur
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+    } catch (error: any) {
+      // Si la session est déjà manquante, ce n'est pas grave, on veut juste nettoyer le local
+      if (error.message?.includes('session missing') || error.name === 'AuthSessionMissingError') {
+        console.warn('Session déjà expirée ou manquante lors de la déconnexion.');
+      } else {
+        console.error('Erreur lors de la déconnexion:', error);
+      }
+    } finally {
+      // DANS TOUS LES CAS : on nettoie l'état local
       setUser(null);
       setSession(null);
-    } catch (error) {
-      console.error('Error signing out:', error);
-      throw error;
+      
+      // On force le nettoyage manuel des cookies pour être sûr (cross-subdomain)
+      // Note : Le client Supabase le fait aussi, mais une double sécurité ne nuit pas ici
+      const isProd = window.location.hostname.endsWith('sivara.ca');
+      if (isProd) {
+         document.cookie = 'sivara-auth-token=; path=/; domain=.sivara.ca; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      }
     }
   };
 

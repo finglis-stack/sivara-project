@@ -92,13 +92,13 @@ const UserMenu = () => {
       setIsSigningOut(true);
       await authSignOut();
       showSuccess('Déconnexion réussie');
-      // Rechargement pour que le cookie soit bien nettoyé partout
-      window.location.reload();
     } catch (error: any) {
-      console.error('Sign out error:', error);
-      showError('Erreur lors de la déconnexion');
+      console.error('Sign out error (handled):', error);
+      // On considère que c'est réussi même en cas d'erreur technique
     } finally {
       setIsSigningOut(false);
+      // Redirection forcée vers la page d'accueil ou de login
+      window.location.href = '/';
     }
   };
 
@@ -158,7 +158,7 @@ const UserMenu = () => {
             const currentUrl = window.location.href;
             // Redirection vers le sous-domaine account avec paramètre de retour
             if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                 window.location.href = `/profile?app=account&returnTo=${encodeURIComponent(currentUrl)}`;
+                 window.location.href = `/?app=account&path=/profile&returnTo=${encodeURIComponent(currentUrl)}`;
             } else {
                 window.location.href = `https://account.sivara.ca/profile?returnTo=${encodeURIComponent(currentUrl)}`;
             }
