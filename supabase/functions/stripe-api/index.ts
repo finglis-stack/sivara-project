@@ -49,6 +49,7 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     })
 
+    // Récupération du profil (commun à plusieurs actions)
     const { data: profile } = await supabaseClient
       .from('profiles')
       .select('stripe_customer_id, has_used_trial, is_pro')
@@ -57,15 +58,66 @@ serve(async (req) => {
 
     let customerId = profile?.stripe_customer_id
 
-    // Gestion Client Inconnu (Réparation auto)
+    // --- SYNC SUBSCRIPTION (NOUVEAU) ---
+    if (action === 'sync_subscription') {
+        if (!customerId) throw new Error("Aucun ID client Stripe associé");
+
+        // On interroge Stripe directement
+        const subscriptions = await stripe.subscriptions.list({
+            customer: customerId,
+            status: 'all', // On veut voir tout, même trialing
+            limit: 1
+        });
+
+        const sub = subscriptions.data[0];
+        let isPro = false;
+        let status = 'none';
+        let endDate = null;
+        let hasUsedTrial = profile.has_used_trial; // On garde l'ancien état par défaut
+
+        if (sub) {
+            status = sub.status;
+            // Actif si 'active' ou 'trialing'
+            isPro = ['active', 'trialing'].includes(status);
+            endDate = new Date(sub.current_period_end * 1000).toISOString();
+            
+            // Si on est en trial ou qu'on l'a été, on marque le flag
+            if (status === 'trialing' || status === 'active') {
+                hasUsedTrial = true;
+            }
+        }
+
+        // Mise à jour forcée via Service Role (contourne RLS si besoin)
+        const serviceClient = createClient(
+            // @ts-ignore
+            Deno.env.get('SUPABASE_URL') ?? '',
+            // @ts-ignore
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        await serviceClient.from('profiles').update({
+            is_pro: isPro,
+            subscription_status: status,
+            subscription_end_date: endDate,
+            has_used_trial: hasUsedTrial, // Mise à jour critique pour empêcher la boucle
+            stripe_subscription_id: sub?.id || null
+        }).eq('id', user.id);
+
+        return new Response(
+            JSON.stringify({ success: true, isPro, status }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+    }
+
+    // Gestion Client Inconnu (Réparation auto pour les autres actions)
     if (customerId) {
         try {
             const existingCustomer = await stripe.customers.retrieve(customerId);
             if (existingCustomer.deleted) {
-                customerId = null; // Il a été supprimé chez Stripe, on recrée
+                customerId = null;
             }
         } catch (e) {
-            customerId = null; // ID invalide ou introuvable
+            customerId = null;
         }
     }
 
@@ -91,7 +143,6 @@ serve(async (req) => {
 
       const isTrialAllowed = requestedTrial && !profile?.has_used_trial && !profile?.is_pro;
 
-      // 1. Vérifier s'il y a déjà un abonnement incomplet pour éviter les doublons
       const existingSubs = await stripe.subscriptions.list({
         customer: customerId,
         status: 'incomplete',
@@ -103,10 +154,8 @@ serve(async (req) => {
       let subscription;
       
       if (existingSubs.data.length > 0) {
-        // On réutilise l'existant
         subscription = existingSubs.data[0];
       } else {
-        // On crée un nouveau
         subscription = await stripe.subscriptions.create({
             customer: customerId,
             items: [{ price: priceId }],
@@ -118,7 +167,6 @@ serve(async (req) => {
       }
 
       let clientSecret;
-      // LOGIQUE CRITIQUE: Si SetupIntent (essai) ou PaymentIntent (paiement)
       if (isTrialAllowed && subscription.pending_setup_intent) {
         // @ts-ignore
         clientSecret = subscription.pending_setup_intent.client_secret;
@@ -126,7 +174,6 @@ serve(async (req) => {
         // @ts-ignore
         clientSecret = subscription.latest_invoice.payment_intent.client_secret;
       } else {
-        // Fallback rare
         throw new Error("Impossible de récupérer le secret de paiement.");
       }
 
