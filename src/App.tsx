@@ -72,7 +72,8 @@ const AppRoutes = () => {
       {/* --- APPLICATION: ACCOUNT --- */}
       {currentApp === 'account' && (
         <>
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          {/* CORRECTION ICI : On pointe vers le profil par défaut, la ProtectedRoute gérera la sécu */}
+          <Route path="/" element={<Navigate to="/profile" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/pricing" element={<Pricing />} />
@@ -87,7 +88,8 @@ const AppRoutes = () => {
               <Profile />
             </ProtectedRoute>
           } />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          {/* Fallback pour éviter le flash si route inconnue */}
+          <Route path="*" element={<Navigate to="/profile" replace />} />
         </>
       )}
 

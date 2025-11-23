@@ -256,6 +256,11 @@ const Docs = () => {
 
   // --- ACTIONS ---
 
+  // CORRECTION NAVIGATION: Ajout de ?app=docs pour éviter de sortir du routeur Docs
+  const handleNavigate = (id: string) => {
+    navigate(`/${id}?app=docs`);
+  };
+
   const createItem = async (type: 'file' | 'folder') => {
     if (!user) return;
     try {
@@ -282,7 +287,7 @@ const Docs = () => {
         .single();
 
       if (error) throw error;
-      if (type === 'file') navigate(`/${data.id}`);
+      if (type === 'file') handleNavigate(data.id);
       else {
         showSuccess('Dossier créé');
         fetchDocuments();
@@ -400,15 +405,8 @@ const Docs = () => {
   };
 
   const handleNavigateToProfile = () => {
-    const hostname = window.location.hostname;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-    const currentUrl = window.location.href;
-
-    if (isLocal) {
-       window.location.href = `/?app=account&path=/profile&returnTo=${encodeURIComponent(currentUrl)}`;
-    } else {
-       window.location.href = `https://account.sivara.ca/profile?returnTo=${encodeURIComponent(currentUrl)}`;
-    }
+    // CORRECTION: Navigation interne pour mobile sans rechargement complet
+    window.location.href = `/?app=account&path=/profile`;
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -488,39 +486,39 @@ const Docs = () => {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="min-h-screen bg-gray-50 flex flex-col pt-[env(safe-area-inset-top)]">
         <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
-          <div className="container mx-auto px-6 py-4">
+          <div className="container mx-auto px-4 lg:px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <Button variant="ghost" onClick={() => window.location.href = '/?app=www'} className="text-gray-600 hover:text-gray-900 hidden md:flex">
-                  <ArrowLeft className="mr-2 h-4 w-4" /> Sivara Search
+                <Button variant="ghost" onClick={() => window.location.href = '/?app=mobile'} className="text-gray-600 hover:text-gray-900 flex">
+                  <ArrowLeft className="mr-2 h-4 w-4" /> <span className="hidden md:inline">Retour</span>
                 </Button>
                 <div className="h-6 w-px bg-gray-200 hidden md:block"></div>
                 <div className="flex items-center gap-3">
-                  <img src="/docs-icon.png" alt="Docs" className="h-8 w-8" />
-                  <h1 className="text-2xl font-light text-gray-900">Docs</h1>
+                  <img src="/docs-icon.png" alt="Docs" className="h-8 w-8 hidden sm:block" />
+                  <h1 className="text-xl sm:text-2xl font-light text-gray-900">Docs</h1>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="relative w-64 hidden md:block">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <div className="flex items-center gap-2 sm:gap-4">
+                <div className="relative w-40 sm:w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
                     type="text"
                     placeholder="Rechercher..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
+                    className="pl-9 h-9 bg-gray-50 border-gray-200 focus:bg-white transition-colors text-sm"
                   />
                 </div>
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                      <Avatar className="h-10 w-10">
+                    <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                      <Avatar className="h-8 w-8">
                         {profile?.avatar_url && <AvatarImage src={profile.avatar_url} />}
-                        <AvatarFallback className="bg-gray-700 text-white">{user.email?.substring(0,2).toUpperCase()}</AvatarFallback>
+                        <AvatarFallback className="bg-gray-700 text-white text-xs">{user.email?.substring(0,2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
@@ -539,11 +537,11 @@ const Docs = () => {
           </div>
         </header>
 
-        <div className="flex-1 container mx-auto px-6 py-8">
+        <div className="flex-1 container mx-auto px-4 lg:px-6 py-4 lg:py-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
               {breadcrumbs.map((crumb, index) => (
-                <div key={index} className="flex items-center">
+                <div key={index} className="flex items-center whitespace-nowrap">
                   {index > 0 && <ChevronRight className="h-4 w-4 text-gray-400 mx-1" />}
                   <DroppableBreadcrumb 
                     folder={crumb} 
@@ -554,31 +552,32 @@ const Docs = () => {
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 justify-between sm:justify-end">
                {/* Filters */}
                <div className="flex bg-gray-100 rounded-lg p-1 mr-2">
                   <button onClick={() => setFilter('all')} className={`px-3 py-1 text-xs font-medium rounded transition-all ${filter === 'all' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Tous</button>
-                  <button onClick={() => setFilter('starred')} className={`px-3 py-1 text-xs font-medium rounded transition-all flex items-center gap-1 ${filter === 'starred' ? 'bg-white shadow text-amber-600' : 'text-gray-500 hover:text-gray-700'}`}><Star className="h-3 w-3" /> Favoris</button>
+                  <button onClick={() => setFilter('starred')} className={`px-3 py-1 text-xs font-medium rounded transition-all flex items-center gap-1 ${filter === 'starred' ? 'bg-white shadow text-amber-600' : 'text-gray-500 hover:text-gray-700'}`}><Star className="h-3 w-3" /></button>
                   <button onClick={() => setFilter('recent')} className={`px-3 py-1 text-xs font-medium rounded transition-all ${filter === 'recent' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Récents</button>
                </div>
 
-               {/* View Toggle */}
-               <div className="flex bg-gray-100 rounded-lg p-1">
-                  <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-white shadow-sm' : 'text-gray-500'}`}><Grid3x3 className="h-4 w-4" /></button>
-                  <button onClick={() => setViewMode('list')} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-500'}`}><List className="h-4 w-4" /></button>
+               <div className="flex items-center gap-2">
+                   {/* View Toggle */}
+                   <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-white shadow-sm' : 'text-gray-500'}`}><Grid3x3 className="h-4 w-4" /></button>
+                      <button onClick={() => setViewMode('list')} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-500'}`}><List className="h-4 w-4" /></button>
+                   </div>
+                   <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button className="bg-gray-900 hover:bg-black text-white gap-2 h-9">
+                          <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Nouveau</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => createItem('file')}><FileText className="mr-2 h-4 w-4" /> Document</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => createItem('folder')}><FolderPlus className="mr-2 h-4 w-4" /> Dossier</DropdownMenuItem>
+                      </DropdownMenuContent>
+                   </DropdownMenu>
                </div>
-               <div className="w-px h-6 bg-gray-200 mx-2"></div>
-               <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="bg-gray-900 hover:bg-black text-white gap-2">
-                      <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Nouveau</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => createItem('file')}><FileText className="mr-2 h-4 w-4" /> Document</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => createItem('folder')}><FolderPlus className="mr-2 h-4 w-4" /> Dossier</DropdownMenuItem>
-                  </DropdownMenuContent>
-               </DropdownMenu>
             </div>
           </div>
 
@@ -613,7 +612,7 @@ const Docs = () => {
                   key={doc.id} 
                   doc={doc} 
                   viewMode={viewMode} 
-                  onClick={(d: any) => navigate(`/${d.id}`)} 
+                  onClick={(d: any) => handleNavigate(d.id)} 
                   onNavigate={enterFolder}
                 >
                    {viewMode === 'grid' ? (
