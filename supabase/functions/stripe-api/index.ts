@@ -58,36 +58,51 @@ serve(async (req) => {
 
     let customerId = profile?.stripe_customer_id
 
-    // --- SYNC SUBSCRIPTION (NOUVEAU) ---
+    // --- SYNC SUBSCRIPTION (SOURCE DE VÉRITÉ = STRIPE) ---
     if (action === 'sync_subscription') {
         if (!customerId) throw new Error("Aucun ID client Stripe associé");
 
-        // On interroge Stripe directement
+        // On récupère l'abonnement le plus récent, quel que soit son statut
         const subscriptions = await stripe.subscriptions.list({
             customer: customerId,
-            status: 'all', // On veut voir tout, même trialing
-            limit: 1
+            limit: 1,
+            status: 'all', // Important: on veut voir même les annulés ou impayés
+            expand: ['data.latest_invoice']
         });
 
         const sub = subscriptions.data[0];
+        
+        // Valeurs par défaut (si aucun abo trouvé)
         let isPro = false;
         let status = 'none';
         let endDate = null;
-        let hasUsedTrial = profile.has_used_trial; // On garde l'ancien état par défaut
+        let stripeSubscriptionId = null;
+        // On garde la valeur DB par défaut, car Stripe ne garde pas l'historique "a eu un essai" sur l'objet Customer facilement
+        // Sauf si l'abonnement actuel prouve le contraire
+        let hasUsedTrial = profile.has_used_trial; 
 
         if (sub) {
+            stripeSubscriptionId = sub.id;
             status = sub.status;
-            // Actif si 'active' ou 'trialing'
-            isPro = ['active', 'trialing'].includes(status);
-            endDate = new Date(sub.current_period_end * 1000).toISOString();
             
-            // Si on est en trial ou qu'on l'a été, on marque le flag
-            if (status === 'trialing' || status === 'active') {
+            // Logique stricte : Actif seulement si active ou trialing
+            // Note: 'past_due' n'est PAS pro (paiement échoué)
+            isPro = ['active', 'trialing'].includes(status);
+            
+            // DATE DE FIN : Source unique = Stripe current_period_end
+            endDate = new Date(sub.current_period_end * 1000).toISOString();
+
+            // LOGIQUE ESSAI : Si l'abonnement Stripe a des dates d'essai, c'est que l'essai est consommé/en cours
+            if (sub.trial_start || sub.trial_end) {
+                hasUsedTrial = true;
+            }
+            // Si le statut est directement 'trialing', c'est évident
+            if (status === 'trialing') {
                 hasUsedTrial = true;
             }
         }
 
-        // Mise à jour forcée via Service Role (contourne RLS si besoin)
+        // Mise à jour forcée via Service Role (contourne RLS)
         const serviceClient = createClient(
             // @ts-ignore
             Deno.env.get('SUPABASE_URL') ?? '',
@@ -95,16 +110,17 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         );
 
+        // On écrase la DB avec les infos Stripe
         await serviceClient.from('profiles').update({
             is_pro: isPro,
             subscription_status: status,
             subscription_end_date: endDate,
-            has_used_trial: hasUsedTrial, // Mise à jour critique pour empêcher la boucle
-            stripe_subscription_id: sub?.id || null
+            has_used_trial: hasUsedTrial,
+            stripe_subscription_id: stripeSubscriptionId
         }).eq('id', user.id);
 
         return new Response(
-            JSON.stringify({ success: true, isPro, status }),
+            JSON.stringify({ success: true, isPro, status, endDate }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
     }
@@ -141,6 +157,7 @@ serve(async (req) => {
     if (action === 'create_subscription_intent') {
       if (!priceId) throw new Error("Price ID manquant");
 
+      // Double vérification stricte pour l'essai
       const isTrialAllowed = requestedTrial && !profile?.has_used_trial && !profile?.is_pro;
 
       const existingSubs = await stripe.subscriptions.list({

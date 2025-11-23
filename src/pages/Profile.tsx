@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface Profile {
   first_name: string;
@@ -49,6 +55,7 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showAvatarDialog, setShowAvatarDialog] = useState(false);
@@ -69,35 +76,52 @@ const Profile = () => {
     is_pro: false,
   });
 
+  const fetchProfile = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user!.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setProfile(data);
+      }
+    } catch (error: any) {
+      console.error('Error fetching profile:', error);
+      showError('Erreur lors du chargement du profil');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!user) {
       navigate('/login');
       return;
     }
-
-    const fetchProfile = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-
-        if (error) throw error;
-
-        if (data) {
-          setProfile(data);
-        }
-      } catch (error: any) {
-        console.error('Error fetching profile:', error);
-        showError('Erreur lors du chargement du profil');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchProfile();
   }, [user, navigate]);
+
+  const handleSyncStripe = async () => {
+    setIsSyncing(true);
+    try {
+        const { data, error } = await supabase.functions.invoke('stripe-api', {
+            body: { action: 'sync_subscription' }
+        });
+        if (error) throw error;
+        
+        // On recharge le profil localement après la sync serveur
+        await fetchProfile();
+        showSuccess("Statut abonnement synchronisé avec Stripe");
+    } catch (e) {
+        showError("Erreur de synchronisation");
+    } finally {
+        setIsSyncing(false);
+    }
+  };
 
   const handleReturn = () => {
     const returnTo = searchParams.get('returnTo');
@@ -159,7 +183,7 @@ const Profile = () => {
     }
   };
 
-  // ... (Code Avatar existant inchangé : handleFileSelect, handleMouseDown, etc.)
+  // ... (Code Avatar existant inchangé)
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -236,7 +260,13 @@ const Profile = () => {
                         <h2 className="text-3xl md:text-4xl font-light tracking-tight">Passez à <span className="font-semibold">Sivara Pro</span></h2>
                         <p className="text-lg font-light text-white/90 max-w-xl">Débloquez le stockage illimité et la personnalisation avancée. <br className="hidden md:block"/>Essai gratuit de 14 jours, puis 4.99$/mois.</p>
                     </div>
-                    <Button onClick={() => navigate('/pricing')} className="bg-white text-black hover:bg-gray-100 font-medium text-base px-8 py-6 rounded-full shadow-xl transition-all hover:scale-105 hover:shadow-2xl border-0">Voir les offres <ArrowRight className="ml-2 h-5 w-5" /></Button>
+                    <div className="flex items-center gap-3">
+                         {/* Petit bouton de sync discret même pour les non-pros, au cas où */}
+                         <Button variant="ghost" size="icon" onClick={handleSyncStripe} disabled={isSyncing} className="text-white hover:bg-white/10">
+                             <RefreshCw className={`h-5 w-5 ${isSyncing ? 'animate-spin' : ''}`} />
+                         </Button>
+                         <Button onClick={() => navigate('/pricing')} className="bg-white text-black hover:bg-gray-100 font-medium text-base px-8 py-6 rounded-full shadow-xl transition-all hover:scale-105 hover:shadow-2xl border-0">Voir les offres <ArrowRight className="ml-2 h-5 w-5" /></Button>
+                    </div>
                 </div>
             </div>
         ) : (
@@ -246,7 +276,21 @@ const Profile = () => {
                       <span className="text-2xl font-bold text-white">S</span>
                    </div>
                    <div>
-                      <h2 className="text-2xl font-bold flex items-center gap-2">Abonnement Pro Actif <span className="bg-green-500 text-xs px-2 py-0.5 rounded-full">Actif</span></h2>
+                      <div className="flex items-center gap-3">
+                          <h2 className="text-2xl font-bold flex items-center gap-2">Abonnement Pro Actif <span className="bg-green-500 text-xs px-2 py-0.5 rounded-full">Actif</span></h2>
+                          <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button onClick={handleSyncStripe} disabled={isSyncing} className="text-gray-400 hover:text-white transition-colors p-1">
+                                        <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Forcer la synchronisation avec Stripe</p>
+                                </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                      </div>
                       <p className="text-gray-400 mt-1">
                           {profile.subscription_status === 'trialing' 
                             ? `Essai gratuit jusqu'au ${formatDate(profile.subscription_end_date!)}` 
@@ -290,8 +334,6 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* ... (Reste de la grille Mes Applications / Infos Perso inchangée) ... */}
-        {/* J'inclus le reste du code précédent pour ne pas casser le fichier */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
           <div className="flex items-center gap-3 mb-6">
             <Grid3x3 className="h-6 w-6 text-gray-700" />
@@ -321,7 +363,7 @@ const Profile = () => {
             <CardHeader><CardTitle className="font-light text-xl">Contact</CardTitle><CardDescription>Gérez vos informations de contact</CardDescription></CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-2"><Label htmlFor="email" className="text-sm font-medium">Email</Label><Input id="email" type="email" value={user?.email || ''} disabled className="h-11 bg-gray-50" /><p className="text-xs text-gray-500">L'email ne peut pas être modifié</p></div>
-              <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-medium">Numéro de téléphone</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[140px] h-11"><SelectValue /></SelectTrigger><SelectContent>{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code}><span className="flex items-center gap-2"><span>{country.flag}</span><span>{country.code}</span></span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-11" /></div></div>
+              <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-medium">Numéro de téléphone</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[140px] h-11"><SelectValue /></SelectTrigger><SelectContent>{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code}><span>{country.flag} {country.code}</span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-11" /></div></div>
             </CardContent>
           </Card>
         </div>
