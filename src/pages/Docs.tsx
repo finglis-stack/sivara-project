@@ -405,8 +405,8 @@ const Docs = () => {
   };
 
   const handleNavigateToProfile = () => {
-    // CORRECTION: Navigation interne pour mobile sans rechargement complet
-    window.location.href = `/?app=account&path=/profile`;
+    // FORCE URL PRODUCTION
+    window.location.href = 'https://account.sivara.ca/profile';
   };
 
   const handleDragStart = (event: DragStartEvent) => {

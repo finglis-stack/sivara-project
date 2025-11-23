@@ -282,9 +282,9 @@ const DocEditor = () => {
       const { data: doc, error } = await supabase.from('documents').select('*').eq('id', id).single();
       if (error || !doc) {
         if (!user) {
+           // FORCE LOGIN URL PRODUCTION
            const currentUrl = window.location.href;
-           const isLocal = window.location.hostname === 'localhost';
-           const loginUrl = isLocal ? `/?app=account&path=/login&returnTo=${encodeURIComponent(currentUrl)}` : `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`;
+           const loginUrl = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`;
            window.location.href = loginUrl;
            return;
         }
@@ -321,8 +321,26 @@ const DocEditor = () => {
   const updatePublicPermission = async (perm: 'read' | 'write') => { if (!document) return; await supabase.from('documents').update({ public_permission: perm }).eq('id', id); setDocument({ ...document, public_permission: perm }); };
   const inviteUser = async () => { if (!newInviteEmail) return; const { error } = await supabase.from('document_access').insert({ document_id: id, email: newInviteEmail.toLowerCase().trim(), permission: invitePermission }); if (error) showError("Erreur invitation"); else { showSuccess("Invitation envoyée"); setNewInviteEmail(''); fetchAccessList(); } };
   const removeAccess = async (accessId: string) => { await supabase.from('document_access').delete().eq('id', accessId); fetchAccessList(); };
-  const copyShareLink = () => { const link = `${window.location.origin}/${id}`; navigator.clipboard.writeText(link); showSuccess("Lien copié !"); };
-  const handleLogin = () => { const currentUrl = window.location.href; const isLocal = window.location.hostname === 'localhost'; const loginUrl = isLocal ? `/?app=account&path=/login&returnTo=${encodeURIComponent(currentUrl)}` : `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`; window.location.href = loginUrl; };
+  
+  // === CORRECTION LIEN PARTAGE ===
+  const copyShareLink = () => { 
+    // FORCE DOMAINE PRODUCTION
+    const link = `https://docs.sivara.ca/${id}`; 
+    navigator.clipboard.writeText(link); 
+    showSuccess("Lien copié : " + link); 
+  };
+  
+  // === CORRECTION NAVIGATION PROFIL ===
+  const handleNavigateToProfile = () => {
+    // FORCE DOMAINE PRODUCTION
+    window.location.href = 'https://account.sivara.ca/profile';
+  };
+
+  const handleLogin = () => { 
+    const currentUrl = window.location.href; 
+    window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`; 
+  };
+  
   const CurrentIcon = AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || FileText;
   const getIconTextColor = (bgColor: string) => { const hex = bgColor.replace('#', ''); const r = parseInt(hex.substr(0, 2), 16); const g = parseInt(hex.substr(2, 2), 16); const b = parseInt(hex.substr(4, 2), 16); return ((r * 299 + g * 587 + b * 114) / 1000) > 155 ? '#1F2937' : '#FFFFFF'; };
 

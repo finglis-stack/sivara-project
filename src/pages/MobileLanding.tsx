@@ -29,19 +29,10 @@ const MobileLanding = () => {
     }
   }, [user]);
 
-  // Navigation interne FLUIDE (sans rechargement)
   const openApp = (appName: string) => {
     if (appName === 'account') {
-        // Pour le profil, on navigue vers account mais on pointe vers /profile directement
-        navigate(`/?app=account`);
-        // Petit hack : comme le router switch, on laisse le temps au mount, puis on ira sur /profile si besoin
-        // Mais App.tsx redirige / vers /login, puis ProtectedRoute vers Profile
-        // Le mieux est de cibler directement la route dans App.tsx si possible, mais ici on change le contexte global.
-        setTimeout(() => {
-             window.history.pushState(null, '', '/profile');
-             // On force un petit événement de navigation pour que le Router interne le capte si besoin, 
-             // mais avec le changement de contexte App.tsx, le router est remonté.
-        }, 100);
+        // FORCE URL DE PRODUCTION ABSOLUE
+        window.location.href = 'https://account.sivara.ca/profile';
     } else {
         navigate(`/?app=${appName}`);
     }
@@ -97,11 +88,9 @@ const MobileLanding = () => {
   }
 
   // --- ÉCRAN CONNECTÉ (DASHBOARD) ---
-  // Ajout de pt-[env(safe-area-inset-top)]
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans pt-[env(safe-area-inset-top)]">
-      {/* Header avec padding-top additionnel pour la sécurité */}
-      <header className="bg-white px-6 py-6 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
+      <header className="bg-white px-6 pt-12 pb-6 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
         <div>
           <p className="text-gray-500 text-sm font-medium">Bonjour,</p>
           <h1 className="text-2xl font-bold text-gray-900">{profile?.first_name || user.email?.split('@')[0]}</h1>
@@ -114,13 +103,11 @@ const MobileLanding = () => {
 
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
         
-        {/* Search Bar Fake */}
         <div onClick={() => openApp('www')} className="bg-white rounded-full shadow-sm border border-gray-200 p-4 flex items-center gap-3 cursor-pointer active:scale-95 transition-transform">
            <Search className="text-gray-400 w-5 h-5" />
            <span className="text-gray-400">Rechercher sur le web...</span>
         </div>
 
-        {/* Apps Grid */}
         <div className="grid grid-cols-2 gap-4">
            <Card 
              onClick={() => openApp('mail')}
@@ -175,7 +162,6 @@ const MobileLanding = () => {
            </Card>
         </div>
 
-        {/* Notifications / Status */}
         <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex items-center gap-4 mb-8">
            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600 shrink-0">
               <Shield className="w-5 h-5" />
@@ -186,7 +172,6 @@ const MobileLanding = () => {
            </div>
         </div>
 
-        {/* Logout */}
         <Button variant="ghost" onClick={() => signOut()} className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 h-12">
            <LogOut className="w-4 h-4 mr-2" /> Se déconnecter
         </Button>
