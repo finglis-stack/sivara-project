@@ -33,9 +33,15 @@ const MobileLanding = () => {
   };
 
   const handleLogin = () => {
-    // On force le contexte "account" et on définit le retour vers "mobile"
-    const returnUrl = '/?app=mobile';
-    window.location.href = `/login?app=account&returnTo=${encodeURIComponent(returnUrl)}`;
+    // On redirige vers le VRAI site externe, en demandant un retour sur l'app native
+    // Si on est en dev local, on utilise localhost, sinon prod
+    const isLocal = window.location.hostname === 'localhost';
+    const baseUrl = isLocal ? 'http://localhost:8080' : 'https://account.sivara.ca';
+    
+    // Callback vers l'app native
+    const callbackUrl = 'com.example.sivara://login-callback';
+    
+    window.location.href = `${baseUrl}/login?returnTo=${encodeURIComponent(callbackUrl)}`;
   };
 
   // --- ÉCRAN NON CONNECTÉ ---

@@ -24,7 +24,19 @@ const Login = () => {
   const returnTo = searchParams.get('returnTo') || '/';
 
   // Fonction sécurisée pour rediriger (interne ou externe)
-  const handleRedirect = (url: string) => {
+  const handleRedirect = async (url: string) => {
+    // DÉTECTION MOBILE : Si l'URL de retour est un schéma custom (ex: com.example.sivara://)
+    // On doit attacher la session à l'URL pour que l'app puisse se connecter
+    if (url.startsWith('com.example.sivara') || url.includes('://')) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            // On attache les tokens en hash fragments
+            const redirectUrl = `${url}#access_token=${session.access_token}&refresh_token=${session.refresh_token}`;
+            window.location.href = redirectUrl;
+            return;
+        }
+    }
+
     if (url.startsWith('http') || url.startsWith('//')) {
       window.location.href = url;
     } else {
@@ -115,7 +127,7 @@ const Login = () => {
       if (error) throw error;
 
       showSuccess('Connexion réussie !');
-      handleRedirect(returnTo);
+      // Le useEffect se chargera de la redirection une fois 'user' mis à jour
     } catch (error: any) {
       console.error('Login error:', error);
       showError(error.message || 'Mot de passe incorrect');
