@@ -384,7 +384,7 @@ const Docs = () => {
     }
   };
 
-  // --- IMPORT PROPRIÉTAIRE .SIVARA ---
+  // --- IMPORT PROPRIÉTAIRE .SIVARA (MIGRATION SÉCURISÉE) ---
   const handleImportSivara = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -398,52 +398,54 @@ const Docs = () => {
             const data = JSON.parse(content);
 
             // 1. Vérification du format
-            if (data.header !== 'SIVARA_SECURE_DOC_V1' || !data.id) {
+            if (data.header !== 'SIVARA_SECURE_DOC_V1' || !data.id || !data.owner_id) {
                 throw new Error("Format de fichier invalide");
             }
 
-            // 2. Vérification des droits sur le serveur (RLS)
-            const { data: existingDoc, error } = await supabase
+            // 2. DÉCHIFFREMENT (Clé du créateur original)
+            // On bascule temporairement le service de chiffrement sur l'ID du créateur du fichier
+            await encryptionService.initialize(data.owner_id);
+            
+            const decryptedTitle = await encryptionService.decrypt(data.encrypted_title, data.iv);
+            // Si c'est un fichier, on déchiffre le contenu, sinon c'est vide (dossier)
+            const decryptedContent = data.encrypted_content ? await encryptionService.decrypt(data.encrypted_content, data.iv) : '';
+
+            // 3. RECHIFFREMENT (Clé de l'utilisateur actuel)
+            // On revient à la clé de l'utilisateur connecté
+            await encryptionService.initialize(user.id);
+            
+            const { encrypted: newEncTitle, iv: newIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
+            const { encrypted: newEncContent } = await encryptionService.encrypt(decryptedContent, newIv);
+
+            // 4. CRÉATION DU NOUVEAU DOCUMENT (Copie propre)
+            // On ignore l'ID du fichier et on laisse la base en créer un nouveau
+            // Cela garantit que c'est un NOUVEAU document dont l'utilisateur est propriétaire
+            const { data: newDoc, error: insertError } = await supabase
                 .from('documents')
-                .select('id')
-                .eq('id', data.id)
+                .insert({
+                    title: newEncTitle,
+                    content: newEncContent,
+                    encryption_iv: newIv,
+                    owner_id: user.id, // L'utilisateur actuel devient propriétaire
+                    type: 'file',
+                    visibility: 'private',
+                    icon: data.icon || 'FileText',
+                    color: data.color || '#3B82F6',
+                    parent_id: currentFolderId // Importé dans le dossier courant
+                })
+                .select()
                 .single();
-
-            // CAS 1: Le document existe et l'utilisateur a accès (partage ou propriétaire)
-            if (existingDoc) {
-                showSuccess("Accès autorisé. Ouverture du document...");
-                handleNavigate(data.id);
-                return;
-            }
-
-            // CAS 2: Le document n'existe pas sur le serveur
-            // Si l'utilisateur est le propriétaire indiqué dans le fichier, on restaure
-            if (data.owner_id === user.id) {
-                const { error: insertError } = await supabase
-                    .from('documents')
-                    .insert({
-                        id: data.id,
-                        title: data.encrypted_title,
-                        content: data.encrypted_content,
-                        encryption_iv: data.iv,
-                        owner_id: user.id,
-                        type: 'file',
-                        visibility: 'private'
-                    });
-                
-                if (insertError) throw insertError;
-                
-                showSuccess("Document restauré depuis la sauvegarde");
-                handleNavigate(data.id);
-            } else {
-                // CAS 3: L'utilisateur n'est pas le propriétaire et le doc n'existe plus
-                // C'est ici que la sécurité joue : on refuse l'accès car on ne peut pas vérifier les droits
-                showError("Accès refusé : Vous n'avez pas les droits sur ce document ou il a été supprimé par son propriétaire.");
-            }
+            
+            if (insertError) throw insertError;
+            
+            showSuccess("Document importé et sécurisé avec succès");
+            fetchDocuments(); // Rafraîchir la liste
 
         } catch (err: any) {
             console.error(err);
-            showError(err.message || "Erreur lors de l'importation");
+            // Important : On restaure le service de chiffrement sur l'utilisateur actuel en cas d'erreur
+            if (user) await encryptionService.initialize(user.id);
+            showError("Erreur lors de l'importation : clé incompatible ou fichier corrompu.");
         } finally {
             setIsImporting(false);
             if (importInputRef.current) importInputRef.current.value = '';

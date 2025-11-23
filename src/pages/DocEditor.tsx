@@ -340,7 +340,7 @@ const DocEditor = () => {
   // --- EXPORT PROPRIÉTAIRE ---
   const handleExportSivara = () => {
     if (!document) return;
-    // On exporte les données CHIFFRÉES (telles que dans la DB)
+    // On exporte les données CHIFFRÉES (telles que dans la DB) avec l'icône et la couleur
     const exportData = {
       header: 'SIVARA_SECURE_DOC_V1',
       id: document.id,
@@ -348,7 +348,10 @@ const DocEditor = () => {
       encrypted_content: document.content,
       iv: document.encryption_iv,
       owner_id: document.owner_id,
-      exported_at: new Date().toISOString()
+      exported_at: new Date().toISOString(),
+      // AJOUT : Icône et couleur
+      icon: document.icon || 'FileText',
+      color: document.color || '#3B82F6'
     };
     
     const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
