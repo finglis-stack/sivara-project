@@ -77,6 +77,8 @@ interface Profile {
 }
 
 // --- CONSTANTS ---
+const DEFAULT_COVER = '/default-cover.jpg';
+
 const AVAILABLE_ICONS = [
   { name: 'Folder', icon: Folder }, { name: 'Star', icon: Star },
   { name: 'Heart', icon: Home }, { name: 'Briefcase', icon: FolderPlus },
@@ -271,6 +273,8 @@ const Docs = () => {
           encryption_iv: iv,
           icon: type === 'folder' ? 'Folder' : 'FileText',
           color: type === 'folder' ? '#6B7280' : '#3B82F6',
+          // Si c'est un dossier, on met l'image par défaut pour éviter le bug d'affichage
+          cover_url: type === 'folder' ? DEFAULT_COVER : null,
           type: type,
           parent_id: currentFolderId
         })
@@ -333,12 +337,6 @@ const Docs = () => {
         icon: customIcon,
         color: customColor,
       };
-      
-      // Si on n'utilise pas de cover (mode icône), on peut vouloir vider l'url ou non.
-      // Ici on garde la cover_url en base mais l'UI priorisera l'affichage selon la dernière action
-      // Simplifions : si on sauvegarde depuis l'onglet icône, on peut "cacher" la cover en mettant une cover_url vide ?
-      // Non, gardons ça simple.
-      
       await supabase.from('documents').update(updateData).eq('id', customizeDialog.doc.id);
       showSuccess('Apparence mise à jour');
       setCustomizeDialog({ isOpen: false, doc: null });
@@ -607,17 +605,17 @@ const Docs = () => {
                   onNavigate={enterFolder}
                 >
                    {viewMode === 'grid' ? (
-                      <Card className="relative h-48 overflow-hidden hover:shadow-md transition-shadow cursor-pointer border-gray-200 flex flex-col group bg-white">
-                         {/* Cover Image for Folder */}
-                         {doc.type === 'folder' && doc.cover_url ? (
+                      <Card className="relative h-60 overflow-hidden hover:shadow-md transition-shadow cursor-pointer border-gray-200 flex flex-col group bg-white">
+                         {/* Cover Image - Toujours présente pour les dossiers grâce au fallback DEFAULT_COVER */}
+                         {doc.type === 'folder' ? (
                              <div className="absolute inset-0 h-24 w-full bg-gray-100">
-                                 <img src={doc.cover_url} alt="Cover" className="w-full h-full object-cover" />
+                                 <img src={doc.cover_url || DEFAULT_COVER} alt="Cover" className="w-full h-full object-cover" />
                              </div>
                          ) : null}
                          
-                         <div className={`p-4 flex flex-col h-full justify-between z-10 ${doc.type === 'folder' && doc.cover_url ? 'pt-28' : ''}`}>
+                         <div className={`p-4 flex flex-col h-full justify-between z-10 ${doc.type === 'folder' ? 'pt-20' : ''}`}>
                             <div className="flex justify-between items-start">
-                                <div className={`h-10 w-10 rounded-lg flex items-center justify-center shadow-sm ${doc.type === 'folder' && !doc.cover_url ? 'bg-gray-100' : ''}`} style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : (doc.cover_url ? 'white' : undefined) }}>
+                                <div className={`h-10 w-10 rounded-lg flex items-center justify-center shadow-sm ${doc.type === 'folder' ? 'bg-white ring-1 ring-gray-100' : ''}`} style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}>
                                    {doc.type === 'folder' ? <Folder className="h-5 w-5 text-gray-500" /> : <FileText className="h-5 w-5 text-white" />}
                                 </div>
                                 <div className="flex gap-1">
@@ -636,7 +634,7 @@ const Docs = () => {
                                    </DropdownMenu>
                                 </div>
                             </div>
-                            <div>
+                            <div className="mt-2">
                                 <h3 className="font-medium text-gray-900 truncate mb-1" title={doc.decryptedTitle}>{doc.decryptedTitle}</h3>
                                 <p className="text-xs text-gray-500">
                                    {doc.type === 'folder' ? 'Dossier' : new Date(doc.updated_at).toLocaleDateString()}
@@ -647,7 +645,7 @@ const Docs = () => {
                    ) : (
                       <div className="flex items-center p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer group">
                          <div className={`h-10 w-10 rounded flex items-center justify-center mr-4 ${doc.type === 'folder' ? 'bg-gray-100' : ''}`} style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}>
-                            {doc.type === 'folder' && doc.cover_url ? <img src={doc.cover_url} className="h-full w-full object-cover rounded" /> : (doc.type === 'folder' ? <Folder className="h-5 w-5 text-gray-500" /> : <FileText className="h-5 w-5 text-white" />)}
+                            {doc.type === 'folder' ? <img src={doc.cover_url || DEFAULT_COVER} className="h-full w-full object-cover rounded" /> : <FileText className="h-5 w-5 text-white" />}
                          </div>
                          <div className="flex-1 min-w-0">
                             <h3 className="font-medium text-gray-900 truncate flex items-center gap-2">
