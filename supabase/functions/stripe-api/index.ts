@@ -49,7 +49,7 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     })
 
-    // Récupération du profil (commun à plusieurs actions)
+    // Récupération du profil
     const { data: profile } = await supabaseClient
       .from('profiles')
       .select('stripe_customer_id, has_used_trial, is_pro')
@@ -58,51 +58,36 @@ serve(async (req) => {
 
     let customerId = profile?.stripe_customer_id
 
-    // --- SYNC SUBSCRIPTION (SOURCE DE VÉRITÉ = STRIPE) ---
+    // --- SYNC SUBSCRIPTION ---
     if (action === 'sync_subscription') {
         if (!customerId) throw new Error("Aucun ID client Stripe associé");
 
-        // On récupère l'abonnement le plus récent, quel que soit son statut
         const subscriptions = await stripe.subscriptions.list({
             customer: customerId,
             limit: 1,
-            status: 'all', // Important: on veut voir même les annulés ou impayés
+            status: 'all', 
             expand: ['data.latest_invoice']
         });
 
         const sub = subscriptions.data[0];
         
-        // Valeurs par défaut (si aucun abo trouvé)
         let isPro = false;
         let status = 'none';
         let endDate = null;
         let stripeSubscriptionId = null;
-        // On garde la valeur DB par défaut, car Stripe ne garde pas l'historique "a eu un essai" sur l'objet Customer facilement
-        // Sauf si l'abonnement actuel prouve le contraire
         let hasUsedTrial = profile.has_used_trial; 
 
         if (sub) {
             stripeSubscriptionId = sub.id;
             status = sub.status;
-            
-            // Logique stricte : Actif seulement si active ou trialing
-            // Note: 'past_due' n'est PAS pro (paiement échoué)
             isPro = ['active', 'trialing'].includes(status);
-            
-            // DATE DE FIN : Source unique = Stripe current_period_end
             endDate = new Date(sub.current_period_end * 1000).toISOString();
 
-            // LOGIQUE ESSAI : Si l'abonnement Stripe a des dates d'essai, c'est que l'essai est consommé/en cours
-            if (sub.trial_start || sub.trial_end) {
-                hasUsedTrial = true;
-            }
-            // Si le statut est directement 'trialing', c'est évident
-            if (status === 'trialing') {
+            if (sub.trial_start || sub.trial_end || status === 'trialing') {
                 hasUsedTrial = true;
             }
         }
 
-        // Mise à jour forcée via Service Role (contourne RLS)
         const serviceClient = createClient(
             // @ts-ignore
             Deno.env.get('SUPABASE_URL') ?? '',
@@ -110,7 +95,6 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         );
 
-        // On écrase la DB avec les infos Stripe
         await serviceClient.from('profiles').update({
             is_pro: isPro,
             subscription_status: status,
@@ -125,13 +109,11 @@ serve(async (req) => {
         );
     }
 
-    // Gestion Client Inconnu (Réparation auto pour les autres actions)
+    // Gestion Client Inconnu
     if (customerId) {
         try {
             const existingCustomer = await stripe.customers.retrieve(customerId);
-            if (existingCustomer.deleted) {
-                customerId = null;
-            }
+            if (existingCustomer.deleted) customerId = null;
         } catch (e) {
             customerId = null;
         }
@@ -153,52 +135,66 @@ serve(async (req) => {
       await serviceClient.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
     }
 
-    // --- SUBSCRIPTION INTENT ---
+    // --- SUBSCRIPTION INTENT (CORRECTION ICI) ---
     if (action === 'create_subscription_intent') {
       if (!priceId) throw new Error("Price ID manquant");
 
-      // Double vérification stricte pour l'essai
       const isTrialAllowed = requestedTrial && !profile?.has_used_trial && !profile?.is_pro;
 
+      // FIX: On cherche TOUS les statuts, pas juste incomplete
+      // Cela évite de recréer un abonnement si l'utilisateur est déjà en trialing ou active
       const existingSubs = await stripe.subscriptions.list({
         customer: customerId,
-        status: 'incomplete',
-        limit: 1,
         price: priceId,
+        limit: 10, // Marge de sécurité
+        status: 'all', 
         expand: ['data.latest_invoice.payment_intent', 'data.pending_setup_intent']
       });
 
       let subscription;
+
+      // 1. Priorité aux abonnements déjà actifs ou en essai (pour ne pas dupliquer)
+      const activeOrTrialing = existingSubs.data.find((s: any) => ['active', 'trialing'].includes(s.status));
       
-      if (existingSubs.data.length > 0) {
-        subscription = existingSubs.data[0];
+      // 2. Sinon, on cherche un incomplet (panier abandonné)
+      const incomplete = existingSubs.data.find((s: any) => s.status === 'incomplete');
+
+      if (activeOrTrialing) {
+          subscription = activeOrTrialing;
+      } else if (incomplete) {
+          subscription = incomplete;
       } else {
-        subscription = await stripe.subscriptions.create({
-            customer: customerId,
-            items: [{ price: priceId }],
-            payment_behavior: 'default_incomplete',
-            payment_settings: { save_default_payment_method: 'on_subscription' },
-            expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
-            trial_period_days: isTrialAllowed ? 14 : undefined,
-        });
+          // 3. Rien n'existe, on crée
+          subscription = await stripe.subscriptions.create({
+              customer: customerId,
+              items: [{ price: priceId }],
+              payment_behavior: 'default_incomplete',
+              payment_settings: { save_default_payment_method: 'on_subscription' },
+              expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
+              trial_period_days: isTrialAllowed ? 14 : undefined,
+          });
       }
 
       let clientSecret;
-      if (isTrialAllowed && subscription.pending_setup_intent) {
+      
+      // Logique de récupération du secret un peu plus robuste
+      if (subscription.pending_setup_intent) {
         // @ts-ignore
         clientSecret = subscription.pending_setup_intent.client_secret;
       } else if (subscription.latest_invoice?.payment_intent) {
         // @ts-ignore
         clientSecret = subscription.latest_invoice.payment_intent.client_secret;
-      } else {
-        throw new Error("Impossible de récupérer le secret de paiement.");
-      }
-
+      } 
+      
+      // Si l'abonnement est déjà actif/payé, il n'y a peut-être pas de secret nécessaire
+      // Le frontend devra gérer le cas où clientSecret est null si l'utilisateur recharge la page Checkout alors qu'il est déjà pro
+      
       return new Response(
         JSON.stringify({ 
           subscriptionId: subscription.id, 
           clientSecret: clientSecret,
-          isTrialActive: isTrialAllowed 
+          // Si on a récupéré un abo existant qui est déjà en trialing, on renvoie true
+          isTrialActive: isTrialAllowed || subscription.status === 'trialing'
         }), 
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
