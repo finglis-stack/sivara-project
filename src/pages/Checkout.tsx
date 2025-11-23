@@ -6,9 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { Loader2, ShieldCheck, CheckCircle2, ArrowRight, Lock, CreditCard } from 'lucide-react';
 
-// REMPLACE PAR TON VRAI ID DE PRODUIT STRIPE
-// ex: price_1Pxyz...
-const STRIPE_PRICE_ID_MONTHLY = 'price_1Qsqt5JUX5Lw5tWz4aQJqX8f'; 
+// ID de prix Stripe officiel (Sivara Pro - Mensuel)
+const STRIPE_PRICE_ID_MONTHLY = 'price_1SWTi12UEuKhlvPiQdVw7Jwl'; 
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -24,7 +23,7 @@ const Checkout = () => {
       const { data, error } = await supabase.functions.invoke('stripe-api', {
         body: {
           action: 'create_checkout',
-          priceId: STRIPE_PRICE_ID_MONTHLY, // ID récupéré du dashboard Stripe
+          priceId: STRIPE_PRICE_ID_MONTHLY,
           isTrial: isTrial
         }
       });
