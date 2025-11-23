@@ -16,7 +16,6 @@ serve(async (req) => {
   }
 
   try {
-    // 1. Initialisation
     const supabaseClient = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -31,14 +30,13 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     })
 
-    // 2. Auth Check
     const { data: { user } } = await supabaseClient.auth.getUser()
     if (!user) throw new Error('Non authentifié')
 
     const { action, priceId, isTrial } = await req.json()
     const email = user.email
 
-    // 3. Récupérer ou créer le client Stripe
+    // --- Gestion Client Stripe ---
     const { data: profile } = await supabaseClient
       .from('profiles')
       .select('stripe_customer_id')
@@ -53,8 +51,6 @@ serve(async (req) => {
         metadata: { supabase_uuid: user.id },
       })
       customerId = customer.id
-      
-      // Sauvegarde immédiate
       await createClient(
         // @ts-ignore
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -63,30 +59,41 @@ serve(async (req) => {
       ).from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
     }
 
-    // --- ACTION: CHECKOUT (S'abonner) ---
-    if (action === 'create_checkout') {
-      const sessionConfig: any = {
+    // --- ACTION: CREATION SOUSCRIPTION (EMBEDDED) ---
+    if (action === 'create_subscription_intent') {
+      
+      // On crée la souscription immédiatement mais en mode "incomplet"
+      // Cela permet au frontend de finaliser le paiement ou l'empreinte CB
+      const subscription = await stripe.subscriptions.create({
         customer: customerId,
-        line_items: [{ price: priceId, quantity: 1 }],
-        mode: 'subscription',
-        success_url: `${req.headers.get('origin')}/pro-onboarding?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${req.headers.get('origin')}/pricing`,
-        allow_promotion_codes: true,
+        items: [{ price: priceId }],
+        payment_behavior: 'default_incomplete',
+        payment_settings: { save_default_payment_method: 'on_subscription' },
+        expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
+        trial_period_days: isTrial ? 14 : undefined,
+      });
+
+      // Si c'est un essai gratuit, on utilise le pending_setup_intent (empreinte CB)
+      // Sinon, on utilise le payment_intent de la facture (paiement immédiat)
+      let clientSecret;
+      if (isTrial && subscription.pending_setup_intent) {
+        // @ts-ignore
+        clientSecret = subscription.pending_setup_intent.client_secret;
+      } else {
+        // @ts-ignore
+        clientSecret = subscription.latest_invoice.payment_intent.client_secret;
       }
 
-      // Gestion de l'essai gratuit
-      if (isTrial) {
-        sessionConfig.subscription_data = {
-          trial_period_days: 14,
-          metadata: { is_trial: 'true' }
-        };
-      }
-
-      const session = await stripe.checkout.sessions.create(sessionConfig)
-      return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(
+        JSON.stringify({ 
+          subscriptionId: subscription.id, 
+          clientSecret: clientSecret 
+        }), 
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // --- ACTION: PORTAL (Gérer/Annuler) ---
+    // --- ACTION: PORTAL ---
     if (action === 'create_portal') {
       const session = await stripe.billingPortal.sessions.create({
         customer: customerId,
