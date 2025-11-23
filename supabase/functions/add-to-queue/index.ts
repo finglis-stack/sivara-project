@@ -15,6 +15,7 @@ class CryptoService {
   private key: CryptoKey | null = null;
 
   async initialize(secretKey: string) {
+    // Normalisation de la clé sur 32 bytes (STANDARDISÉ)
     const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
     this.key = await crypto.subtle.importKey(
       'raw',
@@ -91,6 +92,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
+    console.error("Add queue error:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
