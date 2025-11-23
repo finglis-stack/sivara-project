@@ -2,6 +2,14 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+// @ts-ignore: Deno types
+import { removeStopwords, fra, eng } from 'https://esm.sh/stopword@3.0.1'
+// @ts-ignore: Deno types
+import { PorterStemmerFr } from 'https://esm.sh/natural@6.10.4/lib/natural/stemmers/porter_stemmer_fr.js'
+// @ts-ignore: Deno types
+import { DoubleMetaphone } from 'https://esm.sh/natural@6.10.4/lib/natural/phonetics/double_metaphone.js'
+// @ts-ignore: Deno types
+import { NGrams } from 'https://esm.sh/natural@6.10.4/lib/natural/ngrams/ngrams.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,51 +17,36 @@ const corsHeaders = {
 }
 
 // ==========================================
-// 🛡️ TITANIUM TOKENIZER ENGINE (SHARED) 🛡️
+// 🛡️ TITANIUM TOKENIZER ENGINE (PRO LIB VERSION)
 // ==========================================
 
 class TitaniumTokenizer {
-  public static STOPWORDS = new Set([
-    'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'donc', 'or', 'ni', 'car', 
-    'de', 'du', 'en', 'à', 'dans', 'par', 'pour', 'sur', 'avec', 'sans', 'sous', 'ce', 'se',
-    'qui', 'que', 'quoi', 'dont', 'où', 'est', 'sont', 'ont', 'il', 'ils', 'elle', 'elles',
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'
-  ]);
-
+  
   static normalize(text: string): string {
-    return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+    return text.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+      .replace(/[^a-z0-9\s]/g, " ") 
+      .replace(/\s+/g, " ").trim();
+  }
+
+  static filterStopwords(words: string[]): string[] {
+    let cleaned = removeStopwords(words, fra);
+    cleaned = removeStopwords(cleaned, eng);
+    return cleaned.filter(w => w.length > 1);
   }
 
   static getStem(word: string): string {
-    if (word.length <= 4) return word;
-    if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
-    if (word.endsWith('aux')) return word.slice(0, -2) + 'l'; 
-    if (word.endsWith('sse')) return word.slice(0, -3);
-    if (word.endsWith('ement')) return word.slice(0, -5);
-    if (word.endsWith('ing')) return word.slice(0, -3);
-    if (word.endsWith('ed')) return word.slice(0, -2);
-    if (word.endsWith('es')) return word.slice(0, -2);
-    if (word.endsWith('s')) return word.slice(0, -1);
-    if (word.endsWith('er')) return word.slice(0, -2);
-    if (word.endsWith('ez')) return word.slice(0, -2);
-    if (word.endsWith('ait')) return word.slice(0, -3);
-    return word;
+    return PorterStemmerFr.stem(word);
   }
 
   static getPhoneticFingerprint(word: string): string {
-    let code = word.toUpperCase();
-    code = code.replace(/PH/g, 'F').replace(/CH/g, 'K').replace(/QU/g, 'K').replace(/C([E|I|Y])/g, 'S$1').replace(/C/g, 'K').replace(/GI/g, 'JI').replace(/GE/g, 'JE');
-    const firstChar = code.charAt(0);
-    const rest = code.slice(1).replace(/[AEIOUHYW]/g, '');
-    const cleanRest = rest.replace(/(.)\1+/g, '$1');
-    return (firstChar + cleanRest).substring(0, 4);
+    const code = DoubleMetaphone.process(word);
+    return code[0]; 
   }
 
-  static getNGrams(word: string, n: number): string[] {
-    if (word.length < n) return [];
-    const ngrams = [];
-    for (let i = 0; i <= word.length - n; i++) ngrams.push(word.substring(i, i + n));
-    return ngrams;
+  static getTrigrams(word: string): string[] {
+    if (word.length <= 3) return [];
+    return NGrams.trigrams(word).map((t: string[]) => t.join(''));
   }
 }
 
@@ -102,25 +95,25 @@ class CryptoService {
     if (!this.searchKey) throw new Error('Search key not initialized');
     const tokens = new Set<string>();
     const normalizedText = TitaniumTokenizer.normalize(text);
-    const words = normalizedText.split(' ').filter(w => w.length > 1);
+    const words = normalizedText.split(' ');
+    const usefulWords = TitaniumTokenizer.filterStopwords(words);
 
-    for (const rawWord of words) {
-      if (TitaniumTokenizer.STOPWORDS.has(rawWord)) continue;
+    for (const rawWord of usefulWords) {
+      // 1. EXACT
       tokens.add(await this.hmacToken(`EX:${rawWord}`));
       
+      // 2. STEM (Porter)
       const stem = TitaniumTokenizer.getStem(rawWord);
-      if (stem !== rawWord) tokens.add(await this.hmacToken(`ST:${stem}`));
+      if (stem && stem !== rawWord) tokens.add(await this.hmacToken(`ST:${stem}`));
       
+      // 3. PHONETIC (Double Metaphone)
       const phone = TitaniumTokenizer.getPhoneticFingerprint(rawWord);
-      if (phone.length > 1) tokens.add(await this.hmacToken(`PH:${phone}`));
+      if (phone && phone.length > 0) tokens.add(await this.hmacToken(`PH:${phone}`));
       
+      // 4. TRIGRAMS
       if (rawWord.length > 3) {
-        const trigrams = TitaniumTokenizer.getNGrams(rawWord, 3);
+        const trigrams = TitaniumTokenizer.getTrigrams(rawWord);
         for (const tri of trigrams) tokens.add(await this.hmacToken(`TG:${tri}`));
-      }
-      if (rawWord.length > 4) {
-        const quadgrams = TitaniumTokenizer.getNGrams(rawWord, 4);
-        for (const quad of quadgrams) tokens.add(await this.hmacToken(`QG:${quad}`));
       }
     }
     return Array.from(tokens);
@@ -233,7 +226,7 @@ serve(async (req) => {
     // 1. FETCH
     await logToDb(queueId, `Crawling: ${url}`, 'INIT', 'info');
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'SivaraBot/2.0 (Slow-Edition; +http://sivara.search)' }
+      headers: { 'User-Agent': 'SivaraBot/2.0 (Pro-Edition; +http://sivara.search)' }
     })
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -246,25 +239,24 @@ serve(async (req) => {
     const metadata = extractMetadata(rawHtml, url);
     const urlObj = new URL(url);
 
-    // 3. DISCOVERY MODE
+    // 3. DISCOVERY MODE (1000 liens / 500ms delay)
     const { data: settings } = await supabase.from('crawler_settings').select('discovery_enabled').eq('id', 1).single();
     const discoveryEnabled = settings?.discovery_enabled !== false;
 
     if (discoveryEnabled) {
-       await logToDb(queueId, `Discovery Mode: Full Mapping...`, 'DISCOVERY', 'info');
+       await logToDb(queueId, `Discovery Mode: Pro Extraction...`, 'DISCOVERY', 'info');
        const links = extractLinks(rawHtml, url);
        let addedCount = 0;
 
-       // --- BRIDAGE MODIFIÉ : MAX 1000 LIENS (QUASI ILLIMITÉ) ---
+       // --- PARAMÈTRES CARTOGRAPHIE COMPLÈTE ---
        const MAX_NEW_LINKS = 1000; 
-       const SLOW_DELAY = 500; // 500ms de pause entre chaque ajout
+       const SLOW_DELAY = 500; // 500ms
 
        for (const link of links.slice(0, MAX_NEW_LINKS)) {
           const linkHash = await cryptoService.hash(link);
           const { data: existing } = await supabase.from('crawled_pages').select('id').eq('search_hash', linkHash).single();
           
           if (!existing) {
-             // PAUSE ARTIFICIELLE POUR RALENTIR L'INJECTION
              await new Promise(resolve => setTimeout(resolve, SLOW_DELAY));
 
              const encryptedLink = await cryptoService.encrypt(link);
@@ -278,12 +270,12 @@ serve(async (req) => {
           }
        }
        if (addedCount > 0) {
-          await logToDb(queueId, `Queue +${addedCount} (Slow Mode)`, 'DISCOVERY', 'success');
+          await logToDb(queueId, `Queue +${addedCount} (Pro Mode)`, 'DISCOVERY', 'success');
        }
     }
 
-    // 5. ENCRYPT & INDEX
-    await logToDb(queueId, 'Indexing...', 'ENCRYPTION', 'info');
+    // 5. ENCRYPT & INDEX (Avec Natural Libs)
+    await logToDb(queueId, 'Indexing with Natural NLP...', 'ENCRYPTION', 'info');
 
     const encryptedTitle = await cryptoService.encrypt(metadata.title)
     const encryptedDescription = await cryptoService.encrypt(metadata.description)
@@ -313,7 +305,7 @@ serve(async (req) => {
 
     if (error) throw error
 
-    await logToDb(queueId, `Indexed ${blindIndex.length} tokens`, 'COMPLETE', 'success');
+    await logToDb(queueId, `Indexed ${blindIndex.length} smart tokens`, 'COMPLETE', 'success');
     try { await supabase.rpc('increment_crawl_stats') } catch (e) {}
 
     return new Response(JSON.stringify({ success: true, tokens: blindIndex.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })

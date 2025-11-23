@@ -2,6 +2,14 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+// @ts-ignore: Deno types
+import { removeStopwords, fra, eng } from 'https://esm.sh/stopword@3.0.1'
+// @ts-ignore: Deno types
+import { PorterStemmerFr } from 'https://esm.sh/natural@6.10.4/lib/natural/stemmers/porter_stemmer_fr.js'
+// @ts-ignore: Deno types
+import { DoubleMetaphone } from 'https://esm.sh/natural@6.10.4/lib/natural/phonetics/double_metaphone.js'
+// @ts-ignore: Deno types
+import { NGrams } from 'https://esm.sh/natural@6.10.4/lib/natural/ngrams/ngrams.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,52 +17,42 @@ const corsHeaders = {
 }
 
 // ==========================================
-// 🛡️ TITANIUM TOKENIZER ENGINE (SHARED) 🛡️
+// 🛡️ TITANIUM TOKENIZER ENGINE (PRO LIB VERSION)
 // ==========================================
-// Doit être STRICTEMENT identique au crawler
 
 class TitaniumTokenizer {
-  public static STOPWORDS = new Set([
-    'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'donc', 'or', 'ni', 'car', 
-    'de', 'du', 'en', 'à', 'dans', 'par', 'pour', 'sur', 'avec', 'sans', 'sous', 'ce', 'se',
-    'qui', 'que', 'quoi', 'dont', 'où', 'est', 'sont', 'ont', 'il', 'ils', 'elle', 'elles',
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'
-  ]);
-
+  
   static normalize(text: string): string {
-    return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+    // Nettoyage standard
+    return text.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève accents
+      .replace(/[^a-z0-9\s]/g, " ") // Garde alphanum
+      .replace(/\s+/g, " ").trim();
+  }
+
+  static filterStopwords(words: string[]): string[] {
+    // Utilisation de la lib 'stopword' pour FR et EN combinés
+    let cleaned = removeStopwords(words, fra);
+    cleaned = removeStopwords(cleaned, eng);
+    // Filtre supplémentaire pour les mots très courts résiduels
+    return cleaned.filter(w => w.length > 1);
   }
 
   static getStem(word: string): string {
-    if (word.length <= 4) return word;
-    if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
-    if (word.endsWith('aux')) return word.slice(0, -2) + 'l'; 
-    if (word.endsWith('sse')) return word.slice(0, -3);
-    if (word.endsWith('ement')) return word.slice(0, -5);
-    if (word.endsWith('ing')) return word.slice(0, -3);
-    if (word.endsWith('ed')) return word.slice(0, -2);
-    if (word.endsWith('es')) return word.slice(0, -2);
-    if (word.endsWith('s')) return word.slice(0, -1);
-    if (word.endsWith('er')) return word.slice(0, -2);
-    if (word.endsWith('ez')) return word.slice(0, -2);
-    if (word.endsWith('ait')) return word.slice(0, -3);
-    return word;
+    // Utilisation de l'algorithme de Porter pour le Français
+    return PorterStemmerFr.stem(word);
   }
 
   static getPhoneticFingerprint(word: string): string {
-    let code = word.toUpperCase();
-    code = code.replace(/PH/g, 'F').replace(/CH/g, 'K').replace(/QU/g, 'K').replace(/C([E|I|Y])/g, 'S$1').replace(/C/g, 'K').replace(/GI/g, 'JI').replace(/GE/g, 'JE');
-    const firstChar = code.charAt(0);
-    const rest = code.slice(1).replace(/[AEIOUHYW]/g, '');
-    const cleanRest = rest.replace(/(.)\1+/g, '$1');
-    return (firstChar + cleanRest).substring(0, 4);
+    // Double Metaphone est l'algo standard pro pour la phonétique
+    const code = DoubleMetaphone.process(word);
+    return code[0]; // On prend le code primaire
   }
 
-  static getNGrams(word: string, n: number): string[] {
-    if (word.length < n) return [];
-    const ngrams = [];
-    for (let i = 0; i <= word.length - n; i++) ngrams.push(word.substring(i, i + n));
-    return ngrams;
+  static getTrigrams(word: string): string[] {
+    if (word.length <= 3) return [];
+    // Utilisation de NGrams de Natural
+    return NGrams.trigrams(word).map((t: string[]) => t.join(''));
   }
 }
 
@@ -93,30 +91,29 @@ class CryptoService {
     if (!this.searchKey) throw new Error('Search key not initialized');
     
     const tokens = new Set<string>();
-    const weights = new Map<string, number>(); // Map pour stocker l'importance de chaque token
+    const weights = new Map<string, number>();
     
     const normalizedText = TitaniumTokenizer.normalize(query);
-    const words = normalizedText.split(' ').filter(w => w.length > 1);
+    const words = normalizedText.split(' ');
+    const usefulWords = TitaniumTokenizer.filterStopwords(words);
 
-    for (const rawWord of words) {
-      if (TitaniumTokenizer.STOPWORDS.has(rawWord)) continue;
-
+    for (const rawWord of usefulWords) {
       // 1. EXACT MATCH (Poids : 100)
       const exactToken = await this.hmacToken(`EX:${rawWord}`);
       tokens.add(exactToken);
       weights.set(exactToken, 100);
 
-      // 2. STEM MATCH (Poids : 80)
+      // 2. STEM MATCH (Poids : 80) - Via PorterStemmerFr
       const stem = TitaniumTokenizer.getStem(rawWord);
-      if (stem !== rawWord) {
+      if (stem && stem !== rawWord) {
         const stemToken = await this.hmacToken(`ST:${stem}`);
         tokens.add(stemToken);
         weights.set(stemToken, 80);
       }
 
-      // 3. PHONETIC MATCH (Poids : 50)
+      // 3. PHONETIC MATCH (Poids : 50) - Via Double Metaphone
       const phone = TitaniumTokenizer.getPhoneticFingerprint(rawWord);
-      if (phone.length > 1) {
+      if (phone && phone.length > 0) {
         const phoneToken = await this.hmacToken(`PH:${phone}`);
         tokens.add(phoneToken);
         weights.set(phoneToken, 50);
@@ -124,7 +121,7 @@ class CryptoService {
 
       // 4. N-GRAMS (Poids : 5 par trigramme)
       if (rawWord.length > 3) {
-        const trigrams = TitaniumTokenizer.getNGrams(rawWord, 3);
+        const trigrams = TitaniumTokenizer.getTrigrams(rawWord);
         for (const tri of trigrams) {
             const token = await this.hmacToken(`TG:${tri}`);
             tokens.add(token);
@@ -171,21 +168,18 @@ serve(async (req) => {
        return new Response(JSON.stringify({ results: [], total: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    console.log(`[TITANIUM SEARCH] Searching with ${queryTokens.length} tokens (Mix of Exact, Stem, Phone, Ngram)`);
+    console.log(`[TITANIUM PRO] Searching with ${queryTokens.length} tokens`);
 
     // 2. Recherche SQL "Overlaps"
-    // On demande à Postgres de trouver tout ce qui a au moins un point commun
-    // L'optimisation GIN rend ça instantané
     const { data: candidates, error, count } = await supabase
       .from('crawled_pages')
       .select('*', { count: 'exact' })
       .overlaps('blind_index', queryTokens)
-      .limit(limit * 5); // On récupère plus de candidats pour le ranking en mémoire
+      .limit(limit * 5); 
 
     if (error) throw error;
 
     // 3. Scoring & Ranking en mémoire
-    // C'est ici qu'on recrée la pertinence "Google-like"
     const results = [];
     
     for (const page of candidates || []) {
@@ -194,13 +188,10 @@ serve(async (req) => {
         let score = 0;
         let matchesDetails = { exact: 0, stem: 0, phone: 0, ngram: 0 };
 
-        // Calcul du score pondéré
         queryTokens.forEach(token => {
             if (pageTokens.has(token)) {
                 const weight = weights.get(token) || 1;
                 score += weight;
-                
-                // Juste pour le debug/logique
                 if (weight === 100) matchesDetails.exact++;
                 else if (weight === 80) matchesDetails.stem++;
                 else if (weight === 50) matchesDetails.phone++;
@@ -208,20 +199,13 @@ serve(async (req) => {
             }
         });
 
-        // Seuil de pertinence (Anti-bruit)
-        // Si on n'a que des N-Grams faibles (ex: 20 points = 4 trigrammes communs), c'est peut-être du bruit
-        // Sauf si la requête est très courte
         if (score < 15) continue;
 
-        // Déchiffrement (seulement si pertinent)
         const decryptedTitle = await cryptoService.decrypt(page.title);
         const decryptedDesc = await cryptoService.decrypt(page.description);
         const decryptedUrl = await cryptoService.decrypt(page.url);
         const decryptedDomain = await cryptoService.decrypt(page.domain);
 
-        // Boost de score si le mot-clé est dans le titre (approximation via longueur)
-        // Comme on ne sait pas *où* est le token, on ne peut pas être sûr, 
-        // mais on peut booster par défaut les résultats qui matchent "Exact"
         if (matchesDetails.exact > 0) score *= 1.5;
 
         results.push({
@@ -229,25 +213,24 @@ serve(async (req) => {
           url: decryptedUrl,
           title: decryptedTitle,
           description: decryptedDesc,
-          content: "", // Optimisation bande passante
+          content: "", 
           domain: decryptedDomain,
           crawled_at: page.crawled_at,
           rank: score,
-          debug_score: matchesDetails // Pour comprendre pourquoi ça rank
+          debug_score: matchesDetails 
         });
       } catch (e) { continue; }
     }
 
-    // Tri et Pagination manuelle (car on a fetché large)
     results.sort((a, b) => b.rank - a.rank);
     const paginatedResults = results.slice((page - 1) * limit, page * limit);
 
     return new Response(
       JSON.stringify({
         results: paginatedResults,
-        total: count || results.length, // Approximation
+        total: count || results.length,
         page,
-        algorithm: 'Sivara-Titanium-Weighted-SSE',
+        algorithm: 'Sivara-Titanium-Pro-Libs',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
