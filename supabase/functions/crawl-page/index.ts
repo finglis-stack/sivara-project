@@ -12,10 +12,8 @@ const corsHeaders = {
 // 🛡️ TITANIUM TOKENIZER ENGINE (SHARED) 🛡️
 // ==========================================
 // Ce moteur doit être IDENTIQUE entre crawl-page et search.
-// Il transforme le texte brut en empreintes cryptographiques intelligentes.
 
 class TitaniumTokenizer {
-  // Stopwords (Mots vides à ignorer pour réduire le bruit)
   public static STOPWORDS = new Set([
     'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'donc', 'or', 'ni', 'car', 
     'de', 'du', 'en', 'à', 'dans', 'par', 'pour', 'sur', 'avec', 'sans', 'sous', 'ce', 'se',
@@ -23,29 +21,14 @@ class TitaniumTokenizer {
     'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'
   ]);
 
-  /**
-   * Normalise le texte : minuscule, suppression accents, caractères spéciaux
-   */
   static normalize(text: string): string {
-    return text
-      .toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève les accents
-      .replace(/[^a-z0-9\s]/g, " ") // Garde seulement alphanum
-      .replace(/\s+/g, " ")
-      .trim();
+    return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   }
 
-  /**
-   * Stemming léger (Racination) pour FR/EN
-   * Transforme "mangerons" -> "mang", "files" -> "file"
-   */
   static getStem(word: string): string {
     if (word.length <= 4) return word;
-    
-    // Règles simples mais efficaces (80/20 rule)
-    // Pluriels et terminaisons communes
     if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
-    if (word.endsWith('aux')) return word.slice(0, -2) + 'l'; // Chevaux -> Cheval
+    if (word.endsWith('aux')) return word.slice(0, -2) + 'l'; 
     if (word.endsWith('sse')) return word.slice(0, -3);
     if (word.endsWith('ement')) return word.slice(0, -5);
     if (word.endsWith('ing')) return word.slice(0, -3);
@@ -55,45 +38,22 @@ class TitaniumTokenizer {
     if (word.endsWith('er')) return word.slice(0, -2);
     if (word.endsWith('ez')) return word.slice(0, -2);
     if (word.endsWith('ait')) return word.slice(0, -3);
-    
     return word;
   }
 
-  /**
-   * Algorithme Phonétique Simplifié (Mix Soundex/Metaphone)
-   * Permet de matcher "Philo" et "Filo"
-   */
   static getPhoneticFingerprint(word: string): string {
     let code = word.toUpperCase();
-    
-    // 1. Substitutions phonétiques majeures
-    code = code.replace(/PH/g, 'F');
-    code = code.replace(/CH/g, 'K'); // "Chorale" -> "Korale" (Approximation)
-    code = code.replace(/QU/g, 'K');
-    code = code.replace(/C([E|I|Y])/g, 'S$1'); // Ce -> Se
-    code = code.replace(/C/g, 'K'); // Ca -> Ka
-    code = code.replace(/GI/g, 'JI');
-    code = code.replace(/GE/g, 'JE');
-    
-    // 2. Suppression des voyelles sauf la première (Style Soundex)
+    code = code.replace(/PH/g, 'F').replace(/CH/g, 'K').replace(/QU/g, 'K').replace(/C([E|I|Y])/g, 'S$1').replace(/C/g, 'K').replace(/GI/g, 'JI').replace(/GE/g, 'JE');
     const firstChar = code.charAt(0);
     const rest = code.slice(1).replace(/[AEIOUHYW]/g, '');
-    
-    // 3. Suppression des doublons
     const cleanRest = rest.replace(/(.)\1+/g, '$1');
-    
-    return (firstChar + cleanRest).substring(0, 4); // Garde 4 chars max
+    return (firstChar + cleanRest).substring(0, 4);
   }
 
-  /**
-   * Génère les N-Grams (Trigrammes et Quadgrammes)
-   */
   static getNGrams(word: string, n: number): string[] {
     if (word.length < n) return [];
     const ngrams = [];
-    for (let i = 0; i <= word.length - n; i++) {
-      ngrams.push(word.substring(i, i + n));
-    }
+    for (let i = 0; i <= word.length - n; i++) ngrams.push(word.substring(i, i + n));
     return ngrams;
   }
 }
@@ -111,23 +71,9 @@ class CryptoService {
 
   async initialize(secretKey: string) {
     const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
-    
-    this.key = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['encrypt', 'decrypt']
-    );
-
+    this.key = await crypto.subtle.importKey('raw', keyData, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
     const searchKeyData = await crypto.subtle.digest('SHA-256', keyData);
-    this.searchKey = await crypto.subtle.importKey(
-      'raw',
-      searchKeyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
+    this.searchKey = await crypto.subtle.importKey('raw', searchKeyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   }
 
   async encrypt(text: string, deterministic: boolean = false): Promise<string> {
@@ -153,37 +99,22 @@ class CryptoService {
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // --- GÉNÉRATION INTELLIGENTE DES TOKENS ---
   async generateBlindIndex(text: string): Promise<string[]> {
     if (!this.searchKey) throw new Error('Search key not initialized');
-    
     const tokens = new Set<string>();
     const normalizedText = TitaniumTokenizer.normalize(text);
     const words = normalizedText.split(' ').filter(w => w.length > 1);
 
     for (const rawWord of words) {
-      // 0. Filtre Stopwords (sauf si le mot est très rare, mais ici on simplifie)
       if (TitaniumTokenizer.STOPWORDS.has(rawWord)) continue;
-
-      // 1. Hash EXACT (Le mot tel quel) -> Score Maximum
       tokens.add(await this.hmacToken(`EX:${rawWord}`));
-
-      // 2. Hash STEM (La racine) -> Score Élevé
-      // Permet de trouver "Chevaux" en tapant "Cheval"
+      
       const stem = TitaniumTokenizer.getStem(rawWord);
-      if (stem !== rawWord) {
-        tokens.add(await this.hmacToken(`ST:${stem}`));
-      }
-
-      // 3. Hash PHONETIC (Le son) -> Score Moyen (Tolérance fautes)
-      // Permet de trouver "Philo" en tapant "Filo"
+      if (stem !== rawWord) tokens.add(await this.hmacToken(`ST:${stem}`));
+      
       const phone = TitaniumTokenizer.getPhoneticFingerprint(rawWord);
-      if (phone.length > 1) {
-        tokens.add(await this.hmacToken(`PH:${phone}`));
-      }
-
-      // 4. N-GRAMS (3 et 4 lettres) -> Score Faible (Fuzzy brut)
-      // Permet de trouver des bouts de mots
+      if (phone.length > 1) tokens.add(await this.hmacToken(`PH:${phone}`));
+      
       if (rawWord.length > 3) {
         const trigrams = TitaniumTokenizer.getNGrams(rawWord, 3);
         for (const tri of trigrams) tokens.add(await this.hmacToken(`TG:${tri}`));
@@ -193,18 +124,11 @@ class CryptoService {
         for (const quad of quadgrams) tokens.add(await this.hmacToken(`QG:${quad}`));
       }
     }
-
     return Array.from(tokens);
   }
 
   private async hmacToken(input: string): Promise<string> {
-    // On signe le token "typé" (ex: "PH:F821")
-    const signature = await crypto.subtle.sign(
-      'HMAC',
-      this.searchKey!,
-      encoder.encode(input)
-    );
-    // On garde 8 bytes pour l'index (compromis collision/taille)
+    const signature = await crypto.subtle.sign('HMAC', this.searchKey!, encoder.encode(input));
     return btoa(String.fromCharCode(...new Uint8Array(signature).slice(0, 8)));
   }
 }
@@ -214,13 +138,11 @@ class CryptoService {
 // ==========================================
 
 function isAllowedLanguage(html: string): boolean {
-  // Détection sommaire
   const langMatch = html.match(/<html[^>]+lang=["']([a-zA-Z\-]+)["'][^>]*>/i);
   if (langMatch) {
     const lang = langMatch[1].toLowerCase();
     return lang.startsWith('fr') || lang.startsWith('en');
   }
-  // Fallback heuristique
   const textSample = html.substring(0, 2000).toLowerCase();
   const frCount = (textSample.match(/\b(le|la|et|est|pour|dans)\b/g) || []).length;
   const enCount = (textSample.match(/\b(the|and|is|for|with|that)\b/g) || []).length;
@@ -228,35 +150,58 @@ function isAllowedLanguage(html: string): boolean {
 }
 
 function extractMetadata(html: string, url: string): { title: string, description: string, content: string } {
-  // Extraction Titre
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   let title = titleMatch ? titleMatch[1].trim() : 'Sans titre';
-  
-  // Nettoyage Titre générique
   const urlObj = new URL(url);
   const domainName = urlObj.hostname.replace('www.', '');
   if (title.length < 5 || /home|accueil|index/i.test(title)) {
     title = `${title} - ${domainName}`;
   }
-
-  // Extraction Description
   const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i);
   const description = descMatch ? descMatch[1].trim() : '';
-
-  // Extraction Contenu (Nettoyage brutal)
   let content = html
     .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, " ")
     .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, ' ') // Strip tags
-    .replace(/\s+/g, ' ')     // Normalize spaces
+    .replace(/<[^>]+>/g, ' ') 
+    .replace(/\s+/g, ' ')     
     .trim();
 
   return {
     title: title.substring(0, 255),
     description: description.substring(0, 500),
-    content: content.substring(0, 10000) // Limite saine pour le stockage
+    content: content.substring(0, 10000)
   };
+}
+
+function extractLinks(html: string, baseUrl: string): string[] {
+  const links = new Set<string>();
+  const regex = /href=["']([^"']+)["']/g;
+  let match;
+  const baseObj = new URL(baseUrl);
+
+  while ((match = regex.exec(html)) !== null) {
+    try {
+      const link = match[1];
+      const absoluteUrl = new URL(link, baseUrl).href;
+      const urlObj = new URL(absoluteUrl);
+
+      // Filtres de base : HTTP/S uniquement, même domaine
+      if (!['http:', 'https:'].includes(urlObj.protocol)) continue;
+      if (urlObj.hostname !== baseObj.hostname) continue; // Restrict to same domain for now
+      
+      // Filtres extensions
+      if (/\.(jpg|jpeg|png|gif|pdf|zip|css|js)$/i.test(urlObj.pathname)) continue;
+
+      // Suppression des ancres
+      urlObj.hash = '';
+      
+      links.add(urlObj.href);
+    } catch (e) {
+      // Ignore invalid URLs
+    }
+  }
+  return Array.from(links);
 }
 
 // @ts-ignore: Deno types
@@ -281,8 +226,6 @@ serve(async (req) => {
   try {
     // @ts-ignore
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!
-    if (!encryptionKey) throw new Error('ENCRYPTION_KEY not configured')
-
     const cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
 
@@ -308,26 +251,57 @@ serve(async (req) => {
     const metadata = extractMetadata(rawHtml, url);
     const urlObj = new URL(url);
 
-    // 3. ENCRYPT & INDEX
+    // 3. CHECK SETTINGS FOR DISCOVERY
+    const { data: settings } = await supabase.from('crawler_settings').select('discovery_enabled').eq('id', 1).single();
+    const discoveryEnabled = settings?.discovery_enabled !== false;
+
+    // 4. DISCOVERY MODE
+    if (discoveryEnabled) {
+       await logToDb(queueId, `Discovery Mode ON: Extracting links...`, 'DISCOVERY', 'info');
+       const links = extractLinks(rawHtml, url);
+       let addedCount = 0;
+
+       // Optimisation : On vérifie les doublons en calculant les hashs d'abord
+       // Note : C'est lourd si la page a 1000 liens, mais c'est nécessaire pour ne pas polluer
+       for (const link of links.slice(0, 50)) { // Limite à 50 liens par page pour éviter l'explosion
+          const linkHash = await cryptoService.hash(link);
+          
+          // Vérif si déjà crawlé
+          const { data: existing } = await supabase.from('crawled_pages').select('id').eq('search_hash', linkHash).single();
+          
+          // Vérif si déjà en queue (Approximation : on ne peut pas vérifier facilement car URL chiffrée avec IV random)
+          // Pour l'instant, on ajoute. process-queue peut re-vérifier plus tard.
+          
+          if (!existing) {
+             const encryptedLink = await cryptoService.encrypt(link);
+             const { error } = await supabase.from('crawl_queue').insert({
+                url: encryptedLink,
+                priority: 0, // Priorité basse pour la découverte
+                status: 'pending',
+                added_at: new Date().toISOString()
+             });
+             if (!error) addedCount++;
+          }
+       }
+       if (addedCount > 0) {
+          await logToDb(queueId, `Discovered +${addedCount} new links`, 'DISCOVERY', 'success');
+       }
+    }
+
+    // 5. ENCRYPT & INDEX
     await logToDb(queueId, 'Generating Titanium Blind Index...', 'ENCRYPTION', 'info');
 
-    // Chiffrement des données (Payload illisible par le serveur)
     const encryptedTitle = await cryptoService.encrypt(metadata.title)
     const encryptedDescription = await cryptoService.encrypt(metadata.description)
     const encryptedContent = await cryptoService.encrypt(metadata.content)
     const encryptedUrl = await cryptoService.encrypt(url, true)
     const encryptedDomain = await cryptoService.encrypt(urlObj.hostname)
     
-    // Hash pour dédoublonnage (pas pour la recherche)
     const searchHash = await cryptoService.hash(url);
 
-    // GÉNÉRATION DU BLIND INDEX AVANCÉ
-    // On indexe le titre, la description et le début du contenu
-    // C'est ici que le Titanium Tokenizer fait son boulot
     const textToIndex = `${metadata.title} ${metadata.description} ${metadata.content.substring(0, 2000)}`;
     const blindIndex = await cryptoService.generateBlindIndex(textToIndex);
 
-    // Upsert
     const { error } = await supabase
       .from('crawled_pages')
       .upsert({
@@ -339,13 +313,13 @@ serve(async (req) => {
         http_status: response.status,
         status: 'success',
         search_hash: searchHash,
-        blind_index: blindIndex, // Tableau de tokens cryptés (EX:..., ST:..., PH:..., TG:...)
+        blind_index: blindIndex,
         updated_at: new Date().toISOString()
       }, { onConflict: 'url' })
 
     if (error) throw error
 
-    await logToDb(queueId, `Indexed ${blindIndex.length} tokens (Exact/Stem/Phone/Ngrams)`, 'COMPLETE', 'success');
+    await logToDb(queueId, `Indexed ${blindIndex.length} tokens`, 'COMPLETE', 'success');
     try { await supabase.rpc('increment_crawl_stats') } catch (e) {}
 
     return new Response(JSON.stringify({ success: true, tokens: blindIndex.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
