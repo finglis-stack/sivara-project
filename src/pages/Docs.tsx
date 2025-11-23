@@ -26,7 +26,7 @@ import {
   FileText, Plus, Search, Clock, Star, MoreVertical, Trash2, 
   Download, Share2, Copy, Loader2, Grid3x3, List, ArrowLeft, 
   FolderPlus, Folder, ChevronRight, Home, MoveUp, Edit2, 
-  Image as ImageIcon, Palette, UserCircle, StarOff, Upload
+  Image as ImageIcon, Palette, UserCircle, StarOff, Upload, FileJson
 } from 'lucide-react';
 
 // DND Imports
@@ -178,6 +178,7 @@ const Docs = () => {
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean, docId: string, currentTitle: string }>({ isOpen: false, docId: '', currentTitle: '' });
   const [customizeDialog, setCustomizeDialog] = useState<{ isOpen: boolean, doc: DecryptedDocument | null }>({ isOpen: false, doc: null });
   const [newTitle, setNewTitle] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
   
   // State Customization
   const [customIcon, setCustomIcon] = useState('Folder');
@@ -185,6 +186,7 @@ const Docs = () => {
   const [isUploading, setIsUploading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -256,7 +258,6 @@ const Docs = () => {
 
   // --- ACTIONS ---
 
-  // CORRECTION NAVIGATION: Ajout de ?app=docs pour éviter de sortir du routeur Docs
   const handleNavigate = (id: string) => {
     navigate(`/${id}?app=docs`);
   };
@@ -278,7 +279,6 @@ const Docs = () => {
           encryption_iv: iv,
           icon: type === 'folder' ? 'Folder' : 'FileText',
           color: type === 'folder' ? '#6B7280' : '#3B82F6',
-          // Si c'est un dossier, on met l'image par défaut pour éviter le bug d'affichage
           cover_url: type === 'folder' ? DEFAULT_COVER : null,
           type: type,
           parent_id: currentFolderId
@@ -384,6 +384,75 @@ const Docs = () => {
     }
   };
 
+  // --- IMPORT PROPRIÉTAIRE .SIVARA ---
+  const handleImportSivara = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+        try {
+            const content = e.target?.result as string;
+            const data = JSON.parse(content);
+
+            // 1. Vérification du format
+            if (data.header !== 'SIVARA_SECURE_DOC_V1' || !data.id) {
+                throw new Error("Format de fichier invalide");
+            }
+
+            // 2. Vérification des droits sur le serveur (RLS)
+            const { data: existingDoc, error } = await supabase
+                .from('documents')
+                .select('id')
+                .eq('id', data.id)
+                .single();
+
+            // CAS 1: Le document existe et l'utilisateur a accès (partage ou propriétaire)
+            if (existingDoc) {
+                showSuccess("Accès autorisé. Ouverture du document...");
+                handleNavigate(data.id);
+                return;
+            }
+
+            // CAS 2: Le document n'existe pas sur le serveur
+            // Si l'utilisateur est le propriétaire indiqué dans le fichier, on restaure
+            if (data.owner_id === user.id) {
+                const { error: insertError } = await supabase
+                    .from('documents')
+                    .insert({
+                        id: data.id,
+                        title: data.encrypted_title,
+                        content: data.encrypted_content,
+                        encryption_iv: data.iv,
+                        owner_id: user.id,
+                        type: 'file',
+                        visibility: 'private'
+                    });
+                
+                if (insertError) throw insertError;
+                
+                showSuccess("Document restauré depuis la sauvegarde");
+                handleNavigate(data.id);
+            } else {
+                // CAS 3: L'utilisateur n'est pas le propriétaire et le doc n'existe plus
+                // C'est ici que la sécurité joue : on refuse l'accès car on ne peut pas vérifier les droits
+                showError("Accès refusé : Vous n'avez pas les droits sur ce document ou il a été supprimé par son propriétaire.");
+            }
+
+        } catch (err: any) {
+            console.error(err);
+            showError(err.message || "Erreur lors de l'importation");
+        } finally {
+            setIsImporting(false);
+            if (importInputRef.current) importInputRef.current.value = '';
+        }
+    };
+
+    reader.readAsText(file);
+  };
+
   // --- NAVIGATION & DND ---
 
   const enterFolder = (folder: DecryptedDocument) => {
@@ -405,7 +474,6 @@ const Docs = () => {
   };
 
   const handleNavigateToProfile = () => {
-    // FORCE URL PRODUCTION
     window.location.href = 'https://account.sivara.ca/profile';
   };
 
@@ -575,8 +643,14 @@ const Docs = () => {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => createItem('file')}><FileText className="mr-2 h-4 w-4" /> Document</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => createItem('folder')}><FolderPlus className="mr-2 h-4 w-4" /> Dossier</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => importInputRef.current?.click()}>
+                            {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileJson className="mr-2 h-4 w-4" />} 
+                            Importer .sivara
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                    </DropdownMenu>
+                   <input ref={importInputRef} type="file" accept=".sivara" className="hidden" onChange={handleImportSivara} />
                </div>
             </div>
           </div>

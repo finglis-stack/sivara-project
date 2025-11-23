@@ -20,7 +20,7 @@ import {
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
-  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn
+  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey
 } from 'lucide-react';
 
 import {
@@ -322,23 +322,42 @@ const DocEditor = () => {
   const inviteUser = async () => { if (!newInviteEmail) return; const { error } = await supabase.from('document_access').insert({ document_id: id, email: newInviteEmail.toLowerCase().trim(), permission: invitePermission }); if (error) showError("Erreur invitation"); else { showSuccess("Invitation envoyée"); setNewInviteEmail(''); fetchAccessList(); } };
   const removeAccess = async (accessId: string) => { await supabase.from('document_access').delete().eq('id', accessId); fetchAccessList(); };
   
-  // === CORRECTION LIEN PARTAGE ===
   const copyShareLink = () => { 
-    // FORCE DOMAINE PRODUCTION
     const link = `https://docs.sivara.ca/${id}`; 
     navigator.clipboard.writeText(link); 
     showSuccess("Lien copié : " + link); 
   };
   
-  // === CORRECTION NAVIGATION PROFIL ===
   const handleNavigateToProfile = () => {
-    // FORCE DOMAINE PRODUCTION
     window.location.href = 'https://account.sivara.ca/profile';
   };
 
   const handleLogin = () => { 
     const currentUrl = window.location.href; 
     window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`; 
+  };
+
+  // --- EXPORT PROPRIÉTAIRE ---
+  const handleExportSivara = () => {
+    if (!document) return;
+    // On exporte les données CHIFFRÉES (telles que dans la DB)
+    const exportData = {
+      header: 'SIVARA_SECURE_DOC_V1',
+      id: document.id,
+      encrypted_title: document.title,
+      encrypted_content: document.content,
+      iv: document.encryption_iv,
+      owner_id: document.owner_id,
+      exported_at: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = window.document.createElement('a');
+    a.href = url;
+    a.download = `secure-${document.id.slice(0, 8)}.sivara`;
+    a.click();
+    showSuccess("Document exporté (Format sécurisé .sivara)");
   };
   
   const CurrentIcon = AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || FileText;
@@ -394,6 +413,7 @@ const DocEditor = () => {
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => window.print()}><Download className="mr-2 h-4 w-4" /> Exporter PDF</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportSivara}><FileKey className="mr-2 h-4 w-4 text-blue-600" /> Exporter .sivara</DropdownMenuItem>
                   {isOwner && <DropdownMenuItem className="text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Supprimer</DropdownMenuItem>}
                 </DropdownMenuContent>
               </DropdownMenu>
