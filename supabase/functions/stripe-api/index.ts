@@ -11,11 +11,14 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  // Gestion CORS (Preflight)
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    console.log(`[Stripe API] Nouvelle requête reçue`);
+
     const supabaseClient = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -24,28 +27,47 @@ serve(async (req) => {
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     )
 
-    // @ts-ignore
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
-      apiVersion: '2023-10-16',
-      httpClient: Stripe.createFetchHttpClient(),
-    })
-
-    const { data: { user } } = await supabaseClient.auth.getUser()
-    if (!user) throw new Error('Non authentifié')
+    // Vérification Authentification
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
+    
+    if (authError || !user) {
+      console.error('[Stripe API] Erreur Auth:', authError);
+      throw new Error('Non authentifié');
+    }
 
     const { action, priceId, isTrial: requestedTrial } = await req.json()
+    console.log(`[Stripe API] Action: ${action}, User: ${user.id}`);
 
-    // --- ACTION: GET CONFIG (Pour le frontend) ---
+    // --- ACTION: GET CONFIG (Sans Stripe init) ---
     if (action === 'get_config') {
       // @ts-ignore
       const publishableKey = Deno.env.get('STRIPE_PUBLISHABLE_KEY');
-      if (!publishableKey) throw new Error('STRIPE_PUBLISHABLE_KEY non configurée');
+      
+      console.log(`[Stripe API] Récupération clé publique. Présente ? ${!!publishableKey}`);
+
+      if (!publishableKey) {
+        console.error('[Stripe API] STRIPE_PUBLISHABLE_KEY manquante dans les secrets');
+        throw new Error('Configuration serveur incomplète (Clé publique manquante)');
+      }
       
       return new Response(
         JSON.stringify({ publishableKey }), 
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // --- INITIALISATION STRIPE (Seulement si nécessaire pour les autres actions) ---
+    // @ts-ignore
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+    if (!stripeKey) {
+        console.error('[Stripe API] STRIPE_SECRET_KEY manquante');
+        throw new Error('Configuration serveur incomplète (Clé secrète manquante)');
+    }
+
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: '2023-10-16',
+      httpClient: Stripe.createFetchHttpClient(),
+    })
 
     const email = user.email
 
@@ -61,11 +83,14 @@ serve(async (req) => {
     let customerId = profile?.stripe_customer_id
 
     if (!customerId) {
+      console.log(`[Stripe API] Création nouveau client Stripe pour ${email}`);
       const customer = await stripe.customers.create({
         email: email,
         metadata: { supabase_uuid: user.id },
       })
       customerId = customer.id
+      
+      // Update avec service role pour contourner RLS si nécessaire sur l'update
       await createClient(
         // @ts-ignore
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -74,8 +99,9 @@ serve(async (req) => {
       ).from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
     }
 
-    // --- ACTION: CREATION SOUSCRIPTION (EMBEDDED) ---
+    // --- ACTION: CREATION SOUSCRIPTION ---
     if (action === 'create_subscription_intent') {
+      console.log(`[Stripe API] Création intention pour ${customerId}. Essai ? ${isTrialAllowed}`);
       
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
@@ -114,10 +140,13 @@ serve(async (req) => {
       return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    throw new Error('Action inconnue')
+    throw new Error(`Action inconnue: ${action}`)
 
   } catch (error) {
-    console.error(error)
-    return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    console.error(`[Stripe API Error]`, error)
+    return new Response(
+      JSON.stringify({ error: error.message || 'Une erreur serveur est survenue' }), 
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 })
