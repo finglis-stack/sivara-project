@@ -39,6 +39,13 @@ Une suite collaborative temps réel où le serveur agit comme un simple stockage
 *   **Dérivation de Clés (PBKDF2) :**
     *   Les clés de chiffrement sont dérivées localement garantissant que les clés ne transitent jamais en clair sur le réseau.
 
+### 4. Infrastructure de Paiement et Souscription (Billing)
+L'architecture de facturation délègue la complexité transactionnelle à Stripe tout en maintenant une synchronisation stricte.
+
+*   **Source of Truth (SOT) :** Stripe est l'autorité absolue pour l'état des abonnements. La base de données locale agit uniquement comme un miroir en lecture seule pour les permissions applicatives.
+*   **Edge Webhooks :** Un pipeline de webhooks sécurisé (`stripe-webhook`) intercepte les événements de paiement en temps réel pour mettre à jour les statuts `is_pro` via des fonctions serveur privilégiées.
+*   **Syncronisation Forcée :** Mécanisme de vérification à la demande permettant à l'utilisateur de forcer la réconciliation des états entre Stripe et la base de données en cas de latence des webhooks.
+
 ---
 
 ## 🛡️ Conformité Légale et Loi 25 (Québec)
