@@ -10,17 +10,30 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 })
-// @ts-ignore
-const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
 
 serve(async (req) => {
+  // @ts-ignore
+  const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
   const signature = req.headers.get('stripe-signature')
-  if (!signature || !endpointSecret) return new Response('Webhook Error', { status: 400 })
+
+  if (!signature || !endpointSecret) {
+    console.error('[Webhook] Manque la signature ou le secret')
+    return new Response('Webhook Error: Configuration manquante', { status: 400 })
+  }
 
   try {
     const body = await req.text()
-    const event = stripe.webhooks.constructEvent(body, signature, endpointSecret)
+    let event;
+
+    try {
+        event = stripe.webhooks.constructEvent(body, signature, endpointSecret)
+    } catch (err: any) {
+        console.error(`[Webhook] Erreur de signature: ${err.message}`)
+        return new Response(`Webhook Error: ${err.message}`, { status: 400 })
+    }
     
+    console.log(`[Webhook] Événement reçu: ${event.type}`)
+
     const supabase = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -56,6 +69,10 @@ serve(async (req) => {
              // On ne remet jamais has_used_trial à false une fois qu'il est true
              ...(hasUsedTrial ? { has_used_trial: true } : {})
            }).eq('id', profile.id)
+           
+           console.log(`[Webhook] Profil ${profile.id} mis à jour: ${status}`)
+        } else {
+           console.warn(`[Webhook] Aucun profil trouvé pour le client Stripe: ${subscription.customer}`)
         }
         break
       }
@@ -68,14 +85,15 @@ serve(async (req) => {
              subscription_status: 'canceled',
              subscription_end_date: null,
         }).eq('stripe_customer_id', subscription.customer)
+        console.log(`[Webhook] Abonnement supprimé pour le client: ${subscription.customer}`)
         break
       }
     }
 
-    return new Response(JSON.stringify({ received: true }), { status: 200 })
+    return new Response(JSON.stringify({ received: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 
-  } catch (err) {
-    console.error(`Webhook Error: ${err.message}`)
+  } catch (err: any) {
+    console.error(`[Webhook] Erreur serveur: ${err.message}`)
     return new Response(`Webhook Error: ${err.message}`, { status: 400 })
   }
 })
