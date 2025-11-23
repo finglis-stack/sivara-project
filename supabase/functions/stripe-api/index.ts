@@ -17,8 +17,6 @@ serve(async (req) => {
   }
 
   try {
-    console.log(`[Stripe API] Nouvelle requête reçue`);
-
     const supabaseClient = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -31,24 +29,16 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
     
     if (authError || !user) {
-      console.error('[Stripe API] Erreur Auth:', authError);
       throw new Error('Non authentifié');
     }
 
     const { action, priceId, isTrial: requestedTrial } = await req.json()
-    console.log(`[Stripe API] Action: ${action}, User: ${user.id}`);
 
-    // --- ACTION: GET CONFIG (Sans Stripe init) ---
+    // --- ACTION: GET CONFIG ---
     if (action === 'get_config') {
       // @ts-ignore
       const publishableKey = Deno.env.get('STRIPE_PUBLISHABLE_KEY');
-      
-      console.log(`[Stripe API] Récupération clé publique. Présente ? ${!!publishableKey}`);
-
-      if (!publishableKey) {
-        console.error('[Stripe API] STRIPE_PUBLISHABLE_KEY manquante dans les secrets');
-        throw new Error('Configuration serveur incomplète (Clé publique manquante)');
-      }
+      if (!publishableKey) throw new Error('Clé publique manquante (STRIPE_PUBLISHABLE_KEY)');
       
       return new Response(
         JSON.stringify({ publishableKey }), 
@@ -56,12 +46,11 @@ serve(async (req) => {
       )
     }
 
-    // --- INITIALISATION STRIPE (Seulement si nécessaire pour les autres actions) ---
+    // --- INITIALISATION STRIPE ---
     // @ts-ignore
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
     if (!stripeKey) {
-        console.error('[Stripe API] STRIPE_SECRET_KEY manquante');
-        throw new Error('Configuration serveur incomplète (Clé secrète manquante)');
+        throw new Error('Clé secrète manquante (STRIPE_SECRET_KEY). Vérifiez vos secrets Supabase.');
     }
 
     const stripe = new Stripe(stripeKey, {
@@ -71,7 +60,7 @@ serve(async (req) => {
 
     const email = user.email
 
-    // --- Gestion Client Stripe & Vérification Profil ---
+    // --- Gestion Client Stripe ---
     const { data: profile } = await supabaseClient
       .from('profiles')
       .select('stripe_customer_id, has_used_trial, is_pro')
@@ -79,18 +68,15 @@ serve(async (req) => {
       .single()
 
     const isTrialAllowed = requestedTrial && !profile?.has_used_trial && !profile?.is_pro;
-
     let customerId = profile?.stripe_customer_id
 
     if (!customerId) {
-      console.log(`[Stripe API] Création nouveau client Stripe pour ${email}`);
       const customer = await stripe.customers.create({
         email: email,
         metadata: { supabase_uuid: user.id },
       })
       customerId = customer.id
       
-      // Update avec service role pour contourner RLS si nécessaire sur l'update
       await createClient(
         // @ts-ignore
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -101,34 +87,40 @@ serve(async (req) => {
 
     // --- ACTION: CREATION SOUSCRIPTION ---
     if (action === 'create_subscription_intent') {
-      console.log(`[Stripe API] Création intention pour ${customerId}. Essai ? ${isTrialAllowed}`);
-      
-      const subscription = await stripe.subscriptions.create({
-        customer: customerId,
-        items: [{ price: priceId }],
-        payment_behavior: 'default_incomplete',
-        payment_settings: { save_default_payment_method: 'on_subscription' },
-        expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
-        trial_period_days: isTrialAllowed ? 14 : undefined,
-      });
+      if (!priceId) throw new Error("ID de prix (priceId) manquant");
 
-      let clientSecret;
-      if (isTrialAllowed && subscription.pending_setup_intent) {
-        // @ts-ignore
-        clientSecret = subscription.pending_setup_intent.client_secret;
-      } else {
-        // @ts-ignore
-        clientSecret = subscription.latest_invoice.payment_intent.client_secret;
+      try {
+        const subscription = await stripe.subscriptions.create({
+          customer: customerId,
+          items: [{ price: priceId }],
+          payment_behavior: 'default_incomplete',
+          payment_settings: { save_default_payment_method: 'on_subscription' },
+          expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
+          trial_period_days: isTrialAllowed ? 14 : undefined,
+        });
+
+        let clientSecret;
+        if (isTrialAllowed && subscription.pending_setup_intent) {
+          // @ts-ignore
+          clientSecret = subscription.pending_setup_intent.client_secret;
+        } else {
+          // @ts-ignore
+          clientSecret = subscription.latest_invoice.payment_intent.client_secret;
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            subscriptionId: subscription.id, 
+            clientSecret: clientSecret,
+            isTrialActive: isTrialAllowed 
+          }), 
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      } catch (stripeError: any) {
+        console.error("Stripe Create Error:", stripeError);
+        // Renvoi de l'erreur Stripe spécifique (ex: No such price)
+        throw new Error(`Stripe Error: ${stripeError.message}`);
       }
-
-      return new Response(
-        JSON.stringify({ 
-          subscriptionId: subscription.id, 
-          clientSecret: clientSecret,
-          isTrialActive: isTrialAllowed 
-        }), 
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
     }
 
     // --- ACTION: PORTAL ---
@@ -142,11 +134,13 @@ serve(async (req) => {
 
     throw new Error(`Action inconnue: ${action}`)
 
-  } catch (error) {
-    console.error(`[Stripe API Error]`, error)
+  } catch (error: any) {
+    console.error(`[API Error]`, error.message)
+    // IMPORTANT: On renvoie 200 avec un champ error pour que le client puisse lire le message
+    // au lieu de recevoir une erreur générique FunctionsHttpError
     return new Response(
-      JSON.stringify({ error: error.message || 'Une erreur serveur est survenue' }), 
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: error.message }), 
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })

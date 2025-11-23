@@ -9,6 +9,8 @@ import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 // --- CONFIGURATION ---
+// IMPORTANT: Cet ID doit exister dans votre Dashboard Stripe (Mode Test si clé PK_TEST)
+// Si vous avez copié le code, ce "price_..." n'existe pas chez vous. Créez un produit dans Stripe et remplacez l'ID ici.
 const STRIPE_PRICE_ID_MONTHLY = 'price_1SWTi12UEuKhlvPiQdVw7Jwl'; 
 const STRIPE_PUBLISHABLE_KEY = 'pk_test_51SWTTe2UEuKhlvPiZK33IJhJSYPTaYPfkQX9KcBUt39uD4w0vEf8z5iTYufLx01PfJyNvgN4Pa20iGXskGEzPl7x00danXtwmY';
 
@@ -99,7 +101,7 @@ const Checkout = () => {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [confirmedIsTrial, setConfirmedIsTrial] = useState<boolean>(requestedTrial);
   const [isDowngraded, setIsDowngraded] = useState(false);
-  const [initError, setInitError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -112,7 +114,7 @@ const Checkout = () => {
         // 1. Initialiser Stripe avec la clé publique hardcodée
         setStripePromise(loadStripe(STRIPE_PUBLISHABLE_KEY));
 
-        // 2. Créer l'intention de paiement via le serveur (toujours besoin de la clé secrète côté serveur)
+        // 2. Créer l'intention de paiement
         const { data, error } = await supabase.functions.invoke('stripe-api', {
           body: {
             action: 'create_subscription_intent',
@@ -121,9 +123,20 @@ const Checkout = () => {
           }
         });
 
-        if (error || !data?.clientSecret) {
-            console.error("Erreur serveur:", error);
-            throw new Error("Erreur lors de la création de la session de paiement");
+        // Gestion d'erreur réseau
+        if (error) {
+            console.error("Erreur réseau:", error);
+            throw new Error("Erreur de communication avec le serveur de paiement.");
+        }
+
+        // Gestion d'erreur logique (Stripe Error) renvoyée en JSON
+        if (data && data.error) {
+             console.error("Erreur Stripe:", data.error);
+             throw new Error(data.error);
+        }
+
+        if (!data?.clientSecret) {
+            throw new Error("Réponse invalide du serveur (Pas de clientSecret)");
         }
         
         setClientSecret(data.clientSecret);
@@ -134,21 +147,41 @@ const Checkout = () => {
             showError("Vous avez déjà bénéficié de l'essai gratuit.");
         }
 
-      } catch (e) {
+      } catch (e: any) {
         console.error(e);
-        setInitError(true);
-        showError("Impossible d'initialiser le paiement sécurisé.");
+        setErrorMessage(e.message || "Erreur inconnue");
+        showError(e.message || "Impossible d'initialiser le paiement.");
       }
     };
 
     initPayment();
   }, [user, requestedTrial]);
 
-  if (initError) {
+  if (errorMessage) {
       return (
-          <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-white">
-              <p className="text-gray-500 font-light">Le service de paiement est momentanément indisponible.</p>
-              <Button onClick={() => window.location.reload()} variant="outline">Réessayer</Button>
+          <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-white p-4 text-center">
+              <div className="bg-red-50 p-4 rounded-full">
+                  <AlertCircle className="h-8 w-8 text-red-500" />
+              </div>
+              <div className="max-w-md">
+                  <h1 className="text-xl font-semibold text-gray-900 mb-2">Erreur d'initialisation</h1>
+                  <p className="text-gray-600 mb-4">{errorMessage}</p>
+                  
+                  {errorMessage.includes('No such price') && (
+                      <div className="text-xs text-left bg-gray-100 p-4 rounded border border-gray-200 font-mono mb-4 overflow-auto">
+                          <p><strong>Cause probable :</strong> L'ID de produit Stripe (<code>{STRIPE_PRICE_ID_MONTHLY}</code>) n'existe pas dans votre compte Stripe.</p>
+                          <p className="mt-2"><strong>Solution :</strong> Créez un produit dans votre Dashboard Stripe, copiez l'ID du tarif (commence par <code>price_...</code>) et mettez-le à jour dans <code>src/pages/Checkout.tsx</code>.</p>
+                      </div>
+                  )}
+                  
+                  {errorMessage.includes('Clé secrète manquante') && (
+                      <div className="text-xs text-left bg-gray-100 p-4 rounded border border-gray-200 font-mono mb-4 overflow-auto">
+                          <p><strong>Solution :</strong> Ajoutez <code>STRIPE_SECRET_KEY</code> dans les secrets de votre projet Supabase (Edge Functions).</p>
+                      </div>
+                  )}
+
+                  <Button onClick={() => window.location.reload()} variant="outline">Réessayer</Button>
+              </div>
           </div>
       );
   }
