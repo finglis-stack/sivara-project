@@ -5,13 +5,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { Loader2, ArrowRight, Check, ShieldCheck, Lock, CreditCard, AlertCircle } from 'lucide-react';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 // --- CONFIGURATION ---
 const STRIPE_PRICE_ID_MONTHLY = 'price_1SWTi12UEuKhlvPiQdVw7Jwl'; 
-// REMPLACE CECI PAR TA CLÉ PUBLIQUE (pk_test_...)
-const stripePromise = loadStripe('pk_test_51SWTi12UEuKhlvPisWq48Z3iX4p8Qv5t9gq7x6z0y1a2b3c4d5e6f7g8h9i0j'); 
 
 const Appearance = {
   theme: 'flat',
@@ -94,9 +92,9 @@ const Checkout = () => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   
-  // On récupère l'intention de l'utilisateur, mais le serveur aura le dernier mot
   const requestedTrial = searchParams.get('trial') === 'true';
   
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [confirmedIsTrial, setConfirmedIsTrial] = useState<boolean>(requestedTrial);
   const [isDowngraded, setIsDowngraded] = useState(false);
@@ -110,22 +108,28 @@ const Checkout = () => {
 
     const initPayment = async () => {
       try {
+        // 1. Récupérer la clé publique Stripe depuis le serveur
+        const { data: configData, error: configError } = await supabase.functions.invoke('stripe-api', {
+           body: { action: 'get_config' }
+        });
+        
+        if (configError || !configData?.publishableKey) throw new Error("Erreur de configuration Stripe");
+        setStripePromise(loadStripe(configData.publishableKey));
+
+        // 2. Créer l'intention de paiement
         const { data, error } = await supabase.functions.invoke('stripe-api', {
           body: {
             action: 'create_subscription_intent',
             priceId: STRIPE_PRICE_ID_MONTHLY,
-            isTrial: requestedTrial // On demande un essai
+            isTrial: requestedTrial
           }
         });
 
         if (error || !data?.clientSecret) throw error;
         
         setClientSecret(data.clientSecret);
-        
-        // Le serveur nous dit si l'essai a été accepté ou refusé (car déjà utilisé)
         setConfirmedIsTrial(data.isTrialActive);
         
-        // Si on demandait un essai mais que le serveur a dit non, on notifie l'utilisateur
         if (requestedTrial && !data.isTrialActive) {
             setIsDowngraded(true);
             showError("Vous avez déjà bénéficié de l'essai gratuit.");
@@ -150,7 +154,6 @@ const Checkout = () => {
       );
   }
 
-  // On utilise la valeur CONFIRMÉE par le serveur pour l'affichage
   const isTrial = confirmedIsTrial;
 
   return (
@@ -237,7 +240,7 @@ const Checkout = () => {
                 </div>
             )}
 
-            {clientSecret ? (
+            {clientSecret && stripePromise ? (
                 // @ts-ignore
                 <Elements stripe={stripePromise} options={{ clientSecret, appearance: Appearance }}>
                     <CheckoutForm clientSecret={clientSecret} isTrial={isTrial} />

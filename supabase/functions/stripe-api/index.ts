@@ -34,6 +34,19 @@ serve(async (req) => {
     if (!user) throw new Error('Non authentifié')
 
     const { action, priceId, isTrial: requestedTrial } = await req.json()
+
+    // --- ACTION: GET CONFIG (Pour le frontend) ---
+    if (action === 'get_config') {
+      // @ts-ignore
+      const publishableKey = Deno.env.get('STRIPE_PUBLISHABLE_KEY');
+      if (!publishableKey) throw new Error('STRIPE_PUBLISHABLE_KEY non configurée');
+      
+      return new Response(
+        JSON.stringify({ publishableKey }), 
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const email = user.email
 
     // --- Gestion Client Stripe & Vérification Profil ---
@@ -43,8 +56,6 @@ serve(async (req) => {
       .eq('id', user.id)
       .single()
 
-    // SÉCURITÉ : On vérifie si l'utilisateur a le droit à l'essai
-    // Si il a déjà utilisé l'essai, on force isTrial à false, peu importe ce que dit le frontend
     const isTrialAllowed = requestedTrial && !profile?.has_used_trial && !profile?.is_pro;
 
     let customerId = profile?.stripe_customer_id
@@ -72,7 +83,6 @@ serve(async (req) => {
         payment_behavior: 'default_incomplete',
         payment_settings: { save_default_payment_method: 'on_subscription' },
         expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
-        // On utilise la valeur sécurisée isTrialAllowed
         trial_period_days: isTrialAllowed ? 14 : undefined,
       });
 
@@ -89,7 +99,6 @@ serve(async (req) => {
         JSON.stringify({ 
           subscriptionId: subscription.id, 
           clientSecret: clientSecret,
-          // On renvoie le statut réel au frontend pour qu'il mette à jour l'UI
           isTrialActive: isTrialAllowed 
         }), 
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
