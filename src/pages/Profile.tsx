@@ -115,7 +115,7 @@ const Profile = () => {
         
         // On recharge le profil localement après la sync serveur
         await fetchProfile();
-        showSuccess("Statut abonnement synchronisé avec Stripe");
+        showSuccess("Statut abonnement synchronisé");
     } catch (e) {
         showError("Erreur de synchronisation");
     } finally {
@@ -270,28 +270,28 @@ const Profile = () => {
                 </div>
             </div>
         ) : (
-            <div className="mb-8 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-2xl p-8 shadow-md border border-gray-700 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="mb-8 bg-white rounded-2xl p-8 shadow-sm border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
                    <div className="h-14 w-14 bg-gradient-to-tr from-yellow-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
                       <span className="text-2xl font-bold text-white">S</span>
                    </div>
                    <div>
                       <div className="flex items-center gap-3">
-                          <h2 className="text-2xl font-bold flex items-center gap-2">Abonnement Pro Actif <span className="bg-green-500 text-xs px-2 py-0.5 rounded-full">Actif</span></h2>
+                          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">Abonnement Pro Actif <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">Actif</span></h2>
                           <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <button onClick={handleSyncStripe} disabled={isSyncing} className="text-gray-400 hover:text-white transition-colors p-1">
+                                    <button onClick={handleSyncStripe} disabled={isSyncing} className="text-gray-400 hover:text-gray-600 transition-colors p-1 bg-gray-50 rounded-full ml-1">
                                         <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
                                     </button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p>Forcer la synchronisation avec Stripe</p>
+                                    <p>Synchroniser le statut de paiement</p>
                                 </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                       </div>
-                      <p className="text-gray-400 mt-1">
+                      <p className="text-gray-500 mt-1">
                           {profile.subscription_status === 'trialing' 
                             ? `Essai gratuit jusqu'au ${formatDate(profile.subscription_end_date!)}` 
                             : `Prochain renouvellement le ${formatDate(profile.subscription_end_date!)}`
@@ -303,7 +303,7 @@ const Profile = () => {
                     variant="outline" 
                     onClick={handleManageSubscription} 
                     disabled={isPortalLoading}
-                    className="border-gray-600 hover:bg-white hover:text-black text-white gap-2 h-12 px-6"
+                    className="gap-2 h-12 px-6"
                 >
                     {isPortalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
                     Gérer mon abonnement
