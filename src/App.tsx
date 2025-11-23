@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Capacitor } from "@capacitor/core";
@@ -28,68 +28,112 @@ import MobileLanding from "./pages/MobileLanding";
 
 const queryClient = new QueryClient();
 
-// Fonction utilitaire pour détecter l'application courante avec persistance
-const getCurrentApp = () => {
+const AppRoutes = () => {
+  const [searchParams] = useSearchParams();
   const hostname = window.location.hostname;
-  const searchParams = new URLSearchParams(window.location.search);
-  let app = searchParams.get('app');
+  
+  // Calcul de l'application courante réactif
+  const currentApp = useMemo(() => {
+    const appParam = searchParams.get('app');
 
-  // 1. Gestion Mobile (Capacitor)
-  if (Capacitor.isNativePlatform()) {
-    if (app) {
-      sessionStorage.setItem('sivara_mobile_context', app);
-    } else {
-      app = sessionStorage.getItem('sivara_mobile_context');
+    // 1. Gestion Mobile (Capacitor)
+    if (Capacitor.isNativePlatform()) {
+      if (appParam === 'docs') return 'docs';
+      if (appParam === 'account') return 'account';
+      if (appParam === 'mail') return 'mail';
+      if (appParam === 'www') return 'www';
+      return 'mobile-launcher';
     }
 
-    if (app === 'mobile' || app === 'mobile-launcher') {
-        sessionStorage.removeItem('sivara_mobile_context');
-        return 'mobile-launcher';
+    // 2. Mode Localhost
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      if (appParam === 'docs') return 'docs';
+      if (appParam === 'account') return 'account';
+      if (appParam === 'mail') return 'mail';
+      if (appParam === 'www') return 'www';
+      if (appParam === 'mobile') return 'mobile-launcher';
+      return 'dev-portal';
     }
 
-    if (app === 'docs') return 'docs';
-    if (app === 'account') return 'account';
-    if (app === 'mail') return 'mail';
-    if (app === 'www') return 'www';
-    
-    return 'mobile-launcher';
-  }
+    // 3. Mode Production (Sous-domaines)
+    if (hostname.startsWith('docs.')) return 'docs';
+    if (hostname.startsWith('account.')) return 'account';
+    if (hostname.startsWith('mail.')) return 'mail';
+    return 'www';
+  }, [searchParams, hostname]);
 
-  // 2. Mode Localhost avec simulation
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    if (app) sessionStorage.setItem('sivara_dev_context', app);
-    else app = sessionStorage.getItem('sivara_dev_context') || null;
+  return (
+    <Routes>
+      {/* --- MOBILE LAUNCHER --- */}
+      {currentApp === 'mobile-launcher' && (
+        <Route path="*" element={<MobileLanding />} />
+      )}
 
-    if (app === 'mobile') {
-        sessionStorage.removeItem('sivara_dev_context');
-        return 'mobile-launcher';
-    }
+      {/* --- APPLICATION: ACCOUNT --- */}
+      {currentApp === 'account' && (
+        <>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/pro-onboarding" element={
+            <ProtectedRoute>
+              <ProOnboarding />
+            </ProtectedRoute>
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          } />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </>
+      )}
 
-    if (app === 'docs') return 'docs';
-    if (app === 'account') return 'account';
-    if (app === 'mail') return 'mail';
-    if (app === 'www') return 'www';
-    
-    return 'dev-portal';
-  }
+      {/* --- APPLICATION: DOCS --- */}
+      {currentApp === 'docs' && (
+        <>
+          <Route path="/" element={<Docs />} />
+          <Route path="/:id" element={<DocEditor />} />
+          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+        </>
+      )}
 
-  // 3. Mode Production
-  if (hostname.startsWith('docs.')) return 'docs';
-  if (hostname.startsWith('account.')) return 'account';
-  if (hostname.startsWith('mail.')) return 'mail';
-  return 'www';
+      {/* --- APPLICATION: MAIL --- */}
+      {currentApp === 'mail' && (
+        <>
+          <Route path="/" element={<Mail />} />
+          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+        </>
+      )}
+
+      {/* --- APPLICATION: SEARCH ENGINE --- */}
+      {currentApp === 'www' && (
+        <>
+          <Route path="/" element={<Index />} />
+          <Route path="/monitor" element={
+            <ProtectedRoute>
+              <Monitor />
+            </ProtectedRoute>
+          } />
+          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+        </>
+      )}
+
+      {/* --- DEV PORTAL --- */}
+      {currentApp === 'dev-portal' && (
+        <Route path="*" element={<DevPortal />} />
+      )}
+    </Routes>
+  );
 };
 
 const App = () => {
-  const currentApp = getCurrentApp();
-
   useEffect(() => {
-    // Écoute des Deep Links uniquement si plateforme native
     if (Capacitor.isNativePlatform()) {
       const setupListener = async () => {
         await CapacitorApp.addListener('appUrlOpen', async (data) => {
-          console.log('App opened with URL:', data.url);
-          
           if (data.url.includes('login-callback')) {
             try {
               const urlObj = new URL(data.url.replace('#', '?'));
@@ -109,7 +153,6 @@ const App = () => {
           }
         });
       };
-      
       setupListener();
     }
   }, []);
@@ -121,70 +164,7 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <Routes>
-              {/* --- MOBILE LAUNCHER (Capacitor Only) --- */}
-              {currentApp === 'mobile-launcher' && (
-                <Route path="*" element={<MobileLanding />} />
-              )}
-
-              {/* --- APPLICATION: ACCOUNT --- */}
-              {currentApp === 'account' && (
-                <>
-                  <Route path="/" element={<Navigate to="/login" replace />} />
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/onboarding" element={<Onboarding />} />
-                  <Route path="/pricing" element={<Pricing />} />
-                  <Route path="/checkout" element={<Checkout />} />
-                  <Route path="/pro-onboarding" element={
-                    <ProtectedRoute>
-                      <ProOnboarding />
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/profile" element={
-                    <ProtectedRoute>
-                      <Profile />
-                    </ProtectedRoute>
-                  } />
-                  <Route path="*" element={<Navigate to="/login" replace />} />
-                </>
-              )}
-
-              {/* --- APPLICATION: DOCS --- */}
-              {currentApp === 'docs' && (
-                <>
-                  <Route path="/" element={<Docs />} />
-                  <Route path="/:id" element={<DocEditor />} />
-                  <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-                </>
-              )}
-
-              {/* --- APPLICATION: MAIL --- */}
-              {currentApp === 'mail' && (
-                <>
-                  <Route path="/" element={<Mail />} />
-                  <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-                </>
-              )}
-
-              {/* --- APPLICATION: SEARCH ENGINE --- */}
-              {currentApp === 'www' && (
-                <>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/monitor" element={
-                    <ProtectedRoute>
-                      <Monitor />
-                    </ProtectedRoute>
-                  } />
-                  <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-                </>
-              )}
-
-              {/* --- DEV PORTAL --- */}
-              {currentApp === 'dev-portal' && (
-                <Route path="*" element={<DevPortal />} />
-              )}
-
-            </Routes>
+            <AppRoutes />
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

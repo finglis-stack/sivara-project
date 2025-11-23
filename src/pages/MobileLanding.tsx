@@ -8,9 +8,11 @@ import {
   Globe, FileText, Mail, UserCircle, LogOut, 
   Shield, Search, ArrowRight
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const MobileLanding = () => {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<{ first_name: string; avatar_url: string | null } | null>(null);
 
   useEffect(() => {
@@ -27,38 +29,43 @@ const MobileLanding = () => {
     }
   }, [user]);
 
-  // Navigation interne pour changer de "module" dans l'app hybride
+  // Navigation interne FLUIDE (sans rechargement)
   const openApp = (appName: string) => {
-    window.location.href = `/?app=${appName}`;
+    if (appName === 'account') {
+        // Pour le profil, on navigue vers account mais on pointe vers /profile directement
+        navigate(`/?app=account`);
+        // Petit hack : comme le router switch, on laisse le temps au mount, puis on ira sur /profile si besoin
+        // Mais App.tsx redirige / vers /login, puis ProtectedRoute vers Profile
+        // Le mieux est de cibler directement la route dans App.tsx si possible, mais ici on change le contexte global.
+        setTimeout(() => {
+             window.history.pushState(null, '', '/profile');
+             // On force un petit événement de navigation pour que le Router interne le capte si besoin, 
+             // mais avec le changement de contexte App.tsx, le router est remonté.
+        }, 100);
+    } else {
+        navigate(`/?app=${appName}`);
+    }
   };
 
   const handleLogin = () => {
-    // FORCE PRODUCTION URL : On utilise toujours le vrai serveur d'auth pour le deep link
     const baseUrl = 'https://account.sivara.ca';
-    
-    // Callback vers l'app native
     const callbackUrl = 'com.example.sivara://login-callback';
-    
-    // Redirection vers le navigateur système
     window.location.href = `${baseUrl}/login?returnTo=${encodeURIComponent(callbackUrl)}`;
   };
 
-  // --- ÉCRAN NON CONNECTÉ (LANDING) ---
+  // --- ÉCRAN NON CONNECTÉ ---
   if (!user) {
     return (
       <div className="min-h-screen relative flex flex-col justify-end pb-12 px-6 overflow-hidden">
-        {/* Image de fond */}
         <div className="absolute inset-0 z-0">
            <img 
              src="/mobile-login.jpg" 
              alt="Background" 
              className="w-full h-full object-cover"
            />
-           {/* Gradient overlay pour la lisibilité */}
            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90"></div>
         </div>
 
-        {/* Contenu */}
         <div className="relative z-10 space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
           <div>
             <h1 className="text-6xl font-thin text-white tracking-tighter mb-2 drop-shadow-lg">
@@ -90,10 +97,11 @@ const MobileLanding = () => {
   }
 
   // --- ÉCRAN CONNECTÉ (DASHBOARD) ---
+  // Ajout de pt-[env(safe-area-inset-top)]
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
-      {/* Header */}
-      <header className="bg-white px-6 pt-12 pb-6 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans pt-[env(safe-area-inset-top)]">
+      {/* Header avec padding-top additionnel pour la sécurité */}
+      <header className="bg-white px-6 py-6 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
         <div>
           <p className="text-gray-500 text-sm font-medium">Bonjour,</p>
           <h1 className="text-2xl font-bold text-gray-900">{profile?.first_name || user.email?.split('@')[0]}</h1>
@@ -168,7 +176,7 @@ const MobileLanding = () => {
         </div>
 
         {/* Notifications / Status */}
-        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex items-center gap-4">
+        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex items-center gap-4 mb-8">
            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600 shrink-0">
               <Shield className="w-5 h-5" />
            </div>
