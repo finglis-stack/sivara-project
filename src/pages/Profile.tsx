@@ -9,7 +9,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink, RefreshCw, Globe } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import {
   Dialog,
   DialogContent,
@@ -123,20 +124,43 @@ const Profile = () => {
   };
 
   const handleReturn = () => {
+    // 1. Logique Mobile (Capacitor)
+    if (Capacitor.isNativePlatform()) {
+      // Retour au Dashboard Mobile
+      navigate('/?app=mobile');
+      return;
+    }
+
+    // 2. Logique Web (Retour à l'app précédente)
     const returnTo = searchParams.get('returnTo');
     if (returnTo) {
       window.location.href = returnTo;
       return;
     }
-    window.location.href = '/?app=www';
+
+    // 3. Fallback Web (Retour à l'accueil)
+    window.location.href = 'https://sivara.ca';
   };
 
   const navigateToApp = (app: string) => {
+     // Navigation intelligente selon l'environnement
+     if (Capacitor.isNativePlatform()) {
+        navigate(`/?app=${app}`);
+        return;
+     }
+
      const hostname = window.location.hostname;
      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+     
      if (app === 'docs') {
          if (isLocal) window.location.href = '/?app=docs';
          else window.location.href = 'https://docs.sivara.ca';
+     } else if (app === 'mail') {
+         if (isLocal) window.location.href = '/?app=mail';
+         else window.location.href = 'https://mail.sivara.ca';
+     } else if (app === 'www') {
+         if (isLocal) window.location.href = '/?app=www';
+         else window.location.href = 'https://sivara.ca';
      }
   };
 
@@ -343,6 +367,22 @@ const Profile = () => {
                   <img src="/docs-icon.png" alt="Docs" className="h-6 w-6 sm:h-7 sm:w-7" />
                 </div>
                 <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Docs</h3></div>
+              </div>
+            </button>
+            <button onClick={() => navigateToApp('mail')} className="group relative bg-white border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left active:scale-95">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-orange-50 rounded-xl flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                  <Mail className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+                </div>
+                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Mail</h3></div>
+              </div>
+            </button>
+            <button onClick={() => navigateToApp('www')} className="group relative bg-white border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left active:scale-95">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-gray-50 rounded-xl flex items-center justify-center group-hover:bg-gray-100 transition-colors">
+                  <Globe className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
+                </div>
+                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Moteur</h3></div>
               </div>
             </button>
           </div>
