@@ -25,31 +25,52 @@ import MobileLanding from "./pages/MobileLanding";
 
 const queryClient = new QueryClient();
 
-// Fonction utilitaire pour détecter l'application courante
+// Fonction utilitaire pour détecter l'application courante avec persistance
 const getCurrentApp = () => {
   const hostname = window.location.hostname;
   const searchParams = new URLSearchParams(window.location.search);
-  const simulatedApp = searchParams.get('app');
+  let app = searchParams.get('app');
 
-  // 1. Priorité absolue : Application Mobile Native (Capacitor)
+  // 1. Gestion Mobile (Capacitor)
   if (Capacitor.isNativePlatform()) {
-    // Si on demande spécifiquement une app via ?app=..., on la sert
-    if (simulatedApp === 'docs') return 'docs';
-    if (simulatedApp === 'account') return 'account';
-    if (simulatedApp === 'mail') return 'mail';
-    if (simulatedApp === 'www') return 'www';
+    // Si un paramètre 'app' est présent, on met à jour le contexte persistant
+    if (app) {
+      sessionStorage.setItem('sivara_mobile_context', app);
+    } else {
+      // Sinon, on récupère le dernier contexte connu
+      app = sessionStorage.getItem('sivara_mobile_context');
+    }
+
+    // Si on demande explicitement le mobile launcher, on nettoie le contexte
+    if (app === 'mobile' || app === 'mobile-launcher') {
+        sessionStorage.removeItem('sivara_mobile_context');
+        return 'mobile-launcher';
+    }
+
+    if (app === 'docs') return 'docs';
+    if (app === 'account') return 'account';
+    if (app === 'mail') return 'mail';
+    if (app === 'www') return 'www';
     
-    // Sinon, par défaut sur mobile, on lance le Mobile Launcher
+    // Par défaut : Launcher
     return 'mobile-launcher';
   }
 
   // 2. Mode Localhost avec simulation
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    if (simulatedApp === 'docs') return 'docs';
-    if (simulatedApp === 'account') return 'account';
-    if (simulatedApp === 'mail') return 'mail';
-    if (simulatedApp === 'www') return 'www';
-    if (simulatedApp === 'mobile') return 'mobile-launcher'; // Pour tester sur desktop
+    if (app) sessionStorage.setItem('sivara_dev_context', app);
+    else app = sessionStorage.getItem('sivara_dev_context') || null;
+
+    if (app === 'mobile') {
+        sessionStorage.removeItem('sivara_dev_context');
+        return 'mobile-launcher';
+    }
+
+    if (app === 'docs') return 'docs';
+    if (app === 'account') return 'account';
+    if (app === 'mail') return 'mail';
+    if (app === 'www') return 'www';
+    
     return 'dev-portal';
   }
 
@@ -57,7 +78,7 @@ const getCurrentApp = () => {
   if (hostname.startsWith('docs.')) return 'docs';
   if (hostname.startsWith('account.')) return 'account';
   if (hostname.startsWith('mail.')) return 'mail';
-  return 'www'; // sivara.ca par défaut
+  return 'www';
 };
 
 const App = () => {
@@ -103,7 +124,6 @@ const App = () => {
                 <>
                   <Route path="/" element={<Docs />} />
                   <Route path="/:id" element={<DocEditor />} />
-                  {/* Sur mobile, le retour se fait vers le launcher */}
                   <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
                 </>
               )}

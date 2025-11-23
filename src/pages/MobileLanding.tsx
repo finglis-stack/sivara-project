@@ -29,13 +29,13 @@ const MobileLanding = () => {
 
   // Navigation interne pour changer de "module" dans l'app hybride
   const openApp = (appName: string) => {
-    // On utilise le paramètre ?app= pour simuler le routage multi-app dans Capacitor
     window.location.href = `/?app=${appName}`;
   };
 
   const handleLogin = () => {
-    // Redirige vers le module Account
-    window.location.href = '/?app=account&path=/login';
+    // On force le contexte "account" et on définit le retour vers "mobile"
+    const returnUrl = '/?app=mobile';
+    window.location.href = `/login?app=account&returnTo=${encodeURIComponent(returnUrl)}`;
   };
 
   // --- ÉCRAN NON CONNECTÉ ---
