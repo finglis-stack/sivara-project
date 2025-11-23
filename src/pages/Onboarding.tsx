@@ -41,7 +41,6 @@ const Onboarding = () => {
     password: '',
   });
 
-  // Fonction sécurisée pour rediriger (interne ou externe)
   const handleRedirect = (url: string) => {
     if (url.startsWith('http') || url.startsWith('//')) {
       window.location.href = url;
@@ -80,7 +79,6 @@ const Onboarding = () => {
     try {
       setIsLoading(true);
 
-      // Créer le compte
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -89,7 +87,6 @@ const Onboarding = () => {
       if (authError) throw authError;
 
       if (authData.user) {
-        // Créer le profil
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
@@ -106,7 +103,6 @@ const Onboarding = () => {
         if (profileError) throw profileError;
 
         showSuccess('Compte créé avec succès !');
-        // On attend un peu pour que l'utilisateur voie le message
         setTimeout(() => {
           handleRedirect(returnTo);
         }, 1500);
@@ -120,8 +116,7 @@ const Onboarding = () => {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center px-4 py-8">
-      {/* Image de fond */}
+    <div className="min-h-screen relative flex items-center justify-center px-4 py-8 sm:py-12">
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: 'url(/auth-bg-v2.jpg)' }}
@@ -129,19 +124,16 @@ const Onboarding = () => {
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
       </div>
 
-      {/* Contenu */}
       <div className="relative z-10 w-full max-w-2xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-white mb-3 drop-shadow-lg">Sivara</h1>
-          <p className="text-lg text-white/90 drop-shadow">Créez votre compte en quelques étapes</p>
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-2 sm:mb-3 drop-shadow-lg">Sivara</h1>
+          <p className="text-base sm:text-lg text-white/90 drop-shadow px-2">Créez votre compte en quelques étapes</p>
         </div>
 
-        {/* Progress indicator */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-center gap-2">
-            <div className={`h-2 w-24 rounded-full transition-all duration-300 ${step >= 1 ? 'bg-white' : 'bg-white/30'}`}></div>
-            <div className={`h-2 w-24 rounded-full transition-all duration-300 ${step >= 2 ? 'bg-white' : 'bg-white/30'}`}></div>
+            <div className={`h-2 w-20 sm:w-24 rounded-full transition-all duration-300 ${step >= 1 ? 'bg-white' : 'bg-white/30'}`}></div>
+            <div className={`h-2 w-20 sm:w-24 rounded-full transition-all duration-300 ${step >= 2 ? 'bg-white' : 'bg-white/30'}`}></div>
           </div>
           <div className="text-center mt-3 text-sm text-white/90 drop-shadow">
             Étape {step} sur 2
@@ -149,21 +141,20 @@ const Onboarding = () => {
         </div>
 
         <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur">
-          <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-2xl font-bold">
+          <CardHeader className="space-y-1 pb-4 sm:pb-6 px-5 sm:px-6 pt-5 sm:pt-6">
+            <CardTitle className="text-xl sm:text-2xl font-bold">
               {step === 1 ? 'Informations personnelles' : 'Créez vos identifiants'}
             </CardTitle>
-            <CardDescription className="text-base">
+            <CardDescription className="text-sm sm:text-base">
               {step === 1 
                 ? 'Commençons par quelques informations de base' 
                 : 'Choisissez votre email et mot de passe'}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
+          <CardContent className="px-5 sm:px-6 pb-5 sm:pb-6">
+            <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
               {step === 1 ? (
                 <>
-                  {/* Prénom et Nom */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName" className="text-sm font-semibold">
@@ -174,7 +165,7 @@ const Onboarding = () => {
                         placeholder="Jean"
                         value={formData.firstName}
                         onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                        className="h-12 text-base"
+                        className="h-11 sm:h-12 text-base"
                         required
                       />
                     </div>
@@ -187,13 +178,12 @@ const Onboarding = () => {
                         placeholder="Dupont"
                         value={formData.lastName}
                         onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                        className="h-12 text-base"
+                        className="h-11 sm:h-12 text-base"
                         required
                       />
                     </div>
                   </div>
 
-                  {/* Numéro de téléphone */}
                   <div className="space-y-2">
                     <Label htmlFor="phone" className="text-sm font-semibold">
                       Numéro de téléphone
@@ -203,7 +193,7 @@ const Onboarding = () => {
                         value={formData.phoneCountryCode}
                         onValueChange={(value) => setFormData({ ...formData, phoneCountryCode: value })}
                       >
-                        <SelectTrigger className="w-[140px] h-12">
+                        <SelectTrigger className="w-[110px] sm:w-[140px] h-11 sm:h-12 text-sm sm:text-base px-2 sm:px-3">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -223,12 +213,11 @@ const Onboarding = () => {
                         placeholder="6 12 34 56 78"
                         value={formData.phoneNumber}
                         onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                        className="flex-1 h-12 text-base"
+                        className="flex-1 h-11 sm:h-12 text-base"
                       />
                     </div>
                   </div>
 
-                  {/* Type de compte */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">
                       Type de compte <span className="text-red-500">*</span>
@@ -236,7 +225,7 @@ const Onboarding = () => {
                     <RadioGroup
                       value={formData.accountType}
                       onValueChange={(value) => setFormData({ ...formData, accountType: value })}
-                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4"
                     >
                       <div>
                         <RadioGroupItem
@@ -246,12 +235,12 @@ const Onboarding = () => {
                         />
                         <Label
                           htmlFor="individual"
-                          className="flex flex-col items-center justify-between rounded-xl border-2 border-gray-200 bg-white p-6 hover:bg-gray-50 peer-data-[state=checked]:border-gray-700 peer-data-[state=checked]:bg-gray-50 peer-data-[state=checked]:shadow-lg cursor-pointer transition-all"
+                          className="flex flex-row sm:flex-col items-center sm:justify-between rounded-xl border-2 border-gray-200 bg-white p-4 sm:p-6 hover:bg-gray-50 peer-data-[state=checked]:border-gray-700 peer-data-[state=checked]:bg-gray-50 peer-data-[state=checked]:shadow-lg cursor-pointer transition-all h-full"
                         >
-                          <User className="mb-3 h-10 w-10 text-gray-700" />
-                          <div className="text-center">
-                            <div className="font-bold text-lg">Individuel</div>
-                            <div className="text-sm text-gray-500 mt-1">
+                          <User className="h-8 w-8 sm:h-10 sm:w-10 text-gray-700 mr-4 sm:mr-0 sm:mb-3" />
+                          <div className="text-left sm:text-center">
+                            <div className="font-bold text-base sm:text-lg">Individuel</div>
+                            <div className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">
                               Pour un usage personnel
                             </div>
                           </div>
@@ -265,12 +254,12 @@ const Onboarding = () => {
                         />
                         <Label
                           htmlFor="corporate"
-                          className="flex flex-col items-center justify-between rounded-xl border-2 border-gray-200 bg-white p-6 hover:bg-gray-50 peer-data-[state=checked]:border-gray-700 peer-data-[state=checked]:bg-gray-50 peer-data-[state=checked]:shadow-lg cursor-pointer transition-all"
+                          className="flex flex-row sm:flex-col items-center sm:justify-between rounded-xl border-2 border-gray-200 bg-white p-4 sm:p-6 hover:bg-gray-50 peer-data-[state=checked]:border-gray-700 peer-data-[state=checked]:bg-gray-50 peer-data-[state=checked]:shadow-lg cursor-pointer transition-all h-full"
                         >
-                          <Building2 className="mb-3 h-10 w-10 text-gray-700" />
-                          <div className="text-center">
-                            <div className="font-bold text-lg">Entreprise</div>
-                            <div className="text-sm text-gray-500 mt-1">
+                          <Building2 className="h-8 w-8 sm:h-10 sm:w-10 text-gray-700 mr-4 sm:mr-0 sm:mb-3" />
+                          <div className="text-left sm:text-center">
+                            <div className="font-bold text-base sm:text-lg">Entreprise</div>
+                            <div className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">
                               Pour un usage professionnel
                             </div>
                           </div>
@@ -279,8 +268,7 @@ const Onboarding = () => {
                     </RadioGroup>
                   </div>
 
-                  {/* Conditions d'utilisation */}
-                  <div className="space-y-4 pt-4 border-t">
+                  <div className="space-y-4 pt-2 sm:pt-4 border-t">
                     <div className="flex items-start space-x-3">
                       <Checkbox
                         id="terms"
@@ -298,7 +286,7 @@ const Onboarding = () => {
                           J'accepte les conditions d'utilisation{' '}
                           <span className="text-red-500">*</span>
                         </label>
-                        <p className="text-sm text-gray-500 leading-relaxed">
+                        <p className="text-xs sm:text-sm text-gray-500 leading-relaxed">
                           En cochant cette case, vous acceptez nos{' '}
                           <a href="#" className="text-gray-700 underline hover:text-gray-900 font-medium">
                             conditions d'utilisation
@@ -313,11 +301,10 @@ const Onboarding = () => {
                     </div>
                   </div>
 
-                  {/* Bouton suivant */}
                   <Button
                     type="button"
                     onClick={handleNextStep}
-                    className="w-full h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
+                    className="w-full h-11 sm:h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
                     disabled={!formData.termsAccepted}
                   >
                     Continuer
@@ -326,8 +313,7 @@ const Onboarding = () => {
                 </>
               ) : (
                 <>
-                  {/* Email et mot de passe */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 sm:space-y-5">
                     <div className="space-y-2">
                       <Label htmlFor="email" className="text-sm font-semibold">
                         Adresse email <span className="text-red-500">*</span>
@@ -338,7 +324,7 @@ const Onboarding = () => {
                         placeholder="jean.dupont@example.com"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="h-12 text-base"
+                        className="h-11 sm:h-12 text-base"
                         required
                       />
                     </div>
@@ -353,7 +339,7 @@ const Onboarding = () => {
                         placeholder="Minimum 6 caractères"
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="h-12 text-base"
+                        className="h-11 sm:h-12 text-base"
                         required
                       />
                       <p className="text-xs text-gray-500">
@@ -362,20 +348,19 @@ const Onboarding = () => {
                     </div>
                   </div>
 
-                  {/* Boutons */}
-                  <div className="flex gap-3 pt-4">
+                  <div className="flex gap-3 pt-2 sm:pt-4">
                     <Button
                       type="button"
                       onClick={() => setStep(1)}
                       variant="outline"
-                      className="flex-1 h-12 text-base font-semibold"
+                      className="flex-1 h-11 sm:h-12 text-base font-semibold"
                     >
                       <ArrowLeft className="mr-2 h-5 w-5" />
                       Retour
                     </Button>
                     <Button
                       type="submit"
-                      className="flex-1 h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
+                      className="flex-1 h-11 sm:h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
                       disabled={isLoading}
                     >
                       {isLoading ? (
@@ -384,7 +369,7 @@ const Onboarding = () => {
                           Création...
                         </>
                       ) : (
-                        'Créer mon compte'
+                        'Créer'
                       )}
                     </Button>
                   </div>
@@ -392,11 +377,10 @@ const Onboarding = () => {
               )}
             </form>
 
-            {/* Lien de connexion */}
-            <div className="mt-6 text-center">
+            <div className="mt-5 sm:mt-6 text-center">
               <p className="text-sm text-gray-600">
                 Vous avez déjà un compte ?{' '}
-                <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="text-gray-700 font-semibold hover:text-gray-900 underline">
+                <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="text-gray-700 font-semibold hover:text-gray-900 underline block sm:inline mt-1 sm:mt-0">
                   Se connecter
                 </a>
               </p>
