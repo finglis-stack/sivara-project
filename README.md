@@ -46,6 +46,18 @@ L'architecture de facturation délègue la complexité transactionnelle à Strip
 *   **Edge Webhooks :** Un pipeline de webhooks sécurisé (`stripe-webhook`) intercepte les événements de paiement en temps réel pour mettre à jour les statuts `is_pro` via des fonctions serveur privilégiées.
 *   **Syncronisation Forcée :** Mécanisme de vérification à la demande permettant à l'utilisateur de forcer la réconciliation des états entre Stripe et la base de données en cas de latence des webhooks.
 
+### 5. Protocole d'Échange Cryptographique (.sivara)
+Un format de fichier conteneur propriétaire conçu pour la migration de données "Zero-Trust" et la résilience.
+
+*   **Encapsulation Sécurisée :** Le fichier `.sivara` contient le payload chiffré (AES-256-GCM), l'IV unique, l'ID du propriétaire original ainsi que les métadonnées visuelles (icône, couleur). Le fichier ne contient **aucune** clé de déchiffrement.
+*   **Transmutation à la Volée (Re-Encryption) :**
+    *   Lors de l'importation, le client effectue une opération de **Transmutation Cryptographique** locale :
+        1. Dérivation temporaire de la clé publique basée sur l'ID du créateur original (stocké dans le fichier).
+        2. Déchiffrement du contenu en mémoire volatile.
+        3. Rechiffrement immédiat avec la clé privée de l'utilisateur courant.
+        4. Insertion d'un **nouveau** document en base de données.
+    *   **Résilience :** Ce processus permet de restaurer des données même si l'enregistrement original a été supprimé des serveurs (Deep Backup), car le fichier contient tout le nécessaire pour reconstruire l'information de manière autonome et sécurisée.
+
 ---
 
 ## 🛡️ Conformité Légale et Loi 25 (Québec)
