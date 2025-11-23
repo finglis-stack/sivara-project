@@ -399,6 +399,18 @@ const Docs = () => {
     } catch (error) {}
   };
 
+  const handleNavigateToProfile = () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const currentUrl = window.location.href;
+
+    if (isLocal) {
+       window.location.href = `/?app=account&path=/profile&returnTo=${encodeURIComponent(currentUrl)}`;
+    } else {
+       window.location.href = `https://account.sivara.ca/profile?returnTo=${encodeURIComponent(currentUrl)}`;
+    }
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     const item = documents.find(d => d.id === active.id);
@@ -515,7 +527,7 @@ const Docs = () => {
                   <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuLabel>Mon Compte</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => window.location.href = '/?app=account&path=/profile'} className="cursor-pointer">
+                    <DropdownMenuItem onClick={handleNavigateToProfile} className="cursor-pointer">
                       <UserCircle className="mr-2 h-4 w-4" /> Voir le profil
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
