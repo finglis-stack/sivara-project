@@ -33,15 +33,19 @@ serve(async (req) => {
     const { data: { user } } = await supabaseClient.auth.getUser()
     if (!user) throw new Error('Non authentifié')
 
-    const { action, priceId, isTrial } = await req.json()
+    const { action, priceId, isTrial: requestedTrial } = await req.json()
     const email = user.email
 
-    // --- Gestion Client Stripe ---
+    // --- Gestion Client Stripe & Vérification Profil ---
     const { data: profile } = await supabaseClient
       .from('profiles')
-      .select('stripe_customer_id')
+      .select('stripe_customer_id, has_used_trial, is_pro')
       .eq('id', user.id)
       .single()
+
+    // SÉCURITÉ : On vérifie si l'utilisateur a le droit à l'essai
+    // Si il a déjà utilisé l'essai, on force isTrial à false, peu importe ce que dit le frontend
+    const isTrialAllowed = requestedTrial && !profile?.has_used_trial && !profile?.is_pro;
 
     let customerId = profile?.stripe_customer_id
 
@@ -62,21 +66,18 @@ serve(async (req) => {
     // --- ACTION: CREATION SOUSCRIPTION (EMBEDDED) ---
     if (action === 'create_subscription_intent') {
       
-      // On crée la souscription immédiatement mais en mode "incomplet"
-      // Cela permet au frontend de finaliser le paiement ou l'empreinte CB
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: priceId }],
         payment_behavior: 'default_incomplete',
         payment_settings: { save_default_payment_method: 'on_subscription' },
         expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
-        trial_period_days: isTrial ? 14 : undefined,
+        // On utilise la valeur sécurisée isTrialAllowed
+        trial_period_days: isTrialAllowed ? 14 : undefined,
       });
 
-      // Si c'est un essai gratuit, on utilise le pending_setup_intent (empreinte CB)
-      // Sinon, on utilise le payment_intent de la facture (paiement immédiat)
       let clientSecret;
-      if (isTrial && subscription.pending_setup_intent) {
+      if (isTrialAllowed && subscription.pending_setup_intent) {
         // @ts-ignore
         clientSecret = subscription.pending_setup_intent.client_secret;
       } else {
@@ -87,7 +88,9 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           subscriptionId: subscription.id, 
-          clientSecret: clientSecret 
+          clientSecret: clientSecret,
+          // On renvoie le statut réel au frontend pour qu'il mette à jour l'UI
+          isTrialActive: isTrialAllowed 
         }), 
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )

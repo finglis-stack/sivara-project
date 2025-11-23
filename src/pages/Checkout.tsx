@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { Loader2, ArrowRight, Check, ShieldCheck, Lock } from 'lucide-react';
+import { Loader2, ArrowRight, Check, ShieldCheck, Lock, CreditCard, AlertCircle } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
@@ -45,7 +45,6 @@ const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        // Redirection vers la page de succès Sivara
         return_url: `${window.location.origin}/pro-onboarding`,
       },
     });
@@ -58,7 +57,6 @@ const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial
       }
       setIsLoading(false);
     }
-    // Si succès, Stripe redirige automatiquement, pas besoin de setIsLoading(false)
   };
 
   return (
@@ -95,8 +93,13 @@ const Checkout = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const isTrial = searchParams.get('trial') === 'true';
+  
+  // On récupère l'intention de l'utilisateur, mais le serveur aura le dernier mot
+  const requestedTrial = searchParams.get('trial') === 'true';
+  
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [confirmedIsTrial, setConfirmedIsTrial] = useState<boolean>(requestedTrial);
+  const [isDowngraded, setIsDowngraded] = useState(false);
   const [initError, setInitError] = useState(false);
 
   useEffect(() => {
@@ -105,19 +108,29 @@ const Checkout = () => {
        return;
     }
 
-    // Création de l'intention de souscription côté serveur
     const initPayment = async () => {
       try {
         const { data, error } = await supabase.functions.invoke('stripe-api', {
           body: {
             action: 'create_subscription_intent',
             priceId: STRIPE_PRICE_ID_MONTHLY,
-            isTrial: isTrial
+            isTrial: requestedTrial // On demande un essai
           }
         });
 
         if (error || !data?.clientSecret) throw error;
+        
         setClientSecret(data.clientSecret);
+        
+        // Le serveur nous dit si l'essai a été accepté ou refusé (car déjà utilisé)
+        setConfirmedIsTrial(data.isTrialActive);
+        
+        // Si on demandait un essai mais que le serveur a dit non, on notifie l'utilisateur
+        if (requestedTrial && !data.isTrialActive) {
+            setIsDowngraded(true);
+            showError("Vous avez déjà bénéficié de l'essai gratuit.");
+        }
+
       } catch (e) {
         console.error(e);
         setInitError(true);
@@ -126,7 +139,7 @@ const Checkout = () => {
     };
 
     initPayment();
-  }, [user, isTrial]);
+  }, [user, requestedTrial]);
 
   if (initError) {
       return (
@@ -136,6 +149,9 @@ const Checkout = () => {
           </div>
       );
   }
+
+  // On utilise la valeur CONFIRMÉE par le serveur pour l'affichage
+  const isTrial = confirmedIsTrial;
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white font-sans selection:bg-black selection:text-white">
@@ -189,9 +205,13 @@ const Checkout = () => {
                    {isTrial ? '0.00 $' : '4.99 $'}
                </span>
             </div>
-            {isTrial && (
+            {isTrial ? (
                 <p className="text-right text-xs text-gray-400 mt-2 font-light">
                     Puis 4.99 $/mois après 14 jours. Annulable à tout moment.
+                </p>
+            ) : (
+                <p className="text-right text-xs text-gray-400 mt-2 font-light">
+                    Facturé mensuellement. Annulable à tout moment.
                 </p>
             )}
          </div>
@@ -206,6 +226,16 @@ const Checkout = () => {
                    Entrez vos coordonnées bancaires pour {isTrial ? "valider l'empreinte" : "régler votre abonnement"}.
                 </p>
             </div>
+
+            {isDowngraded && (
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 mb-6 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800">
+                        <p className="font-semibold mb-1">Essai gratuit non disponible</p>
+                        <p>Vous avez déjà utilisé votre période d'essai gratuite. La facturation standard de 4.99 $ s'applique.</p>
+                    </div>
+                </div>
+            )}
 
             {clientSecret ? (
                 // @ts-ignore
