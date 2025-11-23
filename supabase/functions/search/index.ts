@@ -4,61 +4,52 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 // @ts-ignore: Deno types
 import { removeStopwords, fra, eng } from 'https://esm.sh/stopword@3.0.1'
+
+// --- FIX IMPORTS NATURAL (Default Exports pour compatibilité Edge) ---
 // @ts-ignore: Deno types
-import { PorterStemmerFr } from 'https://esm.sh/natural@6.10.4/lib/natural/stemmers/porter_stemmer_fr.js'
+import PorterStemmerFr from 'https://esm.sh/natural@6.10.4/lib/natural/stemmers/porter_stemmer_fr.js'
 // @ts-ignore: Deno types
-import { DoubleMetaphone } from 'https://esm.sh/natural@6.10.4/lib/natural/phonetics/double_metaphone.js'
+import DoubleMetaphone from 'https://esm.sh/natural@6.10.4/lib/natural/phonetics/double_metaphone.js'
 // @ts-ignore: Deno types
-import { NGrams } from 'https://esm.sh/natural@6.10.4/lib/natural/ngrams/ngrams.js'
+import NGrams from 'https://esm.sh/natural@6.10.4/lib/natural/ngrams/ngrams.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// ==========================================
-// 🛡️ TITANIUM TOKENIZER ENGINE (PRO LIB VERSION)
-// ==========================================
-
 class TitaniumTokenizer {
   
   static normalize(text: string): string {
-    // Nettoyage standard
     return text.toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève accents
-      .replace(/[^a-z0-9\s]/g, " ") // Garde alphanum
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+      .replace(/[^a-z0-9\s]/g, " ") 
       .replace(/\s+/g, " ").trim();
   }
 
   static filterStopwords(words: string[]): string[] {
-    // Utilisation de la lib 'stopword' pour FR et EN combinés
     let cleaned = removeStopwords(words, fra);
     cleaned = removeStopwords(cleaned, eng);
-    // Filtre supplémentaire pour les mots très courts résiduels
     return cleaned.filter(w => w.length > 1);
   }
 
   static getStem(word: string): string {
-    // Utilisation de l'algorithme de Porter pour le Français
+    // PorterStemmerFr est souvent exporté directement
     return PorterStemmerFr.stem(word);
   }
 
   static getPhoneticFingerprint(word: string): string {
-    // Double Metaphone est l'algo standard pro pour la phonétique
+    // DoubleMetaphone.process renvoie [primary, secondary]
     const code = DoubleMetaphone.process(word);
-    return code[0]; // On prend le code primaire
+    return code[0]; 
   }
 
   static getTrigrams(word: string): string[] {
     if (word.length <= 3) return [];
-    // Utilisation de NGrams de Natural
+    // NGrams est l'objet exporté contenant la méthode trigrams
     return NGrams.trigrams(word).map((t: string[]) => t.join(''));
   }
 }
-
-// ==========================================
-// 🔐 CRYPTO ENGINE
-// ==========================================
 
 // @ts-ignore
 const encoder = new TextEncoder();
@@ -98,12 +89,10 @@ class CryptoService {
     const usefulWords = TitaniumTokenizer.filterStopwords(words);
 
     for (const rawWord of usefulWords) {
-      // 1. EXACT MATCH (Poids : 100)
       const exactToken = await this.hmacToken(`EX:${rawWord}`);
       tokens.add(exactToken);
       weights.set(exactToken, 100);
 
-      // 2. STEM MATCH (Poids : 80) - Via PorterStemmerFr
       const stem = TitaniumTokenizer.getStem(rawWord);
       if (stem && stem !== rawWord) {
         const stemToken = await this.hmacToken(`ST:${stem}`);
@@ -111,7 +100,6 @@ class CryptoService {
         weights.set(stemToken, 80);
       }
 
-      // 3. PHONETIC MATCH (Poids : 50) - Via Double Metaphone
       const phone = TitaniumTokenizer.getPhoneticFingerprint(rawWord);
       if (phone && phone.length > 0) {
         const phoneToken = await this.hmacToken(`PH:${phone}`);
@@ -119,7 +107,6 @@ class CryptoService {
         weights.set(phoneToken, 50);
       }
 
-      // 4. N-GRAMS (Poids : 5 par trigramme)
       if (rawWord.length > 3) {
         const trigrams = TitaniumTokenizer.getTrigrams(rawWord);
         for (const tri of trigrams) {
@@ -161,7 +148,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ results: [], total: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // 1. Générer les tokens avec poids
     const { tokens: queryTokens, weights } = await cryptoService.generateQueryTokens(query);
     
     if (queryTokens.length === 0) {
@@ -170,7 +156,6 @@ serve(async (req) => {
 
     console.log(`[TITANIUM PRO] Searching with ${queryTokens.length} tokens`);
 
-    // 2. Recherche SQL "Overlaps"
     const { data: candidates, error, count } = await supabase
       .from('crawled_pages')
       .select('*', { count: 'exact' })
@@ -179,7 +164,6 @@ serve(async (req) => {
 
     if (error) throw error;
 
-    // 3. Scoring & Ranking en mémoire
     const results = [];
     
     for (const page of candidates || []) {

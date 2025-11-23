@@ -4,21 +4,19 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 // @ts-ignore: Deno types
 import { removeStopwords, fra, eng } from 'https://esm.sh/stopword@3.0.1'
+
+// --- FIX IMPORTS NATURAL (Default Exports) ---
 // @ts-ignore: Deno types
-import { PorterStemmerFr } from 'https://esm.sh/natural@6.10.4/lib/natural/stemmers/porter_stemmer_fr.js'
+import PorterStemmerFr from 'https://esm.sh/natural@6.10.4/lib/natural/stemmers/porter_stemmer_fr.js'
 // @ts-ignore: Deno types
-import { DoubleMetaphone } from 'https://esm.sh/natural@6.10.4/lib/natural/phonetics/double_metaphone.js'
+import DoubleMetaphone from 'https://esm.sh/natural@6.10.4/lib/natural/phonetics/double_metaphone.js'
 // @ts-ignore: Deno types
-import { NGrams } from 'https://esm.sh/natural@6.10.4/lib/natural/ngrams/ngrams.js'
+import NGrams from 'https://esm.sh/natural@6.10.4/lib/natural/ngrams/ngrams.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
-
-// ==========================================
-// 🛡️ TITANIUM TOKENIZER ENGINE (PRO LIB VERSION)
-// ==========================================
 
 class TitaniumTokenizer {
   
@@ -49,10 +47,6 @@ class TitaniumTokenizer {
     return NGrams.trigrams(word).map((t: string[]) => t.join(''));
   }
 }
-
-// ==========================================
-// 🔐 CRYPTO ENGINE
-// ==========================================
 
 // @ts-ignore
 const encoder = new TextEncoder();
@@ -99,18 +93,14 @@ class CryptoService {
     const usefulWords = TitaniumTokenizer.filterStopwords(words);
 
     for (const rawWord of usefulWords) {
-      // 1. EXACT
       tokens.add(await this.hmacToken(`EX:${rawWord}`));
       
-      // 2. STEM (Porter)
       const stem = TitaniumTokenizer.getStem(rawWord);
       if (stem && stem !== rawWord) tokens.add(await this.hmacToken(`ST:${stem}`));
       
-      // 3. PHONETIC (Double Metaphone)
       const phone = TitaniumTokenizer.getPhoneticFingerprint(rawWord);
       if (phone && phone.length > 0) tokens.add(await this.hmacToken(`PH:${phone}`));
       
-      // 4. TRIGRAMS
       if (rawWord.length > 3) {
         const trigrams = TitaniumTokenizer.getTrigrams(rawWord);
         for (const tri of trigrams) tokens.add(await this.hmacToken(`TG:${tri}`));
@@ -124,10 +114,6 @@ class CryptoService {
     return btoa(String.fromCharCode(...new Uint8Array(signature).slice(0, 8)));
   }
 }
-
-// ==========================================
-// 🕷️ CRAWLER LOGIC
-// ==========================================
 
 function isAllowedLanguage(html: string): boolean {
   const langMatch = html.match(/<html[^>]+lang=["']([a-zA-Z\-]+)["'][^>]*>/i);
@@ -178,11 +164,8 @@ function extractLinks(html: string, baseUrl: string): string[] {
       const absoluteUrl = new URL(link, baseUrl).href;
       const urlObj = new URL(absoluteUrl);
 
-      // Filtres de base
       if (!['http:', 'https:'].includes(urlObj.protocol)) continue;
       if (urlObj.hostname !== baseObj.hostname) continue; 
-      
-      // Filtres extensions
       if (/\.(jpg|jpeg|png|gif|pdf|zip|css|js)$/i.test(urlObj.pathname)) continue;
 
       urlObj.hash = '';
