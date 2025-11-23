@@ -39,7 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-// --- EXTENSION FONT SIZE ---
+// ... (Keep existing constants: FontSize, CURSOR_COLORS, FONT_FAMILIES, FONT_SIZES, AVAILABLE_ICONS, COLOR_PALETTE)
 const FontSize = Extension.create({
   name: 'fontSize',
   addOptions() { return { types: ['textStyle'] }; },
@@ -60,7 +60,7 @@ const FontSize = Extension.create({
   },
 });
 
-// --- TYPES ---
+// --- TYPES (Keep existing types) ---
 interface Document {
   id: string;
   title: string;
@@ -135,6 +135,7 @@ const DocEditor = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   
+  // State
   const [document, setDocument] = useState<Document | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -143,15 +144,21 @@ const DocEditor = () => {
   const [isOwner, setIsOwner] = useState(false);
   const [decryptionError, setDecryptionError] = useState(false);
   const [userProfile, setUserProfile] = useState<{avatar_url: string | null} | null>(null);
-  const [showShareDialog, setShowShareDialog] = useState(false);
-  const [showIconPicker, setShowIconPicker] = useState(false);
-  const [selectedIcon, setSelectedIcon] = useState('FileText');
-  const [selectedColor, setSelectedColor] = useState('#3B82F6');
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [cursors, setCursors] = useState<Record<string, RemoteCursor>>({});
   const [accessList, setAccessList] = useState<AccessEntry[]>([]);
+  
+  // UI Dialogs
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  
+  // UI Inputs
+  const [selectedIcon, setSelectedIcon] = useState('FileText');
+  const [selectedColor, setSelectedColor] = useState('#3B82F6');
   const [newInviteEmail, setNewInviteEmail] = useState('');
   const [invitePermission, setInvitePermission] = useState<'read' | 'write'>('read');
+  const [exportPassword, setExportPassword] = useState('');
 
   const titleRef = useRef(title);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
@@ -163,6 +170,7 @@ const DocEditor = () => {
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
+  // ... (Keep Editor init and basic useEffects)
   const editor = useEditor({
     extensions: [
       StarterKit, Underline, TextStyle, FontFamily, FontSize,
@@ -172,7 +180,6 @@ const DocEditor = () => {
     content: '',
     editorProps: {
       attributes: {
-        // MOBILE RESPONSIVE: px-4 sur mobile, px-12+ sur desktop
         class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[90vh] bg-white py-8 px-4 sm:px-12 md:px-16 shadow-sm mb-8 rounded-lg',
       },
     },
@@ -217,6 +224,7 @@ const DocEditor = () => {
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
   useEffect(() => { if (id && user && !isLoading && !decryptionError) { setupRealtime(); } }, [id, user, isLoading, decryptionError, userProfile]);
 
+  // ... (Keep setupRealtime, handleMouseMove, cursor cleanup)
   const setupRealtime = () => {
     if (!id || !user) return;
     const myPresenceState = { id: user.id, email: user.email, color: myColorRef.current, avatar_url: userProfile?.avatar_url, name: user.email?.split('@')[0] || 'Anonyme', online_at: Date.now() };
@@ -277,12 +285,12 @@ const DocEditor = () => {
      return () => clearInterval(interval);
   }, []);
 
+  // ... (Keep fetchDocumentAndInitCrypto, fetchAccessList, handleSave, etc.)
   const fetchDocumentAndInitCrypto = async () => {
     try {
       const { data: doc, error } = await supabase.from('documents').select('*').eq('id', id).single();
       if (error || !doc) {
         if (!user) {
-           // FORCE LOGIN URL PRODUCTION
            const currentUrl = window.location.href;
            const loginUrl = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`;
            window.location.href = loginUrl;
@@ -327,40 +335,70 @@ const DocEditor = () => {
     navigator.clipboard.writeText(link); 
     showSuccess("Lien copié : " + link); 
   };
-  
-  const handleNavigateToProfile = () => {
-    window.location.href = 'https://account.sivara.ca/profile';
-  };
-
   const handleLogin = () => { 
     const currentUrl = window.location.href; 
     window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`; 
   };
 
-  // --- EXPORT PROPRIÉTAIRE ---
-  const handleExportSivara = () => {
-    if (!document) return;
-    // On exporte les données CHIFFRÉES (telles que dans la DB) avec l'icône et la couleur
-    const exportData = {
-      header: 'SIVARA_SECURE_DOC_V1',
-      id: document.id,
-      encrypted_title: document.title,
-      encrypted_content: document.content,
-      iv: document.encryption_iv,
-      owner_id: document.owner_id,
-      exported_at: new Date().toISOString(),
-      // AJOUT : Icône et couleur
-      icon: document.icon || 'FileText',
-      color: document.color || '#3B82F6'
-    };
+  // --- EXPORT PROPRIÉTAIRE AVEC OPTION MOT DE PASSE ---
+  const handleExportSivara = async () => {
+    if (!document || !user) return;
     
-    const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = window.document.createElement('a');
-    a.href = url;
-    a.download = `secure-${document.id.slice(0, 8)}.sivara`;
-    a.click();
-    showSuccess("Document exporté (Format sécurisé .sivara)");
+    try {
+        let encryptedTitle = document.title;
+        let encryptedContent = document.content;
+        let iv = document.encryption_iv;
+        let isPasswordProtected = false;
+        let salt = null;
+
+        // Si un mot de passe est fourni, on rechiffre TOUT avec ce mot de passe
+        if (exportPassword) {
+            const saltValue = crypto.randomUUID();
+            // Initialiser le service avec le mot de passe temporairement
+            await encryptionService.initialize(exportPassword, saltValue);
+            
+            const { encrypted: encTitle, iv: newIv } = await encryptionService.encrypt(titleRef.current);
+            const { encrypted: encContent } = await encryptionService.encrypt(contentRef.current, newIv);
+            
+            encryptedTitle = encTitle;
+            encryptedContent = encContent;
+            iv = newIv;
+            isPasswordProtected = true;
+            salt = saltValue;
+
+            // Restaurer la clé de l'utilisateur
+            await encryptionService.initialize(user.id);
+        }
+
+        const exportData = {
+            header: isPasswordProtected ? 'SIVARA_SECURE_DOC_V2' : 'SIVARA_SECURE_DOC_V1',
+            id: document.id,
+            encrypted_title: encryptedTitle,
+            encrypted_content: encryptedContent,
+            iv: iv,
+            owner_id: document.owner_id,
+            exported_at: new Date().toISOString(),
+            icon: document.icon || 'FileText',
+            color: document.color || '#3B82F6',
+            salt: salt // Pour V2 seulement
+        };
+        
+        const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = window.document.createElement('a');
+        a.href = url;
+        a.download = `secure-${document.id.slice(0, 8)}.sivara`;
+        a.click();
+        
+        showSuccess(isPasswordProtected ? "Document exporté et verrouillé par mot de passe" : "Document exporté (Format sécurisé .sivara)");
+        setShowExportDialog(false);
+        setExportPassword('');
+    } catch (e) {
+        console.error(e);
+        showError("Erreur lors de l'exportation");
+        // En cas d'erreur, on s'assure de restaurer le service
+        if (user) await encryptionService.initialize(user.id);
+    }
   };
   
   const CurrentIcon = AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || FileText;
@@ -416,7 +454,7 @@ const DocEditor = () => {
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => window.print()}><Download className="mr-2 h-4 w-4" /> Exporter PDF</DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExportSivara}><FileKey className="mr-2 h-4 w-4 text-blue-600" /> Exporter .sivara</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowExportDialog(true)}><FileKey className="mr-2 h-4 w-4 text-blue-600" /> Exporter .sivara</DropdownMenuItem>
                   {isOwner && <DropdownMenuItem className="text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Supprimer</DropdownMenuItem>}
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -500,6 +538,32 @@ const DocEditor = () => {
         </DialogContent>
       </Dialog>
       <Dialog open={showIconPicker} onOpenChange={setShowIconPicker}><DialogContent className="max-w-[95vw]"><DialogHeader><DialogTitle>Icône</DialogTitle></DialogHeader><div className="grid grid-cols-6 gap-2">{AVAILABLE_ICONS.map(i => <button key={i.name} onClick={() => { setSelectedIcon(i.name); handleSave('icon', i.name); setShowIconPicker(false); }} className={`p-2 rounded hover:bg-gray-100 ${selectedIcon === i.name ? 'bg-blue-50 ring-1' : ''}`}><i.icon className="h-6 w-6 mx-auto" /></button>)}</div><div className="border-t pt-4 mt-2"><Label>Couleur</Label><div className="flex gap-2 mt-2 overflow-x-auto pb-2">{COLOR_PALETTE.map(c => <button key={c.value} onClick={() => { setSelectedColor(c.value); handleSave('color', c.value); }} className={`h-6 w-6 shrink-0 rounded-full ${selectedColor === c.value ? 'ring-2 ring-offset-2 ring-black' : ''}`} style={{ backgroundColor: c.value }} />)}</div></div></DialogContent></Dialog>
+      
+      {/* Export Password Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Export Sécurisé</DialogTitle>
+                <DialogDescription>Protégez ce fichier avec un mot de passe (optionnel mais recommandé pour le partage).</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                    <Label>Mot de passe (Optionnel)</Label>
+                    <Input 
+                        type="password" 
+                        placeholder="Laisser vide pour utiliser la clé propriétaire" 
+                        value={exportPassword}
+                        onChange={(e) => setExportPassword(e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500">Si défini, ce mot de passe sera requis pour importer le fichier.</p>
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setShowExportDialog(false)}>Annuler</Button>
+                <Button onClick={handleExportSivara}>Exporter</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

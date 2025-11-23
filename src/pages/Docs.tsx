@@ -26,7 +26,7 @@ import {
   FileText, Plus, Search, Clock, Star, MoreVertical, Trash2, 
   Download, Share2, Copy, Loader2, Grid3x3, List, ArrowLeft, 
   FolderPlus, Folder, ChevronRight, Home, MoveUp, Edit2, 
-  Image as ImageIcon, Palette, UserCircle, StarOff, Upload, FileJson
+  Image as ImageIcon, Palette, UserCircle, StarOff, Upload, FileJson, Lock
 } from 'lucide-react';
 
 // DND Imports
@@ -177,8 +177,11 @@ const Docs = () => {
   // State Modals
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean, docId: string, currentTitle: string }>({ isOpen: false, docId: '', currentTitle: '' });
   const [customizeDialog, setCustomizeDialog] = useState<{ isOpen: boolean, doc: DecryptedDocument | null }>({ isOpen: false, doc: null });
+  const [importPasswordDialog, setImportPasswordDialog] = useState<{ isOpen: boolean, fileData: any | null }>({ isOpen: false, fileData: null });
+  
   const [newTitle, setNewTitle] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [importPassword, setImportPassword] = useState('');
   
   // State Customization
   const [customIcon, setCustomIcon] = useState('Folder');
@@ -217,6 +220,9 @@ const Docs = () => {
     setIsLoadingDocs(true);
 
     try {
+      // IMPORTANT: S'assurer que l'instance crypto est bien sur l'utilisateur courant avant de fetch
+      await encryptionService.initialize(user.id);
+
       let query = supabase.from('documents').select('*').eq('owner_id', user.id);
 
       if (currentFolderId) {
@@ -385,73 +391,107 @@ const Docs = () => {
   };
 
   // --- IMPORT PROPRIÉTAIRE .SIVARA (MIGRATION SÉCURISÉE) ---
+  const processImport = async (data: any, password?: string) => {
+    if (!user) return;
+    
+    try {
+        setIsImporting(true);
+
+        // 1. DÉCHIFFREMENT INITIAL
+        if (data.header === 'SIVARA_SECURE_DOC_V2' && password && data.salt) {
+            // Mode Mot de passe (V2)
+            await encryptionService.initialize(password, data.salt);
+        } else if (data.header === 'SIVARA_SECURE_DOC_V1' || data.header === 'SIVARA_SECURE_DOC_V2') {
+            // Mode Legacy/Propriétaire (V1) ou tentative sans mot de passe
+            await encryptionService.initialize(data.owner_id);
+        } else {
+            throw new Error("Format non supporté");
+        }
+        
+        // Tentative de déchiffrement du contenu original
+        let decryptedTitle = '';
+        let decryptedContent = '';
+        
+        try {
+            decryptedTitle = await encryptionService.decrypt(data.encrypted_title, data.iv);
+            decryptedContent = data.encrypted_content ? await encryptionService.decrypt(data.encrypted_content, data.iv) : '';
+        } catch (decryptError) {
+            // Si échec, c'est probablement le mauvais mot de passe ou la mauvaise clé propriétaire
+            if (data.header === 'SIVARA_SECURE_DOC_V2' && !password) {
+                // Si c'est un V2 et qu'on a pas encore demandé le mot de passe, on le demande maintenant
+                setImportPasswordDialog({ isOpen: true, fileData: data });
+                setIsImporting(false);
+                return;
+            }
+            throw new Error("Clé de déchiffrement invalide. Le fichier est peut-être protégé par un autre compte ou un mot de passe incorrect.");
+        }
+
+        // 3. RECHIFFREMENT (Clé de l'utilisateur actuel)
+        // Important: On rebascule sur la clé de l'utilisateur connecté pour sécuriser le nouveau doc
+        await encryptionService.initialize(user.id);
+        
+        const { encrypted: newEncTitle, iv: newIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
+        const { encrypted: newEncContent } = await encryptionService.encrypt(decryptedContent, newIv);
+
+        // 4. CRÉATION DU NOUVEAU DOCUMENT
+        const { error: insertError } = await supabase
+            .from('documents')
+            .insert({
+                title: newEncTitle,
+                content: newEncContent,
+                encryption_iv: newIv,
+                owner_id: user.id, 
+                type: 'file',
+                visibility: 'private',
+                icon: data.icon || 'FileText',
+                color: data.color || '#3B82F6',
+                parent_id: currentFolderId 
+            });
+        
+        if (insertError) throw insertError;
+        
+        showSuccess("Document importé et sécurisé avec succès");
+        setImportPasswordDialog({ isOpen: false, fileData: null });
+        setImportPassword('');
+        
+        // On s'assure que le fetch utilise bien la bonne clé
+        await fetchDocuments(); 
+
+    } catch (err: any) {
+        console.error(err);
+        // En cas d'erreur, on s'assure de restaurer le service sur l'utilisateur courant
+        if (user) await encryptionService.initialize(user.id);
+        showError(err.message || "Erreur lors de l'importation");
+    } finally {
+        setIsImporting(false);
+        if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   const handleImportSivara = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
-    setIsImporting(true);
     const reader = new FileReader();
-
     reader.onload = async (e) => {
         try {
             const content = e.target?.result as string;
             const data = JSON.parse(content);
+            
+            // Vérification sommaire
+            if (!data.header || !data.id || !data.iv) throw new Error("Fichier invalide");
 
-            // 1. Vérification du format
-            if (data.header !== 'SIVARA_SECURE_DOC_V1' || !data.id || !data.owner_id) {
-                throw new Error("Format de fichier invalide");
+            // Si c'est un V2 (protégé par mot de passe), on ouvre le dialogue directement
+            if (data.header === 'SIVARA_SECURE_DOC_V2') {
+                setImportPasswordDialog({ isOpen: true, fileData: data });
+            } else {
+                // Sinon on tente l'import direct (V1 propriétaire)
+                await processImport(data);
             }
-
-            // 2. DÉCHIFFREMENT (Clé du créateur original)
-            // On bascule temporairement le service de chiffrement sur l'ID du créateur du fichier
-            await encryptionService.initialize(data.owner_id);
-            
-            const decryptedTitle = await encryptionService.decrypt(data.encrypted_title, data.iv);
-            // Si c'est un fichier, on déchiffre le contenu, sinon c'est vide (dossier)
-            const decryptedContent = data.encrypted_content ? await encryptionService.decrypt(data.encrypted_content, data.iv) : '';
-
-            // 3. RECHIFFREMENT (Clé de l'utilisateur actuel)
-            // On revient à la clé de l'utilisateur connecté
-            await encryptionService.initialize(user.id);
-            
-            const { encrypted: newEncTitle, iv: newIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
-            const { encrypted: newEncContent } = await encryptionService.encrypt(decryptedContent, newIv);
-
-            // 4. CRÉATION DU NOUVEAU DOCUMENT (Copie propre)
-            // On ignore l'ID du fichier et on laisse la base en créer un nouveau
-            // Cela garantit que c'est un NOUVEAU document dont l'utilisateur est propriétaire
-            const { data: newDoc, error: insertError } = await supabase
-                .from('documents')
-                .insert({
-                    title: newEncTitle,
-                    content: newEncContent,
-                    encryption_iv: newIv,
-                    owner_id: user.id, // L'utilisateur actuel devient propriétaire
-                    type: 'file',
-                    visibility: 'private',
-                    icon: data.icon || 'FileText',
-                    color: data.color || '#3B82F6',
-                    parent_id: currentFolderId // Importé dans le dossier courant
-                })
-                .select()
-                .single();
-            
-            if (insertError) throw insertError;
-            
-            showSuccess("Document importé et sécurisé avec succès");
-            fetchDocuments(); // Rafraîchir la liste
-
-        } catch (err: any) {
-            console.error(err);
-            // Important : On restaure le service de chiffrement sur l'utilisateur actuel en cas d'erreur
-            if (user) await encryptionService.initialize(user.id);
-            showError("Erreur lors de l'importation : clé incompatible ou fichier corrompu.");
-        } finally {
-            setIsImporting(false);
-            if (importInputRef.current) importInputRef.current.value = '';
+        } catch (err) {
+            showError("Fichier corrompu ou invalide");
         }
     };
-
     reader.readAsText(file);
   };
 
@@ -557,6 +597,7 @@ const Docs = () => {
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="min-h-screen bg-gray-50 flex flex-col pt-[env(safe-area-inset-top)]">
+        {/* ... (Header - Keep existing) ... */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
           <div className="container mx-auto px-4 lg:px-6 py-4">
             <div className="flex items-center justify-between">
@@ -693,7 +734,6 @@ const Docs = () => {
                 >
                    {viewMode === 'grid' ? (
                       <Card className="relative h-60 overflow-hidden hover:shadow-md transition-shadow cursor-pointer border-gray-200 flex flex-col group bg-white">
-                         {/* Cover Image - Toujours présente pour les dossiers grâce au fallback DEFAULT_COVER */}
                          {doc.type === 'folder' ? (
                              <div className="absolute inset-0 h-24 w-full bg-gray-100">
                                  <img src={doc.cover_url || DEFAULT_COVER} alt="Cover" className="w-full h-full object-cover" />
@@ -820,6 +860,26 @@ const Docs = () => {
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Password Dialog */}
+      <Dialog open={importPasswordDialog.isOpen} onOpenChange={(open) => !open && setImportPasswordDialog({ ...importPasswordDialog, isOpen: false })}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Fichier protégé</DialogTitle>
+                <DialogDescription>Ce document est chiffré. Entrez le mot de passe pour l'importer.</DialogDescription>
+            </DialogHeader>
+            <Input 
+                type="password" 
+                placeholder="Mot de passe" 
+                value={importPassword}
+                onChange={(e) => setImportPassword(e.target.value)}
+            />
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setImportPasswordDialog({ isOpen: false, fileData: null })}>Annuler</Button>
+                <Button onClick={() => processImport(importPasswordDialog.fileData, importPassword)}>Importer</Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
     </DndContext>

@@ -1,12 +1,6 @@
 /**
  * Service de chiffrement AES-256-GCM côté client
  * Niveau de sécurité: Standard Web (Persistant)
- * 
- * Caractéristiques:
- * - AES-256-GCM (Galois/Counter Mode)
- * - Chiffrement côté client
- * - Clé dérivée de l'ID utilisateur (Stable) pour assurer la persistance entre les sessions
- * - IV unique pour chaque document
  */
 
 const PBKDF2_ITERATIONS = 100000;
@@ -27,21 +21,22 @@ export class EncryptionService {
   }
 
   /**
-   * Initialise la clé maître à partir de l'ID utilisateur unique.
-   * CORRECTION: Normalisation de l'ID en minuscules pour éviter les incohérences de génération de clé.
+   * Initialise la clé maître à partir d'un secret (ID utilisateur ou Mot de passe)
+   * @param secret Le secret (ID ou Password)
+   * @param saltString Optionnel: Un sel spécifique (pour les mots de passe)
    */
-  async initialize(userId: string): Promise<void> {
+  async initialize(secret: string, saltString?: string): Promise<void> {
     const encoder = new TextEncoder();
     
-    // Force l'ID en minuscules pour garantir la cohérence
-    const normalizedUserId = userId.toLowerCase().trim();
-    
-    // Utilisation d'une graine stable basée sur l'ID utilisateur
-    const saltData = encoder.encode(`${normalizedUserId}:sivara-docs-persistent-key-v2`);
+    // Si pas de sel fourni, on utilise le mode "Persistant User ID" (Legacy/Auto)
+    // Sinon on utilise le mode "Mot de passe" avec le sel fourni
+    const finalSalt = saltString 
+      ? encoder.encode(saltString) 
+      : encoder.encode(`${secret.toLowerCase().trim()}:sivara-docs-persistent-key-v2`);
     
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
-      saltData,
+      encoder.encode(secret),
       'PBKDF2',
       false,
       ['deriveBits', 'deriveKey']
@@ -50,7 +45,7 @@ export class EncryptionService {
     this.masterKey = await crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt: saltData,
+        salt: finalSalt,
         iterations: PBKDF2_ITERATIONS,
         hash: 'SHA-512'
       },
@@ -119,7 +114,7 @@ export class EncryptionService {
       return decoder.decode(decryptedData);
     } catch (error) {
       console.error("Decryption failed:", error);
-      throw new Error('Impossible de déchiffrer les données (Clé invalide ou données corrompues)');
+      throw new Error('Clé incorrecte ou données corrompues.');
     }
   }
 }
