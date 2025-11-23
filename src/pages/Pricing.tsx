@@ -233,7 +233,7 @@ const Pricing = () => {
                         <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 group-hover:rotate-12 transition-transform duration-500">
                             <Database className="w-6 h-6 text-white" />
                         </div>
-                        <h3 className="text-4xl font-bold mb-2">30 Go</h3>
+                        <h3 className="text-4xl font-bold mb-2">Illimité</h3>
                         <p className="text-gray-400 font-light leading-relaxed">
                             Un espace colossal pour vos projets les plus ambitieux. Photos RAW, vidéos 4K, archives... tout tient.
                         </p>
@@ -241,7 +241,7 @@ const Pricing = () => {
                     <div className="relative z-10 mt-10">
                          <div className="flex justify-between text-sm font-medium mb-3 text-gray-300">
                             <span>Utilisation</span>
-                            <span>30 GB</span>
+                            <span>Illimité</span>
                          </div>
                          <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
                             <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 w-[15%] group-hover:w-[85%] transition-all duration-1000 ease-out rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)]"></div>

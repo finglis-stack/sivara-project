@@ -219,7 +219,7 @@ const Checkout = () => {
                 <div className="flex items-start gap-4">
                     <div className="mt-1 h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center bg-white"><Check className="h-3 w-3 text-black" /></div>
                     <div>
-                        <p className="font-medium text-gray-900">Stockage Cloud 30 Go</p>
+                        <p className="font-medium text-gray-900">Stockage Cloud Illimité</p>
                         <p className="text-sm text-gray-500 font-light">Sécurisé et chiffré.</p>
                     </div>
                 </div>
