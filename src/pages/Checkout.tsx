@@ -10,6 +10,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 
 // --- CONFIGURATION ---
 const STRIPE_PRICE_ID_MONTHLY = 'price_1SWTi12UEuKhlvPiQdVw7Jwl'; 
+const STRIPE_PUBLISHABLE_KEY = 'pk_test_51SWTTe2UEuKhlvPiZK33IJhJSYPTaYPfkQX9KcBUt39uD4w0vEf8z5iTYufLx01PfJyNvgN4Pa20iGXskGEzPl7x00danXtwmY';
 
 const Appearance = {
   theme: 'flat',
@@ -108,15 +109,10 @@ const Checkout = () => {
 
     const initPayment = async () => {
       try {
-        // 1. Récupérer la clé publique Stripe depuis le serveur
-        const { data: configData, error: configError } = await supabase.functions.invoke('stripe-api', {
-           body: { action: 'get_config' }
-        });
-        
-        if (configError || !configData?.publishableKey) throw new Error("Erreur de configuration Stripe");
-        setStripePromise(loadStripe(configData.publishableKey));
+        // 1. Initialiser Stripe avec la clé publique hardcodée
+        setStripePromise(loadStripe(STRIPE_PUBLISHABLE_KEY));
 
-        // 2. Créer l'intention de paiement
+        // 2. Créer l'intention de paiement via le serveur (toujours besoin de la clé secrète côté serveur)
         const { data, error } = await supabase.functions.invoke('stripe-api', {
           body: {
             action: 'create_subscription_intent',
@@ -125,7 +121,10 @@ const Checkout = () => {
           }
         });
 
-        if (error || !data?.clientSecret) throw error;
+        if (error || !data?.clientSecret) {
+            console.error("Erreur serveur:", error);
+            throw new Error("Erreur lors de la création de la session de paiement");
+        }
         
         setClientSecret(data.clientSecret);
         setConfirmedIsTrial(data.isTrialActive);
