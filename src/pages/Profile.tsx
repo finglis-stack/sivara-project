@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, Sparkles, ArrowRight } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ interface Profile {
   account_type: string;
   created_at: string;
   avatar_url: string | null;
+  is_pro?: boolean;
 }
 
 const countryCodes = [
@@ -61,6 +62,7 @@ const Profile = () => {
     account_type: 'individual',
     created_at: '',
     avatar_url: null,
+    is_pro: false,
   });
 
   useEffect(() => {
@@ -350,13 +352,50 @@ const Profile = () => {
       </header>
 
       <div className="container mx-auto px-6 py-8">
+        
+        {/* BANNIÈRE SIVARA PRO */}
+        {!profile.is_pro && (
+            <div className="mb-8 relative rounded-2xl overflow-hidden shadow-lg group">
+                {/* Image de fond */}
+                <div 
+                    className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 group-hover:scale-105"
+                    style={{ backgroundImage: 'url(/pro-banner.jpg)' }}
+                />
+                {/* Overlay */}
+                <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors duration-500" />
+                
+                {/* Contenu */}
+                <div className="relative z-10 p-8 md:p-10 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <Sparkles className="h-5 w-5 text-amber-300" />
+                            <span className="font-semibold tracking-wider text-amber-300 text-sm uppercase">Nouveau</span>
+                        </div>
+                        <h2 className="text-3xl md:text-4xl font-light tracking-tight">
+                            Passez à <span className="font-semibold">Sivara Pro</span>
+                        </h2>
+                        <p className="text-lg font-light text-white/90 max-w-xl">
+                            Débloquez le stockage illimité et la personnalisation avancée. <br className="hidden md:block"/>
+                            Essai gratuit de 14 jours, puis 4.99$/mois.
+                        </p>
+                    </div>
+                    <Button 
+                        onClick={() => navigate('/pricing')}
+                        className="bg-white text-black hover:bg-gray-100 font-medium text-base px-8 py-6 rounded-full shadow-xl transition-all hover:scale-105 hover:shadow-2xl border-0"
+                    >
+                        Voir les offres <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                </div>
+            </div>
+        )}
+
         {/* Section Avatar et infos principales */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
           <div className="flex items-start gap-8">
             <div className="relative group">
               <Avatar className="h-32 w-32 flex-shrink-0">
                 {profile.avatar_url ? (
-                  <AvatarImage src={profile.avatar_url} alt={profile.first_name} />
+                  <AvatarImage src={profile.avatar_url} alt={profile.first_name || 'Avatar'} />
                 ) : (
                   <AvatarFallback className="bg-gray-700 text-white text-4xl">
                     {getInitials()}
@@ -378,10 +417,18 @@ const Profile = () => {
               />
             </div>
             <div className="flex-1">
-              <h2 className="text-3xl font-light text-gray-900 mb-3">
-                {profile.first_name} {profile.last_name}
-              </h2>
-              <div className="space-y-2">
+              <div className="flex items-center gap-3 mb-1">
+                <h2 className="text-3xl font-light text-gray-900">
+                    {profile.first_name} {profile.last_name}
+                </h2>
+                {profile.is_pro && (
+                    <span className="bg-black text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
+                        PRO
+                    </span>
+                )}
+              </div>
+              
+              <div className="space-y-2 mt-3">
                 <div className="flex items-center gap-3 text-gray-600">
                   <Mail className="h-5 w-5" />
                   <span className="text-lg">{user?.email}</span>
