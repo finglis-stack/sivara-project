@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, Sparkles, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -367,10 +367,6 @@ const Profile = () => {
                 {/* Contenu */}
                 <div className="relative z-10 p-8 md:p-10 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-amber-300" />
-                            <span className="font-semibold tracking-wider text-amber-300 text-sm uppercase">Nouveau</span>
-                        </div>
                         <h2 className="text-3xl md:text-4xl font-light tracking-tight">
                             Passez à <span className="font-semibold">Sivara Pro</span>
                         </h2>
