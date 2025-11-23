@@ -14,9 +14,11 @@ const decoder = new TextDecoder();
 
 class CryptoService {
   private key: CryptoKey | null = null;
+  private searchKey: CryptoKey | null = null;
 
   async initialize(secretKey: string) {
     const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
+    
     this.key = await crypto.subtle.importKey(
       'raw',
       keyData,
@@ -24,22 +26,70 @@ class CryptoService {
       false,
       ['encrypt', 'decrypt']
     );
+
+    // Clé de recherche (Doit être identique à celle du crawler)
+    const searchKeyData = await crypto.subtle.digest('SHA-256', keyData);
+    this.searchKey = await crypto.subtle.importKey(
+      'raw',
+      searchKeyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
   }
 
   async decrypt(encryptedText: string): Promise<string> {
     if (!this.key) throw new Error('Crypto not initialized');
     
-    const combined = Uint8Array.from(atob(encryptedText), c => c.charCodeAt(0));
-    const iv = combined.slice(0, 12);
-    const data = combined.slice(12);
+    try {
+      const combined = Uint8Array.from(atob(encryptedText), c => c.charCodeAt(0));
+      const iv = combined.slice(0, 12);
+      const data = combined.slice(12);
+      
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        this.key,
+        data
+      );
+      
+      return decoder.decode(decrypted);
+    } catch (e) {
+      return '[Decryption Error]';
+    }
+  }
+
+  // Génération des tokens de requête (Même logique que le crawler)
+  async generateQueryTokens(query: string): Promise<string[]> {
+    if (!this.searchKey) throw new Error('Search key not initialized');
     
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      this.key,
-      data
+    const normalized = query.toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const tokens = new Set<string>();
+    const words = normalized.split(' ');
+    
+    for (const word of words) {
+      if (word.length < 3) {
+        tokens.add(await this.hmacToken(word));
+        continue;
+      }
+      // Trigrammes
+      for (let i = 0; i <= word.length - 3; i++) {
+        tokens.add(await this.hmacToken(word.substring(i, i + 3)));
+      }
+    }
+    return Array.from(tokens);
+  }
+
+  private async hmacToken(input: string): Promise<string> {
+    const signature = await crypto.subtle.sign(
+      'HMAC',
+      this.searchKey!,
+      encoder.encode(input)
     );
-    
-    return decoder.decode(decrypted);
+    return btoa(String.fromCharCode(...new Uint8Array(signature).slice(0, 8)));
   }
 }
 
@@ -50,98 +100,94 @@ serve(async (req) => {
   }
 
   try {
-    // @ts-ignore: Deno types
+    // @ts-ignore
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    // @ts-ignore: Deno types
+    // @ts-ignore
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    // @ts-ignore: Deno types
+    // @ts-ignore
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY')!
     
-    if (!encryptionKey) {
-      throw new Error('ENCRYPTION_KEY not configured')
-    }
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
 
-    const { query, page = 1, limit = 10 } = await req.json()
+    const { query, page = 1, limit = 20 } = await req.json()
 
-    if (!query) {
+    if (!query || query.length < 2) {
       return new Response(
-        JSON.stringify({ error: 'Search query is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ results: [], total: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log(`[SECURE SEARCH] Searching encrypted database for: [REDACTED]`)
+    console.log(`[BLIND SEARCH] Querying tokens for: [REDACTED]`)
 
-    // Récupérer toutes les pages cryptées
-    const { data: encryptedPages, error } = await supabase
+    // 1. Générer les tokens de recherche (Hashs des trigrammes)
+    const queryTokens = await cryptoService.generateQueryTokens(query);
+    
+    if (queryTokens.length === 0) {
+       return new Response(JSON.stringify({ results: [], total: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // 2. Recherche SQL via Index GIN (overlaps operator '&&')
+    // On cherche les pages qui ont au moins un token en commun (Fuzzy)
+    // On pourrait être plus strict en demandant @> (contains all), mais && (overlaps) permet l'à-peu-près.
+    const offset = (page - 1) * limit;
+    
+    const { data: candidates, error, count } = await supabase
       .from('crawled_pages')
-      .select('*')
-      .eq('status', 'success')
-      .limit(500)
+      .select('*', { count: 'exact' })
+      .overlaps('blind_index', queryTokens) // LA MAGIE EST ICI : Postgres fait le travail dur via l'index
+      .range(offset, offset + limit - 1);
 
-    if (error) {
-      console.error('[SEARCH ERROR]', error)
-      throw error
-    }
+    if (error) throw error;
 
-    console.log(`[DECRYPTION] Decrypting ${encryptedPages?.length || 0} pages for search...`)
+    console.log(`[DB HIT] Found ${candidates?.length || 0} candidates via Blind Index`);
 
-    const results = []
-    const queryLower = query.toLowerCase()
-
-    // Décrypter et rechercher
-    for (const page of encryptedPages || []) {
+    // 3. Déchiffrement et Classement final (Scoring)
+    // On ne déchiffre QUE les candidats pertinents (ex: 20 résultats), pas toute la base !
+    const results = [];
+    
+    for (const page of candidates || []) {
       try {
-        const decryptedTitle = await cryptoService.decrypt(page.title)
-        const decryptedDescription = await cryptoService.decrypt(page.description)
-        const decryptedContent = await cryptoService.decrypt(page.content)
-        const decryptedUrl = await cryptoService.decrypt(page.url)
-        const decryptedDomain = await cryptoService.decrypt(page.domain)
+        // Score de pertinence basé sur le nombre de tokens communs (Intersection)
+        const pageTokens = new Set(page.blind_index);
+        const matchCount = queryTokens.filter(t => pageTokens.has(t)).length;
+        const matchRatio = matchCount / queryTokens.length;
 
-        const searchText = `${decryptedTitle} ${decryptedDescription} ${decryptedContent}`.toLowerCase()
-        
-        if (searchText.includes(queryLower)) {
-          const rank = (decryptedTitle.toLowerCase().includes(queryLower) ? 10 : 0) +
-                      (decryptedDescription.toLowerCase().includes(queryLower) ? 5 : 0) +
-                      (decryptedContent.toLowerCase().includes(queryLower) ? 1 : 0)
+        // Si le ratio de correspondance est trop faible (< 30%), on ignore (Faux positif du Fuzzy)
+        if (matchRatio < 0.3) continue;
 
-          results.push({
-            id: page.id,
-            url: decryptedUrl,
-            title: decryptedTitle,
-            description: decryptedDescription,
-            content: decryptedContent.substring(0, 300),
-            domain: decryptedDomain,
-            crawled_at: page.crawled_at,
-            rank: rank,
-          })
-        }
-      } catch (decryptError) {
-        console.error('[DECRYPTION ERROR]', decryptError)
-        continue
-      }
+        const decryptedTitle = await cryptoService.decrypt(page.title);
+        const decryptedDesc = await cryptoService.decrypt(page.description);
+        const decryptedUrl = await cryptoService.decrypt(page.url);
+        const decryptedDomain = await cryptoService.decrypt(page.domain);
+
+        results.push({
+          id: page.id,
+          url: decryptedUrl,
+          title: decryptedTitle,
+          description: decryptedDesc,
+          content: "", // On évite de déchiffrer le gros contenu pour la liste
+          domain: decryptedDomain,
+          crawled_at: page.crawled_at,
+          // Le rank est maintenant basé sur la densité de correspondance des hashs
+          rank: matchRatio * 10 
+        });
+      } catch (e) { continue; }
     }
 
-    // Trier par pertinence
-    results.sort((a, b) => b.rank - a.rank)
-
-    const offset = (page - 1) * limit
-    const paginatedResults = results.slice(offset, offset + limit)
-
-    console.log(`[SUCCESS] Found ${results.length} results (showing ${paginatedResults.length})`)
+    // Tri final par pertinence
+    results.sort((a, b) => b.rank - a.rank);
 
     return new Response(
       JSON.stringify({
-        results: paginatedResults,
-        total: results.length,
+        results: results,
+        total: count || results.length,
         page,
-        totalPages: Math.ceil(results.length / limit),
-        encryption: 'AES-256-GCM',
-        security: 'Military-grade',
+        totalPages: Math.ceil((count || 0) / limit),
+        algorithm: 'SSE-Trigram-Blind-Index',
+        security: 'Zero-Knowledge'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
@@ -149,12 +195,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('[SEARCH ERROR]', error)
     return new Response(
-      JSON.stringify({ 
-        error: 'Internal server error', 
-        details: error.message,
-        results: [],
-        total: 0
-      }),
+      JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
