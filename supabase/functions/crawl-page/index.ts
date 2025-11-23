@@ -246,17 +246,17 @@ serve(async (req) => {
     const metadata = extractMetadata(rawHtml, url);
     const urlObj = new URL(url);
 
-    // 3. DISCOVERY MODE (BRIDE A 5 LIENS MAX)
+    // 3. DISCOVERY MODE
     const { data: settings } = await supabase.from('crawler_settings').select('discovery_enabled').eq('id', 1).single();
     const discoveryEnabled = settings?.discovery_enabled !== false;
 
     if (discoveryEnabled) {
-       await logToDb(queueId, `Discovery Mode: Slow Extraction...`, 'DISCOVERY', 'info');
+       await logToDb(queueId, `Discovery Mode: Full Mapping...`, 'DISCOVERY', 'info');
        const links = extractLinks(rawHtml, url);
        let addedCount = 0;
 
-       // --- BRIDAGE ICI : MAX 5 LIENS ---
-       const MAX_NEW_LINKS = 5; 
+       // --- BRIDAGE MODIFIÉ : MAX 1000 LIENS (QUASI ILLIMITÉ) ---
+       const MAX_NEW_LINKS = 1000; 
        const SLOW_DELAY = 500; // 500ms de pause entre chaque ajout
 
        for (const link of links.slice(0, MAX_NEW_LINKS)) {
@@ -278,7 +278,7 @@ serve(async (req) => {
           }
        }
        if (addedCount > 0) {
-          await logToDb(queueId, `Queue +${addedCount} (Throttled)`, 'DISCOVERY', 'success');
+          await logToDb(queueId, `Queue +${addedCount} (Slow Mode)`, 'DISCOVERY', 'success');
        }
     }
 
