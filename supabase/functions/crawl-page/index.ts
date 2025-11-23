@@ -11,7 +11,6 @@ const corsHeaders = {
 // ==========================================
 // 🛡️ TITANIUM TOKENIZER ENGINE (SHARED) 🛡️
 // ==========================================
-// Ce moteur doit être IDENTIQUE entre crawl-page et search.
 
 class TitaniumTokenizer {
   public static STOPWORDS = new Set([
@@ -186,20 +185,16 @@ function extractLinks(html: string, baseUrl: string): string[] {
       const absoluteUrl = new URL(link, baseUrl).href;
       const urlObj = new URL(absoluteUrl);
 
-      // Filtres de base : HTTP/S uniquement, même domaine
+      // Filtres de base
       if (!['http:', 'https:'].includes(urlObj.protocol)) continue;
-      if (urlObj.hostname !== baseObj.hostname) continue; // Restrict to same domain for now
+      if (urlObj.hostname !== baseObj.hostname) continue; 
       
       // Filtres extensions
       if (/\.(jpg|jpeg|png|gif|pdf|zip|css|js)$/i.test(urlObj.pathname)) continue;
 
-      // Suppression des ancres
       urlObj.hash = '';
-      
       links.add(urlObj.href);
-    } catch (e) {
-      // Ignore invalid URLs
-    }
+    } catch (e) {}
   }
   return Array.from(links);
 }
@@ -238,7 +233,7 @@ serve(async (req) => {
     // 1. FETCH
     await logToDb(queueId, `Crawling: ${url}`, 'INIT', 'info');
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'SivaraBot/2.0 (Badass-Edition; +http://sivara.search)' }
+      headers: { 'User-Agent': 'SivaraBot/2.0 (Slow-Edition; +http://sivara.search)' }
     })
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -247,36 +242,35 @@ serve(async (req) => {
     if (!isAllowedLanguage(rawHtml)) throw new Error('Language not supported');
 
     // 2. PARSE
-    await logToDb(queueId, `Parsing & Tokenizing...`, 'PARSING', 'info');
+    await logToDb(queueId, `Parsing...`, 'PARSING', 'info');
     const metadata = extractMetadata(rawHtml, url);
     const urlObj = new URL(url);
 
-    // 3. CHECK SETTINGS FOR DISCOVERY
+    // 3. DISCOVERY MODE (BRIDE A 5 LIENS MAX)
     const { data: settings } = await supabase.from('crawler_settings').select('discovery_enabled').eq('id', 1).single();
     const discoveryEnabled = settings?.discovery_enabled !== false;
 
-    // 4. DISCOVERY MODE
     if (discoveryEnabled) {
-       await logToDb(queueId, `Discovery Mode ON: Extracting links...`, 'DISCOVERY', 'info');
+       await logToDb(queueId, `Discovery Mode: Slow Extraction...`, 'DISCOVERY', 'info');
        const links = extractLinks(rawHtml, url);
        let addedCount = 0;
 
-       // Optimisation : On vérifie les doublons en calculant les hashs d'abord
-       // Note : C'est lourd si la page a 1000 liens, mais c'est nécessaire pour ne pas polluer
-       for (const link of links.slice(0, 50)) { // Limite à 50 liens par page pour éviter l'explosion
+       // --- BRIDAGE ICI : MAX 5 LIENS ---
+       const MAX_NEW_LINKS = 5; 
+       const SLOW_DELAY = 500; // 500ms de pause entre chaque ajout
+
+       for (const link of links.slice(0, MAX_NEW_LINKS)) {
           const linkHash = await cryptoService.hash(link);
-          
-          // Vérif si déjà crawlé
           const { data: existing } = await supabase.from('crawled_pages').select('id').eq('search_hash', linkHash).single();
           
-          // Vérif si déjà en queue (Approximation : on ne peut pas vérifier facilement car URL chiffrée avec IV random)
-          // Pour l'instant, on ajoute. process-queue peut re-vérifier plus tard.
-          
           if (!existing) {
+             // PAUSE ARTIFICIELLE POUR RALENTIR L'INJECTION
+             await new Promise(resolve => setTimeout(resolve, SLOW_DELAY));
+
              const encryptedLink = await cryptoService.encrypt(link);
              const { error } = await supabase.from('crawl_queue').insert({
                 url: encryptedLink,
-                priority: 0, // Priorité basse pour la découverte
+                priority: 0, 
                 status: 'pending',
                 added_at: new Date().toISOString()
              });
@@ -284,12 +278,12 @@ serve(async (req) => {
           }
        }
        if (addedCount > 0) {
-          await logToDb(queueId, `Discovered +${addedCount} new links`, 'DISCOVERY', 'success');
+          await logToDb(queueId, `Queue +${addedCount} (Throttled)`, 'DISCOVERY', 'success');
        }
     }
 
     // 5. ENCRYPT & INDEX
-    await logToDb(queueId, 'Generating Titanium Blind Index...', 'ENCRYPTION', 'info');
+    await logToDb(queueId, 'Indexing...', 'ENCRYPTION', 'info');
 
     const encryptedTitle = await cryptoService.encrypt(metadata.title)
     const encryptedDescription = await cryptoService.encrypt(metadata.description)
