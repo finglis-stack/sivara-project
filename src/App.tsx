@@ -28,29 +28,52 @@ import MobileLanding from "./pages/MobileLanding";
 
 const queryClient = new QueryClient();
 
-// Fonction utilitaire pour détecter l'application courante
+// Fonction utilitaire pour détecter l'application courante avec persistance
 const getCurrentApp = () => {
   const hostname = window.location.hostname;
   const searchParams = new URLSearchParams(window.location.search);
-  const simulatedApp = searchParams.get('app');
+  let app = searchParams.get('app');
 
+  // 1. Gestion Mobile (Capacitor)
   if (Capacitor.isNativePlatform()) {
-    if (simulatedApp === 'docs') return 'docs';
-    if (simulatedApp === 'account') return 'account';
-    if (simulatedApp === 'mail') return 'mail';
-    if (simulatedApp === 'www') return 'www';
+    if (app) {
+      sessionStorage.setItem('sivara_mobile_context', app);
+    } else {
+      app = sessionStorage.getItem('sivara_mobile_context');
+    }
+
+    if (app === 'mobile' || app === 'mobile-launcher') {
+        sessionStorage.removeItem('sivara_mobile_context');
+        return 'mobile-launcher';
+    }
+
+    if (app === 'docs') return 'docs';
+    if (app === 'account') return 'account';
+    if (app === 'mail') return 'mail';
+    if (app === 'www') return 'www';
+    
     return 'mobile-launcher';
   }
 
+  // 2. Mode Localhost avec simulation
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    if (simulatedApp === 'docs') return 'docs';
-    if (simulatedApp === 'account') return 'account';
-    if (simulatedApp === 'mail') return 'mail';
-    if (simulatedApp === 'www') return 'www';
-    if (simulatedApp === 'mobile') return 'mobile-launcher';
+    if (app) sessionStorage.setItem('sivara_dev_context', app);
+    else app = sessionStorage.getItem('sivara_dev_context') || null;
+
+    if (app === 'mobile') {
+        sessionStorage.removeItem('sivara_dev_context');
+        return 'mobile-launcher';
+    }
+
+    if (app === 'docs') return 'docs';
+    if (app === 'account') return 'account';
+    if (app === 'mail') return 'mail';
+    if (app === 'www') return 'www';
+    
     return 'dev-portal';
   }
 
+  // 3. Mode Production
   if (hostname.startsWith('docs.')) return 'docs';
   if (hostname.startsWith('account.')) return 'account';
   if (hostname.startsWith('mail.')) return 'mail';
@@ -61,27 +84,33 @@ const App = () => {
   const currentApp = getCurrentApp();
 
   useEffect(() => {
-    // Écoute des Deep Links pour l'authentification mobile
+    // Écoute des Deep Links uniquement si plateforme native
     if (Capacitor.isNativePlatform()) {
-      CapacitorApp.addListener('appUrlOpen', async (data) => {
-        console.log('App opened with URL:', data.url);
-        
-        if (data.url.includes('login-callback')) {
-          // Extraction des tokens du hash URL (ex: ...#access_token=xyz&refresh_token=abc)
-          const urlObj = new URL(data.url.replace('#', '?')); // Hack pour parser le hash comme query params
-          const accessToken = urlObj.searchParams.get('access_token');
-          const refreshToken = urlObj.searchParams.get('refresh_token');
+      const setupListener = async () => {
+        await CapacitorApp.addListener('appUrlOpen', async (data) => {
+          console.log('App opened with URL:', data.url);
+          
+          if (data.url.includes('login-callback')) {
+            try {
+              const urlObj = new URL(data.url.replace('#', '?'));
+              const accessToken = urlObj.searchParams.get('access_token');
+              const refreshToken = urlObj.searchParams.get('refresh_token');
 
-          if (accessToken && refreshToken) {
-            await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-            // Recharger pour mettre à jour l'état AuthProvider
-            window.location.reload();
+              if (accessToken && refreshToken) {
+                await supabase.auth.setSession({
+                  access_token: accessToken,
+                  refresh_token: refreshToken,
+                });
+                window.location.reload();
+              }
+            } catch (e) {
+              console.error("Deep link error", e);
+            }
           }
-        }
-      });
+        });
+      };
+      
+      setupListener();
     }
   }, []);
 
@@ -98,7 +127,7 @@ const App = () => {
                 <Route path="*" element={<MobileLanding />} />
               )}
 
-              {/* --- APPLICATION: ACCOUNT (account.sivara.ca) --- */}
+              {/* --- APPLICATION: ACCOUNT --- */}
               {currentApp === 'account' && (
                 <>
                   <Route path="/" element={<Navigate to="/login" replace />} />
@@ -120,7 +149,7 @@ const App = () => {
                 </>
               )}
 
-              {/* --- APPLICATION: DOCS (docs.sivara.ca) --- */}
+              {/* --- APPLICATION: DOCS --- */}
               {currentApp === 'docs' && (
                 <>
                   <Route path="/" element={<Docs />} />
@@ -129,7 +158,7 @@ const App = () => {
                 </>
               )}
 
-              {/* --- APPLICATION: MAIL (mail.sivara.ca) --- */}
+              {/* --- APPLICATION: MAIL --- */}
               {currentApp === 'mail' && (
                 <>
                   <Route path="/" element={<Mail />} />
@@ -137,7 +166,7 @@ const App = () => {
                 </>
               )}
 
-              {/* --- APPLICATION: SEARCH ENGINE (sivara.ca) --- */}
+              {/* --- APPLICATION: SEARCH ENGINE --- */}
               {currentApp === 'www' && (
                 <>
                   <Route path="/" element={<Index />} />
@@ -150,7 +179,7 @@ const App = () => {
                 </>
               )}
 
-              {/* --- DEV PORTAL (Localhost Only) --- */}
+              {/* --- DEV PORTAL --- */}
               {currentApp === 'dev-portal' && (
                 <Route path="*" element={<DevPortal />} />
               )}
