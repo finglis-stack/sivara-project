@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { Capacitor } from "@capacitor/core";
 
 // Apps
 import Index from "./pages/Index";
@@ -20,6 +21,7 @@ import Pricing from "./pages/Pricing";
 import Checkout from "./pages/Checkout";
 import ProOnboarding from "./pages/ProOnboarding";
 import Mail from "./pages/Mail";
+import MobileLanding from "./pages/MobileLanding";
 
 const queryClient = new QueryClient();
 
@@ -29,16 +31,29 @@ const getCurrentApp = () => {
   const searchParams = new URLSearchParams(window.location.search);
   const simulatedApp = searchParams.get('app');
 
-  // Mode Localhost avec simulation via paramètre ?app=...
+  // 1. Priorité absolue : Application Mobile Native (Capacitor)
+  if (Capacitor.isNativePlatform()) {
+    // Si on demande spécifiquement une app via ?app=..., on la sert
+    if (simulatedApp === 'docs') return 'docs';
+    if (simulatedApp === 'account') return 'account';
+    if (simulatedApp === 'mail') return 'mail';
+    if (simulatedApp === 'www') return 'www';
+    
+    // Sinon, par défaut sur mobile, on lance le Mobile Launcher
+    return 'mobile-launcher';
+  }
+
+  // 2. Mode Localhost avec simulation
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     if (simulatedApp === 'docs') return 'docs';
     if (simulatedApp === 'account') return 'account';
     if (simulatedApp === 'mail') return 'mail';
     if (simulatedApp === 'www') return 'www';
-    return 'dev-portal'; // Par défaut en localhost
+    if (simulatedApp === 'mobile') return 'mobile-launcher'; // Pour tester sur desktop
+    return 'dev-portal';
   }
 
-  // Mode Production (Sous-domaines réels)
+  // 3. Mode Production (Sous-domaines réels)
   if (hostname.startsWith('docs.')) return 'docs';
   if (hostname.startsWith('account.')) return 'account';
   if (hostname.startsWith('mail.')) return 'mail';
@@ -56,6 +71,11 @@ const App = () => {
         <BrowserRouter>
           <AuthProvider>
             <Routes>
+              {/* --- MOBILE LAUNCHER (Capacitor Only) --- */}
+              {currentApp === 'mobile-launcher' && (
+                <Route path="*" element={<MobileLanding />} />
+              )}
+
               {/* --- APPLICATION: ACCOUNT (account.sivara.ca) --- */}
               {currentApp === 'account' && (
                 <>
@@ -74,7 +94,6 @@ const App = () => {
                       <Profile />
                     </ProtectedRoute>
                   } />
-                  {/* Redirection si page inconnue sur account */}
                   <Route path="*" element={<Navigate to="/login" replace />} />
                 </>
               )}
@@ -84,7 +103,8 @@ const App = () => {
                 <>
                   <Route path="/" element={<Docs />} />
                   <Route path="/:id" element={<DocEditor />} />
-                  <Route path="*" element={<NotFound />} />
+                  {/* Sur mobile, le retour se fait vers le launcher */}
+                  <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
                 </>
               )}
 
@@ -92,7 +112,7 @@ const App = () => {
               {currentApp === 'mail' && (
                 <>
                   <Route path="/" element={<Mail />} />
-                  <Route path="*" element={<NotFound />} />
+                  <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
                 </>
               )}
 
@@ -105,7 +125,7 @@ const App = () => {
                       <Monitor />
                     </ProtectedRoute>
                   } />
-                  <Route path="*" element={<NotFound />} />
+                  <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
                 </>
               )}
 

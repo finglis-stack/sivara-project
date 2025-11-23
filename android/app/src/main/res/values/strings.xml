@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sivara</string>
+    <string name="title_activity_main">Sivara</string>
+    <string name="package_name">com.example.sivara</string>
+    <string name="custom_url_scheme">com.example.sivara</string>
+</resources>
