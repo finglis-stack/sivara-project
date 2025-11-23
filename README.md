@@ -53,6 +53,16 @@ Sivara intègre nativement les exigences de la **Loi modernisant des disposition
 
 ---
 
+## 💎 Sivara Pro : Infrastructure Étendue
+
+Pour les utilisateurs exigeant une capacité industrielle, l'offre Pro débloque les verrous de l'infrastructure :
+
+*   **Identité Personnalisée (CNAME/MX) :** Routage DNS géré pour connecter votre propre nom de domaine. Vos emails et documents sous votre marque (`@votre-entreprise.com`).
+*   **Stockage Haute Capacité :** Allocation de **30 Go** sur des clusters de stockage NVMe répliqués.
+*   **Gouvernance Avancée :** Historique de versions illimité ("Time Travel") sur tous les documents chiffrés et support prioritaire dédié.
+
+---
+
 ## 💻 Stack Technologique
 
 Une pile technique moderne choisie pour sa robustesse, sa typologie stricte et sa scalabilité.
