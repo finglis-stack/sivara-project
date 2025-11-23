@@ -9,8 +9,7 @@ import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 // --- CONFIGURATION ---
-// IMPORTANT: Cet ID doit exister dans votre Dashboard Stripe (Mode Test si clé PK_TEST)
-// Si vous avez copié le code, ce "price_..." n'existe pas chez vous. Créez un produit dans Stripe et remplacez l'ID ici.
+// ID Produit Stripe (Doit exister dans votre dashboard Stripe)
 const STRIPE_PRICE_ID_MONTHLY = 'price_1SWTi12UEuKhlvPiQdVw7Jwl'; 
 const STRIPE_PUBLISHABLE_KEY = 'pk_test_51SWTTe2UEuKhlvPiZK33IJhJSYPTaYPfkQX9KcBUt39uD4w0vEf8z5iTYufLx01PfJyNvgN4Pa20iGXskGEzPl7x00danXtwmY';
 
@@ -43,12 +42,29 @@ const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial
 
     setIsLoading(true);
 
-    const { error } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/pro-onboarding`,
-      },
-    });
+    const returnUrl = `${window.location.origin}/pro-onboarding`;
+
+    let error;
+
+    if (isTrial) {
+        // POUR ESSAI GRATUIT : On confirme le SetupIntent (pas de paiement immédiat)
+        const result = await stripe.confirmSetup({
+            elements,
+            confirmParams: {
+                return_url: returnUrl,
+            },
+        });
+        error = result.error;
+    } else {
+        // POUR PAIEMENT : On confirme le PaymentIntent
+        const result = await stripe.confirmPayment({
+            elements,
+            confirmParams: {
+                return_url: returnUrl,
+            },
+        });
+        error = result.error;
+    }
 
     if (error) {
       if (error.type === "card_error" || error.type === "validation_error") {
@@ -57,6 +73,8 @@ const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial
         setMessage("Une erreur inattendue est survenue.");
       }
       setIsLoading(false);
+    } else {
+        // Normalement on est redirigé avant d'arriver ici
     }
   };
 
@@ -111,10 +129,8 @@ const Checkout = () => {
 
     const initPayment = async () => {
       try {
-        // 1. Initialiser Stripe avec la clé publique hardcodée
         setStripePromise(loadStripe(STRIPE_PUBLISHABLE_KEY));
 
-        // 2. Créer l'intention de paiement
         const { data, error } = await supabase.functions.invoke('stripe-api', {
           body: {
             action: 'create_subscription_intent',
@@ -123,13 +139,11 @@ const Checkout = () => {
           }
         });
 
-        // Gestion d'erreur réseau
         if (error) {
             console.error("Erreur réseau:", error);
-            throw new Error("Erreur de communication avec le serveur de paiement.");
+            throw new Error("Erreur de communication avec le serveur.");
         }
 
-        // Gestion d'erreur logique (Stripe Error) renvoyée en JSON
         if (data && data.error) {
              console.error("Erreur Stripe:", data.error);
              throw new Error(data.error);
@@ -166,20 +180,6 @@ const Checkout = () => {
               <div className="max-w-md">
                   <h1 className="text-xl font-semibold text-gray-900 mb-2">Erreur d'initialisation</h1>
                   <p className="text-gray-600 mb-4">{errorMessage}</p>
-                  
-                  {errorMessage.includes('No such price') && (
-                      <div className="text-xs text-left bg-gray-100 p-4 rounded border border-gray-200 font-mono mb-4 overflow-auto">
-                          <p><strong>Cause probable :</strong> L'ID de produit Stripe (<code>{STRIPE_PRICE_ID_MONTHLY}</code>) n'existe pas dans votre compte Stripe.</p>
-                          <p className="mt-2"><strong>Solution :</strong> Créez un produit dans votre Dashboard Stripe, copiez l'ID du tarif (commence par <code>price_...</code>) et mettez-le à jour dans <code>src/pages/Checkout.tsx</code>.</p>
-                      </div>
-                  )}
-                  
-                  {errorMessage.includes('Clé secrète manquante') && (
-                      <div className="text-xs text-left bg-gray-100 p-4 rounded border border-gray-200 font-mono mb-4 overflow-auto">
-                          <p><strong>Solution :</strong> Ajoutez <code>STRIPE_SECRET_KEY</code> dans les secrets de votre projet Supabase (Edge Functions).</p>
-                      </div>
-                  )}
-
                   <Button onClick={() => window.location.reload()} variant="outline">Réessayer</Button>
               </div>
           </div>
@@ -191,7 +191,7 @@ const Checkout = () => {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white font-sans selection:bg-black selection:text-white">
       
-      {/* GAUCHE : RÉCAPITULATIF ÉPURÉ */}
+      {/* GAUCHE : RÉCAPITULATIF */}
       <div className="lg:w-5/12 bg-gray-50 p-8 lg:p-16 flex flex-col justify-between border-r border-gray-100">
          <div>
             <div className="flex items-center gap-3 mb-16 cursor-pointer opacity-70 hover:opacity-100 transition-opacity" onClick={() => navigate('/pricing')}>
@@ -252,7 +252,7 @@ const Checkout = () => {
          </div>
       </div>
 
-      {/* DROITE : FORMULAIRE STRIPE ELEMENTS */}
+      {/* DROITE : FORMULAIRE */}
       <div className="lg:w-7/12 p-8 lg:p-20 flex flex-col justify-center items-center">
          <div className="w-full max-w-md space-y-8">
             <div className="mb-8">
