@@ -17,6 +17,8 @@ import Monitor from "./pages/Monitor";
 import NotFound from "./pages/NotFound";
 import DevPortal from "./pages/DevPortal";
 import Pricing from "./pages/Pricing";
+import Checkout from "./pages/Checkout";
+import ProOnboarding from "./pages/ProOnboarding";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +60,12 @@ const App = () => {
                   <Route path="/login" element={<Login />} />
                   <Route path="/onboarding" element={<Onboarding />} />
                   <Route path="/pricing" element={<Pricing />} />
+                  <Route path="/checkout" element={<Checkout />} />
+                  <Route path="/pro-onboarding" element={
+                    <ProtectedRoute>
+                      <ProOnboarding />
+                    </ProtectedRoute>
+                  } />
                   <Route path="/profile" element={
                     <ProtectedRoute>
                       <Profile />

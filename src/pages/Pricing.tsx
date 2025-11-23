@@ -1,45 +1,95 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Check, Loader2, ArrowRight, Globe, Database, ShieldCheck, Zap, Layers, Sparkles, Star } from 'lucide-react';
+import { Check, Loader2, ArrowRight, Globe, Database, ShieldCheck, Zap, Layers, Sparkles, Star, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
 
+interface UserProfile {
+  is_pro: boolean;
+  has_used_trial: boolean;
+  subscription_status: string;
+  subscription_end_date: string | null;
+}
+
 const Pricing = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  const handleSubscribe = async () => {
+  useEffect(() => {
+    if (user) {
+      const fetchProfile = async () => {
+        const { data } = await supabase
+          .from('profiles')
+          .select('is_pro, has_used_trial, subscription_status, subscription_end_date')
+          .eq('id', user.id)
+          .single();
+        setProfile(data);
+        setIsLoadingProfile(false);
+      };
+      fetchProfile();
+    } else {
+        setIsLoadingProfile(false);
+    }
+  }, [user]);
+
+  const handleAction = () => {
     if (!user) {
         navigate('/login?returnTo=/pricing');
         return;
     }
 
-    try {
-        setIsLoading(true);
-        // Simulation d'un processus de paiement
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        const { error } = await supabase
-            .from('profiles')
-            .update({ is_pro: true })
-            .eq('id', user.id);
-
-        if (error) throw error;
-
-        showSuccess('Bienvenue dans Sivara Pro !');
-        navigate('/profile');
-    } catch (e) {
-        showError('Erreur lors de l\'activation');
-    } finally {
-        setIsLoading(false);
+    // Cas 1 : Déjà Pro -> On ne fait rien (ou gestion facturation)
+    if (profile?.is_pro) {
+        return; 
     }
+
+    // Cas 2 : Jamais utilisé l'essai -> Checkout Trial
+    if (!profile?.has_used_trial) {
+        navigate('/checkout?plan=monthly&trial=true');
+        return;
+    }
+
+    // Cas 3 : Essai déjà utilisé -> Checkout Normal (Resubscribe)
+    navigate('/checkout?plan=monthly&trial=false');
+  };
+
+  // Helper pour le texte du bouton
+  const getButtonContent = () => {
+    if (isLoadingProfile) return <Loader2 className="animate-spin h-6 w-6" />;
+    
+    if (profile?.is_pro) {
+        return (
+            <span className="flex items-center gap-2">
+                <Check className="h-5 w-5" /> Abonnement Actif
+            </span>
+        );
+    }
+
+    if (profile?.has_used_trial) {
+        return "Réactiver mon abonnement";
+    }
+
+    return "Commencer l'essai gratuit";
+  };
+
+  const getExpirationText = () => {
+      if (profile?.is_pro && profile?.subscription_end_date) {
+          const date = new Date(profile.subscription_end_date).toLocaleDateString();
+          return (
+            <div className="mt-4 flex items-center justify-center gap-2 text-sm font-medium text-green-400 bg-green-400/10 px-4 py-2 rounded-full inline-flex border border-green-400/20">
+                <Clock className="w-4 h-4" />
+                <span>Prochain renouvellement le {date}</span>
+            </div>
+          );
+      }
+      return null;
   };
 
   return (
-    // Suppression de 'font-sans' pour laisser 'Inter' (défini dans body) prendre le dessus
     <div className="min-h-screen bg-white selection:bg-pink-500 selection:text-white" style={{ fontFamily: '"Inter", sans-serif' }}>
       
       {/* Navbar Transparente */}
@@ -92,16 +142,21 @@ const Pricing = () => {
               des outils exclusifs et une identité numérique unique.
             </p>
 
-            <div className="pt-8 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
+            <div className="pt-8 flex flex-col items-center justify-center gap-4 w-full">
               <Button 
-                onClick={handleSubscribe}
-                disabled={isLoading}
-                className="h-16 px-12 bg-white text-black hover:bg-gray-100 text-lg rounded-full shadow-2xl transition-all duration-300 hover:-translate-y-1 font-bold group w-full sm:w-auto border-0"
+                onClick={handleAction}
+                disabled={isLoadingProfile || profile?.is_pro}
+                className={`h-16 px-12 text-lg rounded-full shadow-2xl transition-all duration-300 hover:-translate-y-1 font-bold group w-full sm:w-auto border-0 ${
+                    profile?.is_pro 
+                    ? 'bg-green-500 text-white hover:bg-green-500 cursor-default opacity-90' 
+                    : 'bg-white text-black hover:bg-gray-100'
+                }`}
               >
-                {isLoading ? <Loader2 className="animate-spin mr-2" /> : null}
-                Commencer l'essai gratuit
-                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                {getButtonContent()}
+                {!profile?.is_pro && !isLoadingProfile && <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />}
               </Button>
+              
+              {getExpirationText()}
             </div>
             
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce text-white/50 hidden md:block">
@@ -259,19 +314,26 @@ const Pricing = () => {
               
               <div className="flex flex-col items-center gap-6">
                   <Button 
-                    onClick={handleSubscribe}
-                    disabled={isLoading}
-                    className="h-20 px-12 bg-white text-black hover:bg-gray-100 text-xl rounded-full shadow-[0_0_60px_-15px_rgba(255,255,255,0.4)] transition-all duration-300 hover:scale-105 font-bold border-0 group"
+                    onClick={handleAction}
+                    disabled={isLoadingProfile || profile?.is_pro}
+                    className={`h-20 px-12 text-xl rounded-full shadow-[0_0_60px_-15px_rgba(255,255,255,0.4)] transition-all duration-300 hover:scale-105 font-bold border-0 group ${
+                        profile?.is_pro 
+                        ? 'bg-green-500 text-white hover:bg-green-500 cursor-default opacity-90' 
+                        : 'bg-white text-black hover:bg-gray-100'
+                    }`}
                   >
-                    {isLoading ? <Loader2 className="animate-spin mr-3 h-6 w-6" /> : null}
-                    Activer mon essai gratuit
-                    <ArrowRight className="ml-3 w-6 h-6 group-hover:translate-x-2 transition-transform" />
+                    {getButtonContent()}
+                    {!profile?.is_pro && !isLoadingProfile && <ArrowRight className="ml-3 w-6 h-6 group-hover:translate-x-2 transition-transform" />}
                   </Button>
                   
-                  <div className="flex items-center gap-6 text-sm font-medium text-gray-500">
-                      <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> 14 jours offerts</span>
-                      <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Annulation sans frais</span>
-                  </div>
+                  {getExpirationText()}
+
+                  {!profile?.is_pro && (
+                    <div className="flex items-center gap-6 text-sm font-medium text-gray-500">
+                        <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> 14 jours offerts</span>
+                        <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Annulation sans frais</span>
+                    </div>
+                  )}
               </div>
           </div>
       </div>
