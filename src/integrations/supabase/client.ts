@@ -4,20 +4,21 @@ import Cookies from 'js-cookie'
 const supabaseUrl = 'https://asctcqyupjwjifxidegq.supabase.co'
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs'
 
-// Détermine si on est en production pour définir le domaine du cookie
+// Détection de l'environnement de production (sivara.ca et tous ses sous-domaines)
 const hostname = window.location.hostname;
-const isProd = hostname.endsWith('sivara.ca');
+const isProd = hostname.includes('sivara.ca');
 
-// Le point devant le domaine (.sivara.ca) est crucial pour le partage entre sous-domaines
-const cookieDomain = isProd ? '.sivara.ca' : undefined;
+// Configuration du domaine de cookie pour permettre le partage entre sous-domaines
+// 'sivara.ca' permettra l'accès depuis account.sivara.ca, docs.sivara.ca, etc.
+const cookieDomain = isProd ? 'sivara.ca' : undefined;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Clé unique partagée entre tous les sous-domaines
     storageKey: 'sivara-auth-token',
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: true, // Important pour détecter les tokens dans le hash #
+    flowType: 'pkce',
     storage: {
       getItem: (key) => {
         return Cookies.get(key);
@@ -28,7 +29,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
           path: '/', 
           sameSite: 'Lax', 
           secure: isProd,
-          expires: 365 // Persistance 1 an
+          expires: 365 
         });
       },
       removeItem: (key) => {

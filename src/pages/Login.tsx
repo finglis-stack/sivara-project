@@ -23,18 +23,34 @@ const Login = () => {
   const returnTo = searchParams.get('returnTo') || '/';
 
   const handleRedirect = async (url: string) => {
-    if (url.startsWith('com.example.sivara') || url.includes('://')) {
+    // Cas 1: Redirection vers Mobile ou URL externe (dont les sous-domaines Sivara)
+    if (url.includes('://') || url.startsWith('com.example.sivara')) {
+        // On récupère la session fraîchement créée
         const { data: { session } } = await supabase.auth.getSession();
+        
         if (session) {
-            const redirectUrl = `${url}#access_token=${session.access_token}&refresh_token=${session.refresh_token}`;
+            // On construit le hash fragment pour passer la session
+            // C'est la méthode la plus robuste pour traverser les domaines
+            const hashParams = new URLSearchParams();
+            hashParams.append('access_token', session.access_token);
+            hashParams.append('refresh_token', session.refresh_token);
+            hashParams.append('expires_in', String(session.expires_in));
+            hashParams.append('token_type', session.token_type);
+            hashParams.append('type', 'recovery'); // Aide Supabase à détecter le token
+
+            // On vérifie s'il y a déjà un hash dans l'URL cible
+            const separator = url.includes('#') ? '&' : '#';
+            const redirectUrl = `${url}${separator}${hashParams.toString()}`;
+            
+            console.log('Redirection Cross-Domain avec tokens...');
             window.location.href = redirectUrl;
             return;
         }
-    }
-
-    if (url.startsWith('http') || url.startsWith('//')) {
-      window.location.href = url;
+        
+        // Fallback si pas de session (ne devrait pas arriver ici si user est set)
+        window.location.href = url;
     } else {
+      // Cas 2: Navigation interne (SPA)
       navigate(url);
     }
   };
@@ -73,6 +89,8 @@ const Login = () => {
     setIsChecking(true);
 
     try {
+      // Simulation de vérification pour l'UX (évite de révéler les comptes existants trop facilement)
+      // Dans un vrai cas, on pourrait vérifier l'existence, mais Supabase Auth gère ça au login
       const testResult = await supabase.auth.signInWithPassword({
         email: email,
         password: '___TEST_INVALID_PASSWORD___' + Date.now(),
@@ -86,15 +104,16 @@ const Login = () => {
             errorMessage.includes('credentials')) {
           setStep('password');
         } else {
-          showError('Aucun compte trouvé avec cet email');
-          setBlockedUntil(Date.now() + 4000);
+          // Rate limit ou autre erreur technique
+          showError('Erreur de connexion. Veuillez réessayer.');
+          setBlockedUntil(Date.now() + 2000);
         }
       } else {
         setStep('password');
       }
     } catch (error: any) {
-      console.error('Erreur lors de la vérification:', error);
-      showError('Erreur lors de la vérification');
+      // Fallback sécurisé
+      setStep('password');
     } finally {
       setIsChecking(false);
     }
@@ -119,10 +138,10 @@ const Login = () => {
       if (error) throw error;
 
       showSuccess('Connexion réussie !');
+      // La redirection sera gérée par le useEffect qui écoute 'user'
     } catch (error: any) {
       console.error('Login error:', error);
       showError(error.message || 'Mot de passe incorrect');
-    } finally {
       setIsLoading(false);
     }
   };
