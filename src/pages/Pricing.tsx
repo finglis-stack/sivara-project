@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Check, ArrowLeft, Loader2, ArrowRight, Globe, Mail, Database, ShieldCheck, Zap, Layers, Sparkles, Infinity, Star } from 'lucide-react';
+import { Check, Loader2, ArrowRight, Globe, Database, ShieldCheck, Zap, Layers, Sparkles, Star } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
@@ -39,16 +39,13 @@ const Pricing = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans selection:bg-pink-500 selection:text-white">
-      {/* ==================================================================================== */}
-      {/* HEADER & HERO - STYLE STRICTEMENT IDENTIQUE À DOCS LANDING (INTER, TRANSPARENT)      */}
-      {/* ==================================================================================== */}
+    // Suppression de 'font-sans' pour laisser 'Inter' (défini dans body) prendre le dessus
+    <div className="min-h-screen bg-white selection:bg-pink-500 selection:text-white" style={{ fontFamily: '"Inter", sans-serif' }}>
       
       {/* Navbar Transparente */}
       <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-black/10 backdrop-blur-md border-b border-white/10">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate('/profile')}>
-            {/* Logo blanc pur */}
             <div className="h-9 w-9 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 shadow-inner">
               <span className="text-white font-bold text-lg">S</span>
             </div>
@@ -66,9 +63,8 @@ const Pricing = () => {
         </div>
       </nav>
 
-      {/* Hero Section Immersive */}
+      {/* Hero Section */}
       <div className="relative h-screen w-full overflow-hidden flex items-center justify-center">
-        {/* Image de fond */}
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-in fade-in duration-1000 scale-105"
           style={{ 
@@ -76,11 +72,9 @@ const Pricing = () => {
             backgroundPosition: 'center center'
           }}
         >
-          {/* Overlay sombre uniforme (PAS DE DÉGRADÉ VERS LE BLANC) */}
           <div className="absolute inset-0 bg-black/40"></div>
         </div>
 
-        {/* Contenu Hero */}
         <div className="relative z-10 text-center px-6 max-w-5xl mx-auto mt-10">
           <div className="animate-in fade-in slide-in-from-bottom-8 duration-1000 space-y-8 flex flex-col items-center">
             
@@ -110,7 +104,6 @@ const Pricing = () => {
               </Button>
             </div>
             
-            {/* Indicateur de scroll */}
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce text-white/50 hidden md:block">
               <ArrowRight className="h-6 w-6 rotate-90" />
             </div>
@@ -118,18 +111,13 @@ const Pricing = () => {
         </div>
       </div>
 
-      {/* ==================================================================================== */}
-      {/* CONTENU DYNAMIQUE & VENDEUR (BENTO GRID)                                           */}
-      {/* ==================================================================================== */}
-
+      {/* Section Dynamique Bento Grid */}
       <div className="bg-gray-50 py-32 relative overflow-hidden">
-         {/* Éléments de fond fluides */}
          <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-purple-200/30 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/4 pointer-events-none mix-blend-multiply"></div>
          <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-200/30 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/4 pointer-events-none mix-blend-multiply"></div>
 
          <div className="container mx-auto px-6 relative z-10">
             
-            {/* Intro Impactante */}
             <div className="max-w-3xl mx-auto text-center mb-20">
                 <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 tracking-tight leading-tight">
                     L'excellence n'est pas une option.<br/>
@@ -141,10 +129,9 @@ const Pricing = () => {
                 </p>
             </div>
 
-            {/* BENTO GRID LAYOUT */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[minmax(300px,auto)]">
                 
-                {/* CARD 1: DOMAINE (Large) */}
+                {/* CARD 1: DOMAINE */}
                 <div className="md:col-span-2 bg-white rounded-[2rem] p-10 shadow-sm border border-gray-100 hover:shadow-2xl transition-all duration-500 group overflow-hidden relative">
                     <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-blue-50 to-transparent rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
                     
@@ -154,7 +141,7 @@ const Pricing = () => {
                                 <Globe className="w-3 h-3" /> Identité Pro
                             </div>
                             <h3 className="text-3xl font-bold text-gray-900">Votre nom de domaine.<br/>Votre marque.</h3>
-                            <p className="text-gray-500 leading-relaxed">
+                            <p className="text-gray-500 leading-relaxed font-light">
                                 Connectez votre propre domaine (ex: .com, .fr) et obtenez une adresse email professionnelle. 
                                 Certificats SSL et configuration DNS gérés automatiquement.
                             </p>
@@ -184,7 +171,7 @@ const Pricing = () => {
                     </div>
                 </div>
 
-                {/* CARD 2: STOCKAGE (Tall) */}
+                {/* CARD 2: STOCKAGE */}
                 <div className="md:row-span-2 bg-black rounded-[2rem] p-10 shadow-2xl relative overflow-hidden group text-white flex flex-col justify-between hover:-translate-y-2 transition-transform duration-500">
                     <div className="absolute inset-0 bg-gradient-to-b from-gray-800/50 to-black z-0"></div>
                     <div className="relative z-10">
@@ -207,7 +194,7 @@ const Pricing = () => {
                     </div>
                 </div>
 
-                {/* CARD 3: APPS (Small) */}
+                {/* CARD 3: APPS */}
                 <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-[2rem] p-8 text-white shadow-lg relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
                     <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-1/3 -translate-y-1/3 transition-transform duration-500 group-hover:scale-125">
                         <Layers size={150} />
@@ -218,7 +205,7 @@ const Pricing = () => {
                                 <Zap className="w-3 h-3" /> Illimité
                             </div>
                             <h3 className="text-2xl font-bold mb-2">Suite Apps Pro</h3>
-                            <p className="text-purple-100 text-sm leading-relaxed">
+                            <p className="text-purple-100 text-sm leading-relaxed font-light">
                                 Accès prioritaire aux nouvelles fonctionnalités et outils exclusifs pour créateurs.
                             </p>
                         </div>
@@ -233,7 +220,7 @@ const Pricing = () => {
                     </div>
                 </div>
 
-                {/* CARD 4: SUPPORT (Small) */}
+                {/* CARD 4: SUPPORT */}
                 <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 group hover:shadow-xl transition-all duration-300 flex flex-col justify-center">
                     <div className="flex items-center gap-4 mb-4">
                         <div className="p-3 bg-green-50 rounded-xl group-hover:scale-110 transition-transform duration-300">
@@ -241,7 +228,7 @@ const Pricing = () => {
                         </div>
                         <h3 className="text-lg font-bold text-gray-900">Support VIP</h3>
                     </div>
-                    <p className="text-gray-500 text-sm leading-relaxed">
+                    <p className="text-gray-500 text-sm leading-relaxed font-light">
                         Une équipe dédiée disponible 24/7 pour vous aider à configurer votre domaine et migrer vos données.
                     </p>
                 </div>
@@ -250,9 +237,8 @@ const Pricing = () => {
          </div>
       </div>
 
-      {/* SECTION CTA FINALE */}
+      {/* Footer CTA */}
       <div className="py-32 bg-gray-900 relative overflow-hidden">
-          {/* Particules/Texture de fond */}
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
           <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-[120px] pointer-events-none"></div>
           <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-purple-500/20 rounded-full blur-[120px] pointer-events-none"></div>
