@@ -2,9 +2,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+// @ts-ignore: Deno types
+import { Webhook } from 'https://esm.sh/svix@1.8.1'
 
 // @ts-ignore
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+// @ts-ignore
+const RESEND_WEBHOOK_SECRET = Deno.env.get('RESEND_WEBHOOK_SECRET');
 
 const sendRejectionEmail = async (email: string) => {
   await fetch('https://api.resend.com/emails', {
@@ -33,6 +37,55 @@ const sendRejectionEmail = async (email: string) => {
 
 serve(async (req) => {
   try {
+    // --- VÉRIFICATION SIGNATURE WEBHOOK ---
+    const payload = await req.text();
+    const headers = req.headers;
+
+    if (RESEND_WEBHOOK_SECRET) {
+      const wh = new Webhook(RESEND_WEBHOOK_SECRET);
+      const svix_id = headers.get("svix-id");
+      const svix_timestamp = headers.get("svix-timestamp");
+      const svix_signature = headers.get("svix-signature");
+
+      if (!svix_id || !svix_timestamp || !svix_signature) {
+        console.error("Webhook Error: Missing svix headers");
+        return new Response("Error occured -- no svix headers", { status: 400 });
+      }
+
+      try {
+        wh.verify(payload, {
+          "svix-id": svix_id,
+          "svix-timestamp": svix_timestamp,
+          "svix-signature": svix_signature,
+        });
+      } catch (err) {
+        console.error("Webhook Error: Signature verification failed", err);
+        return new Response("Error occured -- signature verification failed", { status: 400 });
+      }
+    }
+    // --------------------------------------
+
+    const data = JSON.parse(payload);
+    
+    // Gestion Inbound (Email reçu)
+    // Note: Resend peut wrapper l'event différemment selon le type de webhook
+    // Ici on assume le format direct Inbound ou Event "email.delivery"
+    
+    // Pour Inbound, les champs sont souvent à la racine ou dans 'data'
+    const from = data.from || data.data?.from;
+    const subject = data.subject || data.data?.subject;
+    const text = data.text || data.data?.text;
+    const html = data.html || data.data?.html;
+
+    if (!from) {
+        // Ce n'est peut-être pas un email entrant (ex: event de livraison), on ignore poliment
+        return new Response(JSON.stringify({ message: 'Not an inbound email event' }), { status: 200 });
+    }
+
+    const email = from.replace(/.*<(.+)>$/, '$1').trim(); // Extraction email propre
+
+    console.log(`[Support] Email reçu de: ${email}`);
+
     const supabase = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -40,16 +93,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const payload = await req.json();
-    
-    // Resend Webhook format
-    const { from, subject, text, html } = payload;
-    const email = from.replace(/.*<(.+)>$/, '$1').trim(); // Extraction email propre
-
-    console.log(`[Support] Email reçu de: ${email}`);
-
     // 1. Vérifier si l'utilisateur existe
-    // On doit chercher dans auth.users, mais via RPC ou admin API
     const { data: { users }, error: userError } = await supabase.auth.admin.listUsers();
     const user = users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
 
