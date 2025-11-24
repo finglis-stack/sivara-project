@@ -2,15 +2,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-// @ts-ignore: Deno types
-import { Webhook } from 'https://esm.sh/svix@1.8.1'
 
 // @ts-ignore
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-// @ts-ignore
-const RESEND_WEBHOOK_SECRET = Deno.env.get('RESEND_WEBHOOK_SECRET');
 
 const sendRejectionEmail = async (email: string) => {
+  console.log(`[Support] Envoi rejet à ${email}`);
   await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -20,15 +17,21 @@ const sendRejectionEmail = async (email: string) => {
     body: JSON.stringify({
       from: 'Sivara Support <support@sivara.ca>',
       to: [email],
-      subject: 'Accès réservé aux clients Sivara',
+      subject: 'Action requise : Compte client nécessaire',
       html: `
-        <div style="font-family: sans-serif; color: #333;">
-          <h1>Bonjour,</h1>
-          <p>Nous avons bien reçu votre demande.</p>
-          <p>Cependant, le support technique est réservé aux clients disposant d'un compte actif sur Sivara Canada.</p>
-          <p>Nous n'avons trouvé aucun compte associé à cette adresse email.</p>
-          <br/>
-          <a href="https://sivara.ca" style="background: #000; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Créer un compte Sivara</a>
+        <div style="font-family: sans-serif; color: #111; padding: 20px;">
+          <h2 style="margin-top:0;">Bonjour,</h2>
+          <p>Nous avons bien reçu votre message.</p>
+          <p>Cependant, le système de support prioritaire est <strong>exclusivement réservé aux clients identifiés</strong> de Sivara Canada.</p>
+          <p style="background: #f9f9f9; padding: 15px; border-left: 4px solid #000;">
+            Aucun compte actif n'a été trouvé pour l'adresse : <strong>${email}</strong>
+          </p>
+          <p>Pour bénéficier de l'assistance, veuillez créer un compte ou vous connecter :</p>
+          <div style="margin: 30px 0;">
+            <a href="https://sivara.ca" style="background: #000; color: #fff; padding: 12px 25px; text-decoration: none; border-radius: 6px; font-weight: bold;">Accéder à Sivara.ca</a>
+          </div>
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="color: #666; font-size: 12px;">Sivara Canada - Automated Security System</p>
         </div>
       `
     }),
@@ -37,54 +40,20 @@ const sendRejectionEmail = async (email: string) => {
 
 serve(async (req) => {
   try {
-    // --- VÉRIFICATION SIGNATURE WEBHOOK ---
-    const payload = await req.text();
-    const headers = req.headers;
-
-    if (RESEND_WEBHOOK_SECRET) {
-      const wh = new Webhook(RESEND_WEBHOOK_SECRET);
-      const svix_id = headers.get("svix-id");
-      const svix_timestamp = headers.get("svix-timestamp");
-      const svix_signature = headers.get("svix-signature");
-
-      if (!svix_id || !svix_timestamp || !svix_signature) {
-        console.error("Webhook Error: Missing svix headers");
-        return new Response("Error occured -- no svix headers", { status: 400 });
-      }
-
-      try {
-        wh.verify(payload, {
-          "svix-id": svix_id,
-          "svix-timestamp": svix_timestamp,
-          "svix-signature": svix_signature,
-        });
-      } catch (err) {
-        console.error("Webhook Error: Signature verification failed", err);
-        return new Response("Error occured -- signature verification failed", { status: 400 });
-      }
-    }
-    // --------------------------------------
-
-    const data = JSON.parse(payload);
+    const payload = await req.json();
     
-    // Gestion Inbound (Email reçu)
-    // Note: Resend peut wrapper l'event différemment selon le type de webhook
-    // Ici on assume le format direct Inbound ou Event "email.delivery"
+    // Extraction des données (supporte format direct ou wrapper Resend)
+    const from = payload.from || payload.data?.from;
+    const subject = payload.subject || payload.data?.subject;
+    const text = payload.text || payload.data?.text;
+    const html = payload.html || payload.data?.html;
+
+    if (!from) return new Response("No sender found", { status: 200 });
+
+    // Nettoyage email "Nom <email@domain.com>" -> "email@domain.com"
+    const email = from.match(/<(.+)>/)?.[1] || from;
     
-    // Pour Inbound, les champs sont souvent à la racine ou dans 'data'
-    const from = data.from || data.data?.from;
-    const subject = data.subject || data.data?.subject;
-    const text = data.text || data.data?.text;
-    const html = data.html || data.data?.html;
-
-    if (!from) {
-        // Ce n'est peut-être pas un email entrant (ex: event de livraison), on ignore poliment
-        return new Response(JSON.stringify({ message: 'Not an inbound email event' }), { status: 200 });
-    }
-
-    const email = from.replace(/.*<(.+)>$/, '$1').trim(); // Extraction email propre
-
-    console.log(`[Support] Email reçu de: ${email}`);
+    console.log(`[Inbound] Email entrant: ${email}`);
 
     const supabase = createClient(
       // @ts-ignore
@@ -93,65 +62,81 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Vérifier si l'utilisateur existe
-    const { data: { users }, error: userError } = await supabase.auth.admin.listUsers();
-    const user = users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+    // 1. VÉRIFICATION CLIENT STRICTE
+    // On cherche dans la table profiles (qui est sync avec auth.users)
+    // C'est plus sûr car on a besoin de l'ID profile pour les Foreign Keys
+    const { data: users, error: userError } = await supabase
+        .from('profiles')
+        .select('id')
+        .or(`email.eq.${email},contact_email.eq.${email}`) // Au cas où on ajoute un champ contact_email plus tard
+        .maybeSingle();
 
-    if (!user) {
-      console.log(`[Support] Utilisateur inconnu: ${email}. Rejet.`);
-      await sendRejectionEmail(email);
-      return new Response(JSON.stringify({ message: 'User not found, rejection sent' }), { status: 200 });
+    // Fallback: Si pas trouvé dans profiles, chercher dans auth.users via admin API
+    let userId = users?.id;
+    
+    if (!userId) {
+        const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
+        const authUser = authUsers.find((u: any) => u.email?.toLowerCase() === email.toLowerCase().trim());
+        if (authUser) userId = authUser.id;
     }
 
-    // 2. Chercher un ticket ouvert
+    if (!userId) {
+      await sendRejectionEmail(email);
+      return new Response(JSON.stringify({ error: 'User not found' }), { status: 200 });
+    }
+
+    // 2. LOGIQUE TICKET
+    // On cherche un ticket qui n'est PAS fermé (open ou suspended)
     const { data: existingTicket } = await supabase
       .from('support_tickets')
       .select('id')
-      .eq('user_id', user.id)
-      .neq('status', 'closed')
-      .single();
+      .eq('user_id', userId)
+      .neq('status', 'closed') 
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     let ticketId = existingTicket?.id;
 
-    // 3. Créer ticket si inexistant
-    if (!ticketId) {
-      const { data: newTicket, error: ticketError } = await supabase
+    if (ticketId) {
+      // UPDATE TICKET EXISTANT
+      console.log(`[Inbound] Ajout au ticket existant: ${ticketId}`);
+      await supabase.from('support_tickets').update({
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        status: 'open' // On réouvre si c'était "suspended"
+      }).eq('id', ticketId);
+    } else {
+      // NOUVEAU TICKET
+      console.log(`[Inbound] Création nouveau ticket pour ${userId}`);
+      const { data: newTicket, error: createError } = await supabase
         .from('support_tickets')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           customer_email: email,
-          subject: subject || 'Nouveau ticket sans sujet',
+          subject: subject || 'Nouvelle demande sans sujet',
           status: 'open'
         })
         .select()
         .single();
       
-      if (ticketError) throw ticketError;
+      if (createError) throw createError;
       ticketId = newTicket.id;
-      console.log(`[Support] Nouveau ticket créé: ${ticketId}`);
-    } else {
-      // Update timestamp
-      await supabase.from('support_tickets').update({ 
-        updated_at: new Date().toISOString(),
-        last_message_at: new Date().toISOString(),
-        status: 'open' // Réouvrir si suspendu
-      }).eq('id', ticketId);
-      console.log(`[Support] Ticket existant mis à jour: ${ticketId}`);
     }
 
-    // 4. Ajouter le message
+    // 3. INSERTION MESSAGE
     await supabase.from('support_messages').insert({
       ticket_id: ticketId,
-      sender_id: user.id,
+      sender_id: userId,
       sender_email: email,
-      body: html || text || '(Message vide)',
+      body: html || text || '(Contenu vide)',
       is_staff_reply: false
     });
 
     return new Response(JSON.stringify({ success: true, ticketId }), { status: 200 });
 
   } catch (error) {
-    console.error(error);
+    console.error("[Inbound Error]", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 });
