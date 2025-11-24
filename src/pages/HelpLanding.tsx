@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import UserMenu from '@/components/UserMenu';
-import { Search, Book, ArrowRight, Shield, Mail, LifeBuoy, Lock, Settings } from 'lucide-react';
+import { Search, Book, ArrowRight, Shield, Mail, LifeBuoy, Lock, Settings, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 const HelpLanding = () => {
@@ -37,10 +37,20 @@ const HelpLanding = () => {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Implémentation simple de recherche navigation
     if(searchQuery.trim()) {
-        // Pour l'instant, on ne fait rien de complexe, on pourrait rediriger vers une page de recherche
         console.log("Recherche:", searchQuery);
+    }
+  };
+
+  const handleLogin = () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    // Redirection spécifique demandée vers /profile
+    if (isLocal) {
+      window.location.href = '/?app=account&path=/profile';
+    } else {
+      window.location.href = 'https://account.sivara.ca/profile';
     }
   };
 
@@ -59,7 +69,17 @@ const HelpLanding = () => {
                 <Lock className="w-3 h-3 mr-2" /> Admin Panel
               </Button>
             )}
-            <UserMenu />
+            {user ? (
+              <UserMenu />
+            ) : (
+              <Button 
+                onClick={handleLogin}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-700 transition-all duration-300 text-white shadow-md shadow-indigo-200"
+              >
+                <User size={18} />
+                <span className="text-sm font-medium">Connexion</span>
+              </Button>
+            )}
           </div>
         </div>
       </nav>
