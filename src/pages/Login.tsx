@@ -14,12 +14,10 @@ const Login = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [step, setStep] = useState<'email' | 'password'>('email');
-  const [isChecking, setIsChecking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
-
+  
   const returnTo = searchParams.get('returnTo') || '/';
 
   const handleRedirect = async (url: string) => {
@@ -61,62 +59,16 @@ const Login = () => {
     }
   }, [user, returnTo]);
 
-  useEffect(() => {
-    if (blockedUntil) {
-      const interval = setInterval(() => {
-        if (Date.now() >= blockedUntil) {
-          setBlockedUntil(null);
-        }
-      }, 100);
-      return () => clearInterval(interval);
-    }
-  }, [blockedUntil]);
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
+  const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email) {
-      showError('Veuillez entrer votre adresse email');
+    if (!email || !email.includes('@')) {
+      showError('Veuillez entrer une adresse email valide');
       return;
     }
 
-    if (blockedUntil && Date.now() < blockedUntil) {
-      const remainingSeconds = Math.ceil((blockedUntil - Date.now()) / 1000);
-      showError(`Veuillez attendre ${remainingSeconds} seconde${remainingSeconds > 1 ? 's' : ''}`);
-      return;
-    }
-
-    setIsChecking(true);
-
-    try {
-      // Simulation de vérification pour l'UX (évite de révéler les comptes existants trop facilement)
-      // Dans un vrai cas, on pourrait vérifier l'existence, mais Supabase Auth gère ça au login
-      const testResult = await supabase.auth.signInWithPassword({
-        email: email,
-        password: '___TEST_INVALID_PASSWORD___' + Date.now(),
-      });
-
-      if (testResult.error) {
-        const errorMessage = testResult.error.message.toLowerCase();
-        
-        if (errorMessage.includes('invalid login credentials') || 
-            errorMessage.includes('invalid') ||
-            errorMessage.includes('credentials')) {
-          setStep('password');
-        } else {
-          // Rate limit ou autre erreur technique
-          showError('Erreur de connexion. Veuillez réessayer.');
-          setBlockedUntil(Date.now() + 2000);
-        }
-      } else {
-        setStep('password');
-      }
-    } catch (error: any) {
-      // Fallback sécurisé
-      setStep('password');
-    } finally {
-      setIsChecking(false);
-    }
+    // Passage immédiat à l'étape mot de passe sans appel réseau (Zero Latency)
+    setStep('password');
   };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -141,7 +93,14 @@ const Login = () => {
       // La redirection sera gérée par le useEffect qui écoute 'user'
     } catch (error: any) {
       console.error('Login error:', error);
-      showError(error.message || 'Mot de passe incorrect');
+      // Gestion plus fine des erreurs réseau
+      if (error.message?.includes('Failed to fetch')) {
+         showError("Erreur de connexion. Vérifiez votre réseau.");
+      } else if (error.message?.includes('Invalid login credentials')) {
+         showError('Email ou mot de passe incorrect');
+      } else {
+         showError(error.message || 'Erreur lors de la connexion');
+      }
       setIsLoading(false);
     }
   };
@@ -150,13 +109,6 @@ const Login = () => {
     setStep('email');
     setPassword('');
   };
-
-  const getRemainingTime = () => {
-    if (!blockedUntil) return 0;
-    return Math.ceil((blockedUntil - Date.now()) / 1000);
-  };
-
-  const isBlocked = blockedUntil && Date.now() < blockedUntil;
 
   return (
     <div className="min-h-screen relative flex items-center justify-center px-4 py-8 sm:py-0">
@@ -203,36 +155,16 @@ const Login = () => {
                       className="h-11 sm:h-12 pl-10 text-base"
                       required
                       autoFocus
-                      disabled={isChecking || isBlocked}
                     />
                   </div>
-                  {isBlocked && (
-                    <p className="text-xs text-red-600 animate-pulse">
-                      Veuillez attendre {getRemainingTime()} seconde{getRemainingTime() > 1 ? 's' : ''} avant de réessayer
-                    </p>
-                  )}
                 </div>
 
                 <Button
                   type="submit"
                   className="w-full h-11 sm:h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
-                  disabled={isChecking || isBlocked}
                 >
-                  {isChecking ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Vérification...
-                    </>
-                  ) : isBlocked ? (
-                    <>
-                      Bloqué ({getRemainingTime()}s)
-                    </>
-                  ) : (
-                    <>
-                      Continuer
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </>
-                  )}
+                  Continuer
+                  <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </form>
             ) : (
