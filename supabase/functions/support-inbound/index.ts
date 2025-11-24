@@ -43,10 +43,34 @@ serve(async (req) => {
     const payload = await req.json();
     
     // Extraction des données (supporte format direct ou wrapper Resend)
-    const from = payload.from || payload.data?.from;
-    const subject = payload.subject || payload.data?.subject;
-    const text = payload.text || payload.data?.text;
-    const html = payload.html || payload.data?.html;
+    // On cherche partout pour être sûr de ne rien rater
+    const data = payload.data || payload;
+    
+    const from = data.from;
+    let subject = data.subject || '(Sans sujet)';
+    let html = data.html;
+    let text = data.text;
+
+    // CORRECTION CONTENU VIDE
+    // Si html est vide, on prend text. Si text est vide, on force un contenu.
+    let bodyContent = html;
+    if (!bodyContent || bodyContent.trim() === '') {
+        bodyContent = text ? text.replace(/\n/g, '<br/>') : '';
+    }
+
+    // CORRECTION SUJET TROP LONG (Le corps est dans le sujet)
+    // Si le sujet fait plus de 150 caractères, c'est probablement le message entier
+    if (subject.length > 150) {
+        const oldSubject = subject;
+        subject = oldSubject.substring(0, 50) + '...'; // On tronque pour le titre
+        // On remet tout le contenu dans le corps
+        bodyContent = `<p><strong>Sujet original :</strong> ${oldSubject}</p><hr/>${bodyContent}`;
+    }
+
+    // Sécurité finale : si vraiment vide
+    if (!bodyContent || bodyContent.trim() === '') {
+        bodyContent = '<p><em>(Le contenu du message n\'a pas pu être extrait automatiquement. Voir les headers techniques)</em></p>';
+    }
 
     if (!from) return new Response("No sender found", { status: 200 });
 
@@ -63,8 +87,6 @@ serve(async (req) => {
     );
 
     // 1. VÉRIFICATION CLIENT STRICTE
-    // On cherche dans la table profiles (qui est sync avec auth.users)
-    // C'est plus sûr car on a besoin de l'ID profile pour les Foreign Keys
     const { data: users, error: userError } = await supabase
         .from('profiles')
         .select('id')
@@ -114,8 +136,9 @@ serve(async (req) => {
         .insert({
           user_id: userId,
           customer_email: email,
-          subject: subject || 'Nouvelle demande sans sujet',
-          status: 'open'
+          subject: subject,
+          status: 'open',
+          last_message_at: new Date().toISOString()
         })
         .select()
         .single();
@@ -129,7 +152,7 @@ serve(async (req) => {
       ticket_id: ticketId,
       sender_id: userId,
       sender_email: email,
-      body: html || text || '(Contenu vide)',
+      body: bodyContent,
       is_staff_reply: false
     });
 

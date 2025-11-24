@@ -14,7 +14,7 @@ import {
   Folder, FileText, Plus, Edit2, Trash2, 
   Eye, Layout, ChevronRight, Loader2,
   MoreVertical, Phone, Mail, User, HardDrive,
-  ShieldCheck, AlertCircle, PauseCircle, CheckCircle2
+  ShieldCheck, AlertCircle, PauseCircle, CheckCircle2, Smartphone
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -31,7 +31,7 @@ interface Profile {
   id: string;
   first_name: string | null;
   last_name: string | null;
-  email: string; // Join via auth handled manually or view
+  email: string;
   phone_country_code: string | null;
   phone_number: string | null;
   avatar_url: string | null;
@@ -46,7 +46,6 @@ interface Ticket {
   customer_email: string;
   last_message_at: string;
   user_id: string;
-  // Relation jointe
   profiles: Profile | null; 
 }
 
@@ -65,7 +64,6 @@ interface Message {
 interface CustomerStats {
   fileCount: number;
   folderCount: number;
-  totalSize?: string; // Placeholder pour le futur
 }
 
 // ... (Keep existing Category/Article types)
@@ -78,6 +76,9 @@ const HelpAdmin = () => {
   const [activeTab, setActiveTab] = useState<'support' | 'content'>('support');
   const [isStaff, setIsStaff] = useState(false);
   const [isCheckingRole, setIsCheckingRole] = useState(true);
+  
+  // Staff Info (Moi)
+  const [myProfile, setMyProfile] = useState<Profile | null>(null);
 
   // Support State
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -87,29 +88,23 @@ const HelpAdmin = () => {
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null);
+  const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Content State
+  // Content State (Simplifié pour cette vue)
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [articles, setArticles] = useState<Article[]>([]);
-  
-  // Dialogs & Forms (Content)
-  const [showCatDialog, setShowCatDialog] = useState(false);
-  const [showArticleDialog, setShowArticleDialog] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [catForm, setCatForm] = useState({ title: '', description: '', slug: '', order: 0 });
-  const [artForm, setArtForm] = useState<Partial<Article>>({ title: '', slug: '', content: '', is_published: false });
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
 
-  // VERIFICATION STAFF
+  // VERIFICATION STAFF & LOAD MY PROFILE
   useEffect(() => {
     const checkStaff = async () => {
         if (!user) return;
         try {
-            const { data, error } = await supabase.from('profiles').select('is_staff').eq('id', user.id).single();
+            const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
             if (error || !data?.is_staff) { navigate('/'); } 
-            else { setIsStaff(true); }
+            else { 
+                setIsStaff(true); 
+                setMyProfile(data as any); // Store my own profile for optimistic UI
+            }
         } catch (e) { navigate('/'); } 
         finally { setIsCheckingRole(false); }
     };
@@ -120,12 +115,11 @@ const HelpAdmin = () => {
   useEffect(() => {
     if (!isStaff) return;
     if (activeTab === 'support') fetchTickets();
-    else fetchCategories();
   }, [activeTab, isStaff]);
 
   // --- SUPPORT LOGIC ---
   const fetchTickets = async () => {
-    // GRACE AU FIX SQL: On peut maintenant faire la jointure profiles proprement
+    setIsLoadingTickets(true);
     const { data, error } = await supabase
         .from('support_tickets')
         .select(`
@@ -139,10 +133,10 @@ const HelpAdmin = () => {
         .order('last_message_at', { ascending: false });
 
     if (!error) setTickets(data as unknown as Ticket[] || []);
+    setIsLoadingTickets(false);
   };
 
   const fetchCustomerStats = async (userId: string) => {
-      // Calcul des stats à la volée
       const { count: fileCount } = await supabase.from('documents').select('id', { count: 'exact', head: true }).eq('owner_id', userId).eq('type', 'file');
       const { count: folderCount } = await supabase.from('documents').select('id', { count: 'exact', head: true }).eq('owner_id', userId).eq('type', 'folder');
       setCustomerStats({ fileCount: fileCount || 0, folderCount: folderCount || 0 });
@@ -152,14 +146,12 @@ const HelpAdmin = () => {
       setSelectedTicketId(ticket.id);
       setSelectedTicket(ticket);
       
-      // Charger messages
       const { data } = await supabase.from('support_messages')
         .select(`*, profiles:sender_id(first_name, avatar_url)`)
         .eq('ticket_id', ticket.id)
         .order('created_at', { ascending: true });
       setMessages(data || []);
       
-      // Charger stats client
       if (ticket.user_id) fetchCustomerStats(ticket.user_id);
       
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -175,21 +167,39 @@ const HelpAdmin = () => {
 
   const sendReply = async () => {
       if (!selectedTicketId || !replyText.trim()) return;
+      const textToSend = replyText;
+      setReplyText(''); // Clear immédiat
       setIsSending(true);
+      
       try {
+          // Optimistic Update: On ajoute le message tout de suite
+          const tempId = 'temp-' + Date.now();
+          const newMessage: Message = {
+              id: tempId,
+              body: textToSend.replace(/\n/g, '<br/>'),
+              created_at: new Date().toISOString(),
+              is_staff_reply: true,
+              sender_email: 'support@sivara.ca',
+              profiles: {
+                  first_name: myProfile?.first_name || 'Staff',
+                  avatar_url: myProfile?.avatar_url || null
+              }
+          };
+          setMessages(prev => [...prev, newMessage]);
+          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
+          // Envoi réel
           await supabase.functions.invoke('support-outbound', {
-              body: { ticketId: selectedTicketId, messageBody: replyText, status: 'open' }
+              body: { ticketId: selectedTicketId, messageBody: textToSend, status: 'open' }
           });
-          setReplyText('');
           
-          // Refresh messages locally + status
+          // Refresh propre après envoi
           const { data } = await supabase.from('support_messages')
             .select(`*, profiles:sender_id(first_name, avatar_url)`)
             .eq('ticket_id', selectedTicketId)
             .order('created_at', { ascending: true });
           setMessages(data || []);
           
-          // Update list status if needed
           if (selectedTicket?.status !== 'open') {
              setTickets(prev => prev.map(t => t.id === selectedTicketId ? { ...t, status: 'open' } : t));
              setSelectedTicket(prev => prev ? { ...prev, status: 'open' } : null);
@@ -200,26 +210,12 @@ const HelpAdmin = () => {
       finally { setIsSending(false); }
   };
 
-  // --- CONTENT LOGIC (Minimal but functional) ---
-  const fetchCategories = async () => {
-    const { data } = await supabase.from('help_categories').select('*').order('order');
-    setCategories(data || []);
-    if (data?.[0]) handleSelectCategory(data[0]);
-  };
-  const handleSelectCategory = async (cat: Category) => {
-    setSelectedCategory(cat);
-    const { data } = await supabase.from('help_articles').select('*').eq('category_id', cat.id).order('order');
-    setArticles(data || []);
-  };
-  const handleSaveCategory = async () => { /* ... same logic as before ... */ };
-  const handleSaveArticle = async () => { /* ... same logic as before ... */ };
-
   if (loading || isCheckingRole) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
 
   return (
     <div className="flex h-screen bg-white font-sans overflow-hidden">
       
-      {/* MAIN SIDEBAR (Dark) */}
+      {/* SIDEBAR NAVIGATION */}
       <div className="w-20 bg-gray-900 flex flex-col items-center py-6 gap-4 shrink-0 z-30">
          <div className="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center text-white font-bold mb-6 cursor-pointer" onClick={() => navigate('/')}>S</div>
          <button onClick={() => setActiveTab('support')} className={`p-3 rounded-xl transition-all relative group ${activeTab === 'support' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}>
@@ -302,13 +298,16 @@ const HelpAdmin = () => {
                                     <div key={m.id} className={`flex gap-4 ${m.is_staff_reply ? 'flex-row-reverse' : ''}`}>
                                         <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
                                             {m.profiles?.avatar_url && <AvatarImage src={m.profiles.avatar_url} />}
-                                            <AvatarFallback className={m.is_staff_reply ? 'bg-gray-900 text-white' : 'bg-blue-600 text-white'}>{m.is_staff_reply ? 'S' : 'C'}</AvatarFallback>
+                                            <AvatarFallback className={m.is_staff_reply ? 'bg-gray-900 text-white' : 'bg-blue-600 text-white'}>{m.is_staff_reply ? (m.profiles?.first_name?.[0] || 'S') : 'C'}</AvatarFallback>
                                         </Avatar>
                                         <div className={`max-w-[75%] p-5 rounded-2xl text-sm shadow-sm leading-relaxed ${
                                             m.is_staff_reply 
                                             ? 'bg-gray-900 text-white rounded-tr-none' 
                                             : 'bg-white text-gray-800 border border-gray-200 rounded-tl-none'
                                         }`}>
+                                            {m.is_staff_reply && m.profiles?.first_name && (
+                                                <div className="text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-wider">{m.profiles.first_name}</div>
+                                            )}
                                             <div dangerouslySetInnerHTML={{__html: m.body}} />
                                             <div className={`text-[10px] mt-2 opacity-70 ${m.is_staff_reply ? 'text-right' : 'text-left'}`}>
                                                 {new Date(m.created_at).toLocaleString()}
@@ -347,7 +346,7 @@ const HelpAdmin = () => {
                 )}
             </div>
 
-            {/* 3. CUSTOMER INFO SIDEBAR (NEW) */}
+            {/* 3. CUSTOMER INFO SIDEBAR */}
             {selectedTicket && selectedTicket.profiles && (
                 <div className="w-80 bg-white border-l border-gray-200 flex flex-col animate-in slide-in-from-right duration-300">
                     <div className="p-6 flex flex-col items-center border-b border-gray-100">
@@ -379,12 +378,18 @@ const HelpAdmin = () => {
                                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Coordonnées</h3>
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-3 text-sm text-gray-600">
-                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><Phone className="h-4 w-4" /></div>
-                                        <span>{selectedTicket.profiles.phone_country_code || '+1'} {selectedTicket.profiles.phone_number || 'N/A'}</span>
+                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><Smartphone className="h-4 w-4" /></div>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium">{selectedTicket.profiles.phone_country_code || '+1'} {selectedTicket.profiles.phone_number || 'N/A'}</span>
+                                            <span className="text-xs text-gray-400">Mobile</span>
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-600">
                                         <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center text-purple-600"><Mail className="h-4 w-4" /></div>
-                                        <span className="truncate">{selectedTicket.customer_email}</span>
+                                        <div className="flex flex-col overflow-hidden">
+                                            <span className="font-medium truncate">{selectedTicket.customer_email}</span>
+                                            <span className="text-xs text-gray-400">Email principal</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
