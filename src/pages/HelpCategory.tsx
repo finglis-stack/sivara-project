@@ -102,15 +102,36 @@ const HelpCategory = () => {
         </div>
       </nav>
 
-      {/* Header de page */}
-      <div className="bg-gray-50 border-b border-gray-100 py-10">
-        <div className="container mx-auto px-6">
-            <Button variant="ghost" onClick={() => navigate('/')} className="mb-6 pl-0 hover:bg-transparent hover:text-indigo-600 text-gray-500">
+      {/* Header de page avec Image conditionnelle */}
+      <div className="relative w-full">
+        {category?.image_url ? (
+            <div className="absolute inset-0 z-0">
+                <img 
+                    src={category.image_url} 
+                    alt={category.title} 
+                    className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent"></div>
+            </div>
+        ) : (
+            <div className="absolute inset-0 z-0 bg-gray-50 border-b border-gray-100"></div>
+        )}
+
+        <div className="relative z-10 container mx-auto px-6 py-12 sm:py-20">
+            <Button 
+                variant="ghost" 
+                onClick={() => navigate('/')} 
+                className={`mb-6 pl-0 hover:bg-transparent ${category?.image_url ? 'text-white/80 hover:text-white' : 'text-gray-500 hover:text-indigo-600'}`}
+            >
                 <ArrowLeft className="mr-2 h-4 w-4" /> Retour à l'accueil
             </Button>
             <div className="max-w-3xl">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{category?.title}</h1>
-                <p className="text-gray-500 text-lg">{category?.description}</p>
+                <h1 className={`text-3xl md:text-4xl font-bold mb-4 ${category?.image_url ? 'text-white drop-shadow-md' : 'text-gray-900'}`}>
+                    {category?.title}
+                </h1>
+                <p className={`text-lg ${category?.image_url ? 'text-white/90 drop-shadow' : 'text-gray-500'}`}>
+                    {category?.description}
+                </p>
             </div>
         </div>
       </div>
