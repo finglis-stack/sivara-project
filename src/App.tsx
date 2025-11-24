@@ -27,6 +27,8 @@ import Mail from "./pages/Mail";
 import MobileLanding from "./pages/MobileLanding";
 import HelpLanding from "./pages/HelpLanding";
 import HelpAdmin from "./pages/HelpAdmin";
+import HelpCategory from "./pages/HelpCategory";
+import HelpArticle from "./pages/HelpArticle";
 
 const queryClient = new QueryClient();
 
@@ -101,8 +103,8 @@ const AppRoutes = () => {
         <>
           <Route path="/" element={<HelpLanding />} />
           <Route path="/admin" element={<HelpAdmin />} />
-          {/* Placeholder pour la route article détaillée, redirige vers home pour l'instant */}
-          <Route path="/category/:slug" element={<HelpLanding />} />
+          <Route path="/category/:slug" element={<HelpCategory />} />
+          <Route path="/article/:slug" element={<HelpArticle />} />
           <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
         </>
       )}

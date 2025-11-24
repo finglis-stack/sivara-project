@@ -37,8 +37,6 @@ const HelpLanding = () => {
     fetchData();
   }, [user]);
 
-  // Recherche dynamique avec debounce manuel (via onSubmit ou useEffect)
-  // Ici on utilise onSubmit pour le trigger explicite, mais on peut ajouter un useEffect sur searchQuery
   const performSearch = async () => {
     if (!searchQuery.trim()) {
         setSearchResults([]);
@@ -47,7 +45,6 @@ const HelpLanding = () => {
     
     setIsSearching(true);
     try {
-        // Recherche textuelle basique (Améliorable avec Full Text Search postgres)
         const { data, error } = await supabase
             .from('help_articles')
             .select('id, title, slug, content, help_categories(title)')
@@ -144,7 +141,7 @@ const HelpLanding = () => {
             <div className="max-w-4xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <h2 className="text-xl font-semibold mb-4 px-2">Résultats de recherche ({searchResults.length})</h2>
                 {searchResults.map((result) => (
-                    <Card key={result.id} className="p-6 hover:shadow-lg transition-all cursor-pointer group border-l-4 border-l-indigo-500" onClick={() => navigate(`/category/article/${result.slug}`)}>
+                    <Card key={result.id} className="p-6 hover:shadow-lg transition-all cursor-pointer group border-l-4 border-l-indigo-500" onClick={() => navigate(`/article/${result.slug}`)}>
                         <div className="flex items-start justify-between">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-indigo-600 transition-colors">{result.title}</h3>

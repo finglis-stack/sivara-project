@@ -189,7 +189,7 @@ const HelpAdmin = () => {
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-                <Button variant="ghost" onClick={() => navigate('/help')}>
+                <Button variant="ghost" onClick={() => navigate('/')}>
                     <ArrowLeft className="mr-2 h-4 w-4" /> Retour
                 </Button>
                 <h1 className="text-2xl font-bold text-gray-900">Administration Help Center</h1>
