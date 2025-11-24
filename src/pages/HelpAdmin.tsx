@@ -12,7 +12,7 @@ import { showSuccess, showError } from '@/utils/toast';
 import { 
   MessageSquare, Search, Send, LogOut, 
   Folder, FileText, Plus, Edit2, Trash2, 
-  Eye, Layout, Lock, ChevronRight, Loader2,
+  Eye, Layout, ChevronRight, Loader2,
   MoreVertical
 } from 'lucide-react';
 import {
@@ -32,12 +32,10 @@ interface Ticket {
   customer_email: string;
   last_message_at: string;
   profiles: {
-    first_name: string;
-    last_name: string;
+    first_name: string | null;
+    last_name: string | null;
     avatar_url: string | null;
-    phone_number: string;
-    is_pro: boolean;
-  };
+  } | null;
 }
 
 interface Message {
@@ -48,7 +46,7 @@ interface Message {
   sender_email: string;
   profiles?: {
     avatar_url: string | null;
-    first_name: string;
+    first_name: string | null;
   };
 }
 
@@ -73,8 +71,9 @@ interface Article {
 const HelpAdmin = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('support');
+  const [activeTab, setActiveTab] = useState<'support' | 'content'>('support');
   const [isStaff, setIsStaff] = useState(false);
+  const [isCheckingRole, setIsCheckingRole] = useState(true);
 
   // --- CONTENT STATE ---
   const [categories, setCategories] = useState<Category[]>([]);
@@ -85,11 +84,11 @@ const HelpAdmin = () => {
   // Content Dialogs
   const [showCatDialog, setShowCatDialog] = useState(false);
   const [showArticleDialog, setShowArticleDialog] = useState(false);
-  const [editMode, setEditMode] = useState(false); // true = update, false = create
+  const [editMode, setEditMode] = useState(false);
   
   // Forms
   const [catForm, setCatForm] = useState({ title: '', description: '', slug: '', order: 0 });
-  const [artForm, setArtForm] = useState({ title: '', slug: '', content: '', is_published: false });
+  const [artForm, setArtForm] = useState<Partial<Article>>({ title: '', slug: '', content: '', is_published: false });
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
 
   // --- SUPPORT STATE ---
@@ -98,46 +97,121 @@ const HelpAdmin = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [userStats, setUserStats] = useState({ files: 0, folders: 0 });
+  const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // VERIFICATION STAFF
   useEffect(() => {
-    if (!loading && user) {
-      supabase.from('profiles').select('is_staff').eq('id', user.id).single()
-      .then(({ data }) => {
-        if (!data?.is_staff) {
-            navigate('/'); 
-        } else {
-            setIsStaff(true);
+    const checkStaff = async () => {
+        if (!user) return;
+        try {
+            const { data, error } = await supabase.from('profiles').select('is_staff').eq('id', user.id).single();
+            if (error || !data?.is_staff) {
+                console.warn("Accès refusé : utilisateur non staff", error);
+                navigate('/'); 
+            } else {
+                setIsStaff(true);
+            }
+        } catch (e) {
+            console.error("Erreur vérification rôle", e);
+            navigate('/');
+        } finally {
+            setIsCheckingRole(false);
         }
-      });
-    } else if (!loading && !user) {
-        navigate('/login');
+    };
+
+    if (!loading) {
+        if (user) checkStaff();
+        else navigate('/login');
     }
   }, [user, loading, navigate]);
 
   // CHARGEMENT INITIAL
   useEffect(() => {
     if (!isStaff) return;
+    
     if (activeTab === 'support') {
         fetchTickets();
-        const sub = supabase.channel('tickets')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, fetchTickets)
-            .subscribe();
-        return () => { supabase.removeChannel(sub); };
-    } else {
+        
+        const channel = supabase
+        .channel('admin-support')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, () => fetchTickets())
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (payload) => {
+            if (payload.new.ticket_id === selectedTicketId) fetchMessages(selectedTicketId);
+        })
+        .subscribe();
+        
+        return () => { supabase.removeChannel(channel); };
+    } else if (activeTab === 'content') {
         fetchCategories();
     }
-  }, [activeTab, isStaff]);
+  }, [activeTab, isStaff, selectedTicketId]);
 
-  // --- LOGIQUE CONTENU ---
+  // --- SUPPORT LOGIC ---
+  const fetchTickets = async () => {
+    setIsLoadingTickets(true);
+    try {
+        const { data, error } = await supabase
+            .from('support_tickets')
+            .select(`
+                id, subject, status, customer_email, last_message_at,
+                profiles:user_id (first_name, last_name, avatar_url)
+            `)
+            .order('last_message_at', { ascending: false });
 
+        if (error) {
+            console.error("Erreur fetch tickets:", error);
+            showError("Impossible de charger les tickets");
+        } else {
+            setTickets(data as unknown as Ticket[] || []);
+        }
+    } catch (e) {
+        console.error("Exception fetch tickets:", e);
+    } finally {
+        setIsLoadingTickets(false);
+    }
+  };
+
+  const fetchMessages = async (ticketId: string) => {
+    const { data } = await supabase.from('support_messages')
+      .select(`*, profiles:sender_id(avatar_url, first_name)`)
+      .eq('ticket_id', ticketId).order('created_at', { ascending: true });
+    if (data) {
+        setMessages(data);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    }
+  };
+
+  const selectTicket = (ticketId: string) => {
+      setSelectedTicketId(ticketId);
+      fetchMessages(ticketId);
+  };
+
+  const sendReply = async () => {
+      if (!selectedTicketId || !replyText.trim()) return;
+      setIsSending(true);
+      try {
+          await supabase.functions.invoke('support-outbound', {
+              body: { ticketId: selectedTicketId, messageBody: replyText, status: 'open' }
+          });
+          setReplyText('');
+          fetchMessages(selectedTicketId);
+          showSuccess("Envoyé");
+      } catch (e) { showError("Erreur d'envoi"); } finally { setIsSending(false); }
+  };
+
+  const closeTicket = async () => {
+      if (!selectedTicketId) return;
+      await supabase.from('support_tickets').update({ status: 'closed' }).eq('id', selectedTicketId);
+      fetchTickets();
+      showSuccess("Ticket fermé");
+  };
+
+  // --- CONTENT LOGIC ---
   const fetchCategories = async () => {
     setIsLoadingContent(true);
     const { data } = await supabase.from('help_categories').select('*').order('order');
     setCategories(data || []);
-    // Sélectionner la première catégorie par défaut si aucune sélectionnée
     if (data && data.length > 0 && !selectedCategory) {
         handleSelectCategory(data[0]);
     }
@@ -146,13 +220,14 @@ const HelpAdmin = () => {
 
   const handleSelectCategory = async (cat: Category) => {
     setSelectedCategory(cat);
+    setSelectedArticle(null);
     const { data } = await supabase.from('help_articles').select('*').eq('category_id', cat.id).order('order');
     setArticles(data || []);
   };
 
   const handleSaveCategory = async () => {
     try {
-        const slug = catForm.slug || catForm.title.toLowerCase().replace(/ /g, '-');
+        const slug = catForm.slug || catForm.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
         if (editMode && selectedCategory) {
             await supabase.from('help_categories').update({ ...catForm, slug }).eq('id', selectedCategory.id);
             showSuccess("Catégorie mise à jour");
@@ -174,8 +249,8 @@ const HelpAdmin = () => {
 
   const handleSaveArticle = async () => {
       try {
-        if (!selectedCategory) return;
-        const slug = artForm.slug || artForm.title.toLowerCase().replace(/ /g, '-');
+        if (!selectedCategory || !artForm.title) return;
+        const slug = artForm.slug || artForm.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
         
         const payload = {
             title: artForm.title,
@@ -203,41 +278,9 @@ const HelpAdmin = () => {
       if (selectedCategory) handleSelectCategory(selectedCategory);
   };
 
-  // --- LOGIQUE SUPPORT ---
-
-  const fetchTickets = async () => {
-      const { data } = await supabase.from('support_tickets').select('*, profiles:user_id(first_name, last_name, avatar_url)').order('last_message_at', { ascending: false });
-      setTickets(data || []);
-  };
-
-  const selectTicket = async (ticketId: string) => {
-      setSelectedTicketId(ticketId);
-      const { data } = await supabase.from('support_messages').select('*, profiles:sender_id(first_name, avatar_url)').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-      setMessages(data || []);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-  };
-
-  const sendReply = async () => {
-      if (!selectedTicketId || !replyText.trim()) return;
-      setIsSending(true);
-      try {
-          await supabase.functions.invoke('support-outbound', {
-              body: { ticketId: selectedTicketId, messageBody: replyText, status: 'open' }
-          });
-          setReplyText('');
-          selectTicket(selectedTicketId);
-          showSuccess("Envoyé");
-      } catch (e) { showError("Erreur d'envoi"); } finally { setIsSending(false); }
-  };
-
-  const closeTicket = async () => {
-      if (!selectedTicketId) return;
-      await supabase.from('support_tickets').update({ status: 'closed' }).eq('id', selectedTicketId);
-      fetchTickets();
-      showSuccess("Ticket fermé");
-  };
-
-  if (loading || !isStaff) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
+  // --- RENDER ---
+  
+  if (loading || isCheckingRole) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
 
   return (
     <div className="flex h-screen bg-white font-sans overflow-hidden">
@@ -273,13 +316,21 @@ const HelpAdmin = () => {
             {/* LISTE */}
             <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50">
                 <div className="p-4 border-b border-gray-200 bg-white">
-                    <h2 className="font-bold text-gray-900 mb-3">Tickets</h2>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="font-bold text-gray-900">Tickets</h2>
+                        <Button variant="ghost" size="icon" onClick={fetchTickets} disabled={isLoadingTickets}>
+                            <Loader2 className={`h-4 w-4 ${isLoadingTickets ? 'animate-spin' : ''}`} />
+                        </Button>
+                    </div>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input placeholder="Rechercher..." className="pl-9 bg-white" />
+                        <Input placeholder="Rechercher..." className="pl-9 bg-gray-50 border-gray-200" />
                     </div>
                 </div>
                 <ScrollArea className="flex-1">
+                    {tickets.length === 0 && !isLoadingTickets && (
+                        <div className="p-8 text-center text-gray-400 text-sm">Aucun ticket trouvé.</div>
+                    )}
                     {tickets.map(t => (
                         <div 
                             key={t.id} 
@@ -287,11 +338,21 @@ const HelpAdmin = () => {
                             className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-white transition-colors ${selectedTicketId === t.id ? 'bg-white border-l-4 border-l-blue-600 shadow-sm' : 'border-l-4 border-l-transparent'}`}
                         >
                             <div className="flex justify-between items-start mb-1">
-                                <span className="font-bold text-sm text-gray-900">{t.profiles?.first_name || 'Client'}</span>
+                                <div className="flex items-center gap-2">
+                                    <Avatar className="h-6 w-6">
+                                        <AvatarFallback className="text-[10px] bg-gray-200">{t.profiles?.first_name?.[0] || 'C'}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="font-bold text-sm text-gray-900 truncate max-w-[100px]">
+                                        {t.profiles?.first_name || t.customer_email.split('@')[0]}
+                                    </span>
+                                </div>
                                 <span className="text-[10px] text-gray-400">{new Date(t.last_message_at).toLocaleDateString()}</span>
                             </div>
                             <div className="text-sm font-medium text-gray-700 truncate mb-1">{t.subject}</div>
-                            <Badge variant="outline" className={`text-[10px] capitalize ${t.status === 'open' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{t.status}</Badge>
+                            <div className="flex items-center justify-between">
+                                <Badge variant="outline" className={`text-[10px] capitalize ${t.status === 'open' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-600'}`}>{t.status}</Badge>
+                                <span className="text-[10px] text-gray-400 truncate max-w-[120px]">{t.customer_email}</span>
+                            </div>
                         </div>
                     ))}
                 </ScrollArea>
@@ -302,7 +363,10 @@ const HelpAdmin = () => {
                 {selectedTicketId ? (
                     <>
                         <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
-                            <span className="font-bold text-gray-900">Ticket #{selectedTicketId.substring(0,8)}</span>
+                            <span className="font-bold text-gray-900 flex items-center gap-2">
+                                <span className="text-gray-400 font-mono font-normal">#{selectedTicketId.substring(0,8)}</span>
+                                {tickets.find(t => t.id === selectedTicketId)?.subject}
+                            </span>
                             <Button variant="outline" size="sm" onClick={closeTicket}>Clore</Button>
                         </div>
                         <ScrollArea className="flex-1 bg-gray-50/50 p-6">
@@ -324,7 +388,7 @@ const HelpAdmin = () => {
                                     value={replyText} 
                                     onChange={e => setReplyText(e.target.value)} 
                                     placeholder="Répondre..." 
-                                    className="min-h-[100px] pr-14 resize-none bg-gray-50 border-0 focus:ring-1 focus:bg-white transition-all" 
+                                    className="min-h-[100px] pr-14 resize-none bg-gray-50 border-0 focus:ring-1 focus:bg-white transition-all shadow-sm" 
                                 />
                                 <Button 
                                     size="icon" 
@@ -340,7 +404,7 @@ const HelpAdmin = () => {
                 ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
                         <MessageSquare className="h-16 w-16 mb-4 text-gray-200" />
-                        <p>Sélectionnez un ticket</p>
+                        <p>Sélectionnez un ticket pour voir la conversation</p>
                     </div>
                 )}
             </div>
@@ -425,15 +489,10 @@ const HelpAdmin = () => {
                                             </div>
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <Button variant="ghost" size="sm" onClick={() => window.open(`/article/${article.slug}`, '_blank')}>
-                                                    <Eye className="h-4 w-4" />
+                                                    <Eye className="h-4 w-4 text-gray-500" />
                                                 </Button>
                                                 <Button variant="ghost" size="sm" onClick={() => { 
-                                                    setArtForm({
-                                                        title: article.title,
-                                                        slug: article.slug,
-                                                        content: article.content,
-                                                        is_published: article.is_published
-                                                    }); 
+                                                    setArtForm({ ...article }); 
                                                     setSelectedArticle(article); 
                                                     setEditMode(true); 
                                                     setShowArticleDialog(true); 
@@ -465,14 +524,14 @@ const HelpAdmin = () => {
         </div>
       )}
 
-      {/* --- DIALOGUES --- */}
+      {/* DIALOGUES */}
       <Dialog open={showCatDialog} onOpenChange={setShowCatDialog}>
         <DialogContent>
             <DialogHeader><DialogTitle>{editMode ? 'Modifier' : 'Nouvelle'} Catégorie</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
                 <div className="space-y-2"><Label>Titre</Label><Input value={catForm.title} onChange={e => setCatForm({...catForm, title: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Description</Label><Input value={catForm.description} onChange={e => setCatForm({...catForm, description: e.target.value})} /></div>
-                <div className="space-y-2"><Label>Slug (Optionnel)</Label><Input value={catForm.slug} onChange={e => setCatForm({...catForm, slug: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Slug (Optionnel)</Label><Input value={catForm.slug} onChange={e => setCatForm({...catForm, slug: e.target.value})} placeholder="auto-genere" /></div>
             </div>
             <DialogFooter><Button onClick={handleSaveCategory}>Enregistrer</Button></DialogFooter>
         </DialogContent>
@@ -487,11 +546,11 @@ const HelpAdmin = () => {
                     <div className="space-y-2"><Label>Slug</Label><Input value={artForm.slug} onChange={e => setArtForm({...artForm, slug: e.target.value})} /></div>
                 </div>
                 <div className="space-y-2 h-full flex flex-col">
-                    <Label>Contenu (Markdown)</Label>
-                    <Textarea className="flex-1 font-mono text-sm leading-relaxed" value={artForm.content} onChange={e => setArtForm({...artForm, content: e.target.value})} />
+                    <Label>Contenu (Markdown supporté)</Label>
+                    <Textarea className="flex-1 font-mono text-sm leading-relaxed" value={artForm.content} onChange={e => setArtForm({...artForm, content: e.target.value})} placeholder="# Titre..." />
                 </div>
             </div>
-            <DialogFooter className="flex justify-between items-center">
+            <DialogFooter className="flex justify-between items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                     <Switch checked={artForm.is_published} onCheckedChange={c => setArtForm({...artForm, is_published: c})} />
                     <Label>Publié</Label>
