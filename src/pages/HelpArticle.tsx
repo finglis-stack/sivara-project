@@ -32,35 +32,42 @@ const HelpArticle = () => {
       if (!slug) return;
       
       try {
-        // On récupère l'article, la catégorie ET le profil de l'auteur via la foreign key author_id
-        const { data, error } = await supabase
+        // 1. Récupérer l'article et sa catégorie
+        // On retire la jointure profiles ici pour éviter l'erreur de relation
+        const { data: articleData, error: articleError } = await supabase
           .from('help_articles')
-          .select(`
-            *, 
-            help_categories(*),
-            profiles:author_id (
-              first_name,
-              last_name,
-              avatar_url,
-              job_title
-            )
-          `)
+          .select('*, help_categories(*)')
           .eq('slug', slug)
           .single();
         
-        if (error || !data) {
+        if (articleError || !articleData) {
+            console.error("Article fetch error:", articleError);
             navigate('/not-found');
             return;
         }
         
-        setArticle(data);
-        setCategory(data.help_categories);
-        setAuthor(data.profiles); // Supabase map la relation sur le nom de la table
+        setArticle(articleData);
+        setCategory(articleData.help_categories);
+
+        // 2. Récupérer le profil de l'auteur séparément si un ID est présent
+        if (articleData.author_id) {
+            const { data: authorData } = await supabase
+                .from('profiles')
+                .select('first_name, last_name, avatar_url, job_title')
+                .eq('id', articleData.author_id)
+                .maybeSingle(); // maybeSingle évite l'erreur si le profil n'existe pas
+            
+            if (authorData) {
+                setAuthor(authorData);
+            }
+        }
         
-        // Incrémenter vue
-        await supabase.rpc('increment_view_count', { article_id: data.id });
+        // Incrémenter vue (sans bloquer)
+        supabase.rpc('increment_view_count', { article_id: articleData.id });
+
       } catch (err) {
-        console.error(err);
+        console.error("Unexpected error:", err);
+        navigate('/not-found');
       } finally {
         setIsLoading(false);
       }
