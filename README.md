@@ -69,6 +69,83 @@ Une plateforme de support hybride combinant base de connaissances publique et sy
 
 ---
 
+## 🔬 Deep Dive : Architecture Moteur "Sivara Titanium"
+
+Cette section détaille l'implémentation technique du moteur de recherche, conçue comme un système **Crypto-Search** propriétaire. Le principe fondateur est le **"Blind Indexing" (Indexation à l'Aveugle)** : l'infrastructure de stockage ne contient jamais de texte clair.
+
+### 1. Pipeline d'Ingestion Chiffré (The Crawler)
+
+L'ingestion est assurée par une flotte distribuée de micro-services "Serverless" autonomes.
+
+#### A. La File d'Attente Opaque
+Contrairement aux indexeurs standards, Sivara ne stocke pas les URLs cibles en clair.
+1.  **Insertion :** L'utilisateur soumet une URL.
+2.  **Chiffrement Immédiat :** L'URL est chiffrée en **AES-256-GCM** avec un vecteur d'initialisation (IV) unique avant même d'être insérée en base.
+3.  **Stockage :** La base de données relationnelle reçoit un blob binaire illisible. L'administrateur système ne peut pas auditer les cibles du crawler.
+
+#### B. Orchestration & Déchiffrement JIT
+Un superviseur ("Watchdog") distribue la charge avec une gestion stricte de la concurrence (Semaphore Pattern). L'URL n'est déchiffrée qu'en mémoire volatile (RAM) au moment précis de l'exécution du job par le worker, puis immédiatement effacée (Zero-Persistence).
+
+#### C. Extraction et Normalisation
+Le worker télécharge le HTML et applique un nettoyage agressif :
+*   Extraction des métadonnées via Regex haute performance.
+*   Détection de langue heuristique.
+*   **Mode Découverte :** Hachage cryptographique (SHA-256) des liens sortants pour dédoublonnage sans révéler l'URL originale.
+
+---
+
+### 2. Le Moteur NLP "Titanium"
+
+C'est le cœur algorithmique du système. Au lieu d'indexer des mots, le système indexe des concepts linguistiques transformés en preuves cryptographiques via le `TitaniumTokenizer` :
+
+1.  **Normalisation (NFD) :** Suppression des accents et diacritiques (`été` -> `ete`).
+2.  **Filtrage Stopwords :** Nettoyage multilingue (FR/EN) des bruits syntaxiques.
+3.  **Stemming (Racine) :** Algorithme de **Porter** pour réduire les mots à leur racine (`manger`, `mangé` -> `mang`).
+4.  **Empreinte Phonétique :** Algorithme **Double Metaphone**. Encode la *sonorité* du mot, permettant une tolérance aux fautes d'orthographe (ex: "Sivara" match "Sivarra" ou "Civara").
+5.  **N-Grams :** Découpage en trigrammes pour la recherche floue.
+
+---
+
+### 3. Stratégie d'Indexation à l'Aveugle (Blind Index)
+
+C'est l'aspect unique du système. Pour chaque token généré par le NLP, le système génère un **HMAC-SHA256** avec une clé secrète de recherche, distincte de la clé de chiffrement du contenu.
+
+*   Le mot "Pomme" devient -> `hmac(SEARCH_KEY, "EX:pomme")` -> `x8f9...`
+*   La racine "Pomm" devient -> `hmac(SEARCH_KEY, "ST:pomm")` -> `a1b2...`
+*   Le son "PM" devient -> `hmac(SEARCH_KEY, "PH:PM")` -> `z9y8...`
+
+Ces hashs sont stockés dans une colonne vectorielle en base de données. **Le moteur SQL ne voit que des suites de caractères aléatoires** et ne peut pas effectuer d'analyse sémantique inverse. Le contenu brut (titre, description) est stocké chiffré (AES-256-GCM) et est mathématiquement illisible sans la clé `ENCRYPTION_KEY`.
+
+---
+
+### 4. Algorithme de Recherche et Ranking (Retrieval)
+
+Lorsqu'un utilisateur lance une recherche :
+
+1.  **Tokenisation de la Requête :** La requête utilisateur subit le même traitement NLP "Titanium" (Stemming, Phonétique, etc.).
+2.  **Transmutation Cryptographique :** Les tokens de la requête sont convertis en leurs équivalents HMAC côté serveur (Edge).
+3.  **Intersection Vectorielle :** La requête SQL effectue une intersection d'ensembles (`Array Overlap`) sur les hashs. C'est une opération mathématique pure, extrêmement rapide sur PostgreSQL.
+4.  **Scoring Pondéré (In-Memory) :**
+    L'Edge Function récupère les candidats et calcule un score de pertinence localement :
+    *   Match Exact (Token `EX`) : **100 points**
+    *   Match Racine (Token `ST`) : **80 points**
+    *   Match Phonétique (Token `PH`) : **50 points**
+    *   Match Partiel (Token `TG`) : **5 points**
+5.  **Déchiffrement à la Volée :** Seuls les résultats pertinents sont déchiffrés (AES-Decrypt) avant d'être renvoyés au client JSON.
+
+---
+
+### 5. Stack Technique "Titanium"
+
+*   **Compute :** Deno Edge Functions (V8 Isolate). Temps de démarrage < 400ms.
+*   **Database :** PostgreSQL 15 avec extensions `pg_trgm` et types `JSONB` pour le stockage vectoriel opaque.
+*   **Crypto Libs :**
+    *   `Web Crypto API` (Native SubtleCrypto) pour des performances proches du C++.
+    *   `natural` (Node module via ESM) pour les algorithmes linguistiques avancés.
+*   **Sécurité :** Architecture "Defense in Depth". Même en cas de fuite complète de la base de données (`SQL Dump`), un attaquant ne récupérerait que du bruit binaire et des hashs irréversibles, rendant les données totalement inexploitables.
+
+---
+
 ## 🛡️ Conformité Légale et Loi 25 (Québec)
 
 Sivara intègre nativement les exigences de la **Loi modernisant des dispositions législatives en matière de protection des renseignements personnels** (Loi 25).
