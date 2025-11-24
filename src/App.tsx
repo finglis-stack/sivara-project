@@ -25,6 +25,8 @@ import Checkout from "./pages/Checkout";
 import ProOnboarding from "./pages/ProOnboarding";
 import Mail from "./pages/Mail";
 import MobileLanding from "./pages/MobileLanding";
+import HelpLanding from "./pages/HelpLanding";
+import HelpAdmin from "./pages/HelpAdmin";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +44,7 @@ const AppRoutes = () => {
       if (appParam === 'account') return 'account';
       if (appParam === 'mail') return 'mail';
       if (appParam === 'www') return 'www';
+      if (appParam === 'help') return 'help';
       return 'mobile-launcher';
     }
 
@@ -51,6 +54,7 @@ const AppRoutes = () => {
       if (appParam === 'account') return 'account';
       if (appParam === 'mail') return 'mail';
       if (appParam === 'www') return 'www';
+      if (appParam === 'help') return 'help';
       if (appParam === 'mobile') return 'mobile-launcher';
       return 'dev-portal';
     }
@@ -59,6 +63,7 @@ const AppRoutes = () => {
     if (hostname.startsWith('docs.')) return 'docs';
     if (hostname.startsWith('account.')) return 'account';
     if (hostname.startsWith('mail.')) return 'mail';
+    if (hostname.startsWith('help.')) return 'help';
     return 'www';
   }, [searchParams, hostname]);
 
@@ -72,7 +77,6 @@ const AppRoutes = () => {
       {/* --- APPLICATION: ACCOUNT --- */}
       {currentApp === 'account' && (
         <>
-          {/* CORRECTION ICI : On pointe vers le profil par défaut, la ProtectedRoute gérera la sécu */}
           <Route path="/" element={<Navigate to="/profile" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/onboarding" element={<Onboarding />} />
@@ -88,8 +92,18 @@ const AppRoutes = () => {
               <Profile />
             </ProtectedRoute>
           } />
-          {/* Fallback pour éviter le flash si route inconnue */}
           <Route path="*" element={<Navigate to="/profile" replace />} />
+        </>
+      )}
+
+      {/* --- APPLICATION: HELP --- */}
+      {currentApp === 'help' && (
+        <>
+          <Route path="/" element={<HelpLanding />} />
+          <Route path="/admin" element={<HelpAdmin />} />
+          {/* Placeholder pour la route article détaillée, redirige vers home pour l'instant */}
+          <Route path="/category/:slug" element={<HelpLanding />} />
+          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
         </>
       )}
 
@@ -159,29 +173,26 @@ const App = () => {
       setupListener();
     } else {
       // 2. Gestion Cross-Domain Web (Fallback Hash)
-      // Si on arrive sur un sous-domaine avec des tokens dans le hash, on force la session
       const handleHashSession = async () => {
         const hash = window.location.hash;
         if (hash && hash.includes('access_token')) {
           try {
-            const params = new URLSearchParams(hash.substring(1)); // Enlève le #
+            const params = new URLSearchParams(hash.substring(1));
             const accessToken = params.get('access_token');
             const refreshToken = params.get('refresh_token');
 
             if (accessToken && refreshToken) {
-              console.log("Session detectée dans l'URL, restauration...");
               const { error } = await supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken,
               });
               
               if (!error) {
-                // Nettoyage de l'URL pour faire propre
                 window.history.replaceState(null, '', window.location.pathname + window.location.search);
               }
             }
           } catch (e) {
-            console.error("Erreur restauration session via hash", e);
+            console.error("Erreur restauration session", e);
           }
         }
       };

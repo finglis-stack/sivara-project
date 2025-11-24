@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Globe, FileText, Mail, UserCircle, LogOut, 
-  Shield, Search, ArrowRight
+  Shield, Search, ArrowRight, LifeBuoy
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,7 +31,6 @@ const MobileLanding = () => {
 
   const openApp = (appName: string) => {
     if (appName === 'account') {
-        // FORCE URL DE PRODUCTION ABSOLUE
         window.location.href = 'https://account.sivara.ca/profile';
     } else {
         navigate(`/?app=${appName}`);
@@ -111,7 +110,7 @@ const MobileLanding = () => {
         <div className="grid grid-cols-2 gap-4">
            <Card 
              onClick={() => openApp('mail')}
-             className="p-5 flex flex-col justify-between h-36 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] border-0 shadow-sm bg-gradient-to-br from-orange-50 to-white"
+             className="p-5 flex flex-col justify-between h-32 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] border-0 shadow-sm bg-gradient-to-br from-orange-50 to-white"
            >
               <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-600">
                  <Mail className="w-5 h-5" />
@@ -124,7 +123,7 @@ const MobileLanding = () => {
 
            <Card 
              onClick={() => openApp('docs')}
-             className="p-5 flex flex-col justify-between h-36 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] border-0 shadow-sm bg-gradient-to-br from-blue-50 to-white"
+             className="p-5 flex flex-col justify-between h-32 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] border-0 shadow-sm bg-gradient-to-br from-blue-50 to-white"
            >
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
                  <FileText className="w-5 h-5" />
@@ -137,7 +136,7 @@ const MobileLanding = () => {
 
            <Card 
              onClick={() => openApp('www')}
-             className="p-5 flex flex-col justify-between h-36 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] border-0 shadow-sm bg-gradient-to-br from-gray-50 to-white"
+             className="p-5 flex flex-col justify-between h-32 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] border-0 shadow-sm bg-gradient-to-br from-gray-50 to-white"
            >
               <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600">
                  <Globe className="w-5 h-5" />
@@ -149,15 +148,15 @@ const MobileLanding = () => {
            </Card>
 
            <Card 
-             onClick={() => openApp('account')}
-             className="p-5 flex flex-col justify-between h-36 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] border-0 shadow-sm bg-gradient-to-br from-purple-50 to-white"
+             onClick={() => openApp('help')}
+             className="p-5 flex flex-col justify-between h-32 cursor-pointer hover:shadow-md transition-all active:scale-[0.98] border-0 shadow-sm bg-gradient-to-br from-indigo-50 to-white"
            >
-              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-purple-600">
-                 <UserCircle className="w-5 h-5" />
+              <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
+                 <LifeBuoy className="w-5 h-5" />
               </div>
               <div>
-                 <h3 className="font-bold text-gray-900">Compte</h3>
-                 <p className="text-xs text-gray-500">Paramètres & Pro</p>
+                 <h3 className="font-bold text-gray-900">Aide</h3>
+                 <p className="text-xs text-gray-500">Support Center</p>
               </div>
            </Card>
         </div>
