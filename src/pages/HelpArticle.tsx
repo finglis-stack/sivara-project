@@ -33,7 +33,6 @@ const HelpArticle = () => {
       
       try {
         // 1. Récupérer l'article et sa catégorie
-        // On retire la jointure profiles ici pour éviter l'erreur de relation
         const { data: articleData, error: articleError } = await supabase
           .from('help_articles')
           .select('*, help_categories(*)')
@@ -49,13 +48,12 @@ const HelpArticle = () => {
         setArticle(articleData);
         setCategory(articleData.help_categories);
 
-        // 2. Récupérer le profil de l'auteur séparément si un ID est présent
+        // 2. Récupérer le profil de l'auteur via la fonction sécurisée (RPC)
+        // Cela garantit l'accès même si l'utilisateur n'est pas connecté ou n'est pas staff
         if (articleData.author_id) {
             const { data: authorData } = await supabase
-                .from('profiles')
-                .select('first_name, last_name, avatar_url, job_title')
-                .eq('id', articleData.author_id)
-                .maybeSingle(); // maybeSingle évite l'erreur si le profil n'existe pas
+                .rpc('get_author_details', { author_id: articleData.author_id })
+                .maybeSingle();
             
             if (authorData) {
                 setAuthor(authorData);
@@ -85,8 +83,9 @@ const HelpArticle = () => {
   const getAuthorName = () => {
     if (!author) return 'Staff Sivara';
     const first = author.first_name || '';
-    const lastInitial = author.last_name ? `${author.last_name[0]}.` : '';
-    return `${first} ${lastInitial}`.trim() || 'Staff Sivara';
+    const last = author.last_name || '';
+    const fullName = `${first} ${last}`.trim();
+    return fullName || 'Staff Sivara';
   };
 
   if (isLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
