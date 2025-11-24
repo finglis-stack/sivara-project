@@ -4,23 +4,27 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { 
-  LayoutDashboard, MessageSquare, Users, FileText, Settings, 
-  Search, Filter, Clock, CheckCircle2, AlertCircle, Send, 
-  MoreVertical, Phone, Paperclip, Archive, Ban, LogOut, 
-  Folder, File as FileIcon, Crown
+  MessageSquare, Users, FileText, Search, CheckCircle2, 
+  Send, MoreVertical, Phone, Paperclip, Ban, LogOut, 
+  Folder, File as FileIcon, Crown, Plus, Edit2, Trash2, 
+  Save, X, Eye, ArrowRight, Layout
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 
+// --- TYPES ---
 interface Ticket {
   id: string;
   subject: string;
@@ -48,39 +52,74 @@ interface Message {
   };
 }
 
+interface Category {
+  id: string;
+  title: string;
+  description: string;
+  slug: string;
+  icon: string;
+  order: number;
+}
+
+interface Article {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  is_published: boolean;
+  view_count: number;
+  category_id: string;
+}
+
 const HelpAdmin = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('support');
+  const [isLoading, setIsLoading] = useState(true);
+
+  // --- SUPPORT STATE ---
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [replyText, setReplyText] = useState('');
-  const [isLoadingTickets, setIsLoadingTickets] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  
-  // User Stats (Right Panel)
   const [userStats, setUserStats] = useState({ files: 0, folders: 0 });
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // --- CONTENT STATE ---
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  
+  // Content Dialogs
+  const [showCatDialog, setShowCatDialog] = useState(false);
+  const [showArticleDialog, setShowArticleDialog] = useState(false);
+  const [editMode, setEditMode] = useState(false); // true = update, false = create
+  
+  // Forms
+  const [catForm, setCatForm] = useState({ title: '', description: '', slug: '', icon: 'HelpCircle', order: 0 });
+  const [artForm, setArtForm] = useState({ title: '', slug: '', content: '', is_published: false });
 
   useEffect(() => {
     checkStaff();
-    fetchTickets();
+  }, [user]);
 
-    // Realtime Tickets
-    const channel = supabase
-      .channel('admin-support')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, () => fetchTickets())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (payload) => {
-         if (payload.new.ticket_id === selectedTicketId) {
-             fetchMessages(selectedTicketId);
-         }
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [selectedTicketId]);
+  useEffect(() => {
+    if (activeTab === 'support') {
+        fetchTickets();
+        const channel = supabase
+        .channel('admin-support')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, () => fetchTickets())
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (payload) => {
+            if (payload.new.ticket_id === selectedTicketId) fetchMessages(selectedTicketId);
+        })
+        .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    } else if (activeTab === 'content') {
+        fetchCategories();
+    }
+  }, [activeTab, selectedTicketId]);
 
   const checkStaff = async () => {
     if (!user) return;
@@ -88,88 +127,50 @@ const HelpAdmin = () => {
     if (!data?.is_staff) navigate('/');
   };
 
+  // --- SUPPORT LOGIC ---
   const fetchTickets = async () => {
-    setIsLoadingTickets(true);
-    const { data } = await supabase
-      .from('support_tickets')
-      .select(`
-        *,
-        profiles:user_id (first_name, last_name, avatar_url, phone_number, is_pro)
-      `)
+    const { data } = await supabase.from('support_tickets')
+      .select(`*, profiles:user_id (first_name, last_name, avatar_url, phone_number, is_pro)`)
       .order('last_message_at', { ascending: false });
-    
     if (data) setTickets(data);
-    setIsLoadingTickets(false);
   };
 
   const fetchMessages = async (ticketId: string) => {
-    const { data } = await supabase
-      .from('support_messages')
+    const { data } = await supabase.from('support_messages')
       .select(`*, profiles:sender_id(avatar_url, first_name)`)
-      .eq('ticket_id', ticketId)
-      .order('created_at', { ascending: true });
-    
+      .eq('ticket_id', ticketId).order('created_at', { ascending: true });
     if (data) {
         setMessages(data);
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }
   };
 
-  const fetchUserStats = async (userId: string) => {
-      // Count files & folders
-      const { count: files } = await supabase.from('documents').select('id', { count: 'exact', head: true }).eq('owner_id', userId).eq('type', 'file');
-      const { count: folders } = await supabase.from('documents').select('id', { count: 'exact', head: true }).eq('owner_id', userId).eq('type', 'folder');
-      setUserStats({ files: files || 0, folders: folders || 0 });
-  };
-
   const handleSelectTicket = (ticket: Ticket) => {
       setSelectedTicketId(ticket.id);
       fetchMessages(ticket.id);
-      // Fetch stats if user exists (linked via profile)
-      if (ticket.profiles) {
-          // We need user_id, retrieved from ticket row actually
-          // The types above are a bit loose for join, let's assume we have access to user_id
-          // In a real world, we'd fetch it cleanly.
-          // Re-fetching ticket specific raw data to get user_id reliably if needed
-          supabase.from('support_tickets').select('user_id').eq('id', ticket.id).single().then(({data}) => {
-              if(data?.user_id) fetchUserStats(data.user_id);
-          });
-      }
+      supabase.from('support_tickets').select('user_id').eq('id', ticket.id).single().then(({data}) => {
+          if(data?.user_id) {
+             supabase.from('documents').select('id', { count: 'exact', head: true }).eq('owner_id', data.user_id).eq('type', 'file')
+             .then(res => setUserStats(prev => ({ ...prev, files: res.count || 0 })));
+             supabase.from('documents').select('id', { count: 'exact', head: true }).eq('owner_id', data.user_id).eq('type', 'folder')
+             .then(res => setUserStats(prev => ({ ...prev, folders: res.count || 0 })));
+          }
+      });
   };
 
   const handleSendReply = async (newStatus?: string) => {
       if (!selectedTicketId || !replyText.trim()) return;
       setIsSending(true);
       try {
-          const { error } = await supabase.functions.invoke('support-outbound', {
-              body: {
-                  ticketId: selectedTicketId,
-                  messageBody: replyText,
-                  status: newStatus || 'open'
-              }
+          await supabase.functions.invoke('support-outbound', {
+              body: { ticketId: selectedTicketId, messageBody: replyText, status: newStatus || 'open' }
           });
-          
-          if (error) throw error;
-          
           setReplyText('');
-          showSuccess('Réponse envoyée');
           fetchMessages(selectedTicketId);
-          if (newStatus) fetchTickets(); // Refresh list status
-      } catch (e) {
-          showError("Erreur lors de l'envoi");
-      } finally {
-          setIsSending(false);
-      }
+          if (newStatus) fetchTickets();
+          showSuccess('Réponse envoyée');
+      } catch (e) { showError("Erreur d'envoi"); } finally { setIsSending(false); }
   };
-
-  const updateStatus = async (status: string) => {
-      if(!selectedTicketId) return;
-      await supabase.from('support_tickets').update({ status }).eq('id', selectedTicketId);
-      fetchTickets();
-      showSuccess(`Ticket ${status}`);
-  };
-
-  const selectedTicket = tickets.find(t => t.id === selectedTicketId);
 
   const getStatusColor = (status: string) => {
       switch(status) {
@@ -180,252 +181,347 @@ const HelpAdmin = () => {
       }
   };
 
+  // --- CONTENT LOGIC (CATEGORIES) ---
+  const fetchCategories = async () => {
+      const { data } = await supabase.from('help_categories').select('*').order('order');
+      setCategories(data || []);
+      if (!selectedCategory && data && data.length > 0) handleSelectCategory(data[0]);
+  };
+
+  const handleSelectCategory = async (cat: Category) => {
+      setSelectedCategory(cat);
+      setSelectedArticle(null); // Reset article selection
+      const { data } = await supabase.from('help_articles').select('*').eq('category_id', cat.id).order('order');
+      setArticles(data || []);
+  };
+
+  const slugify = (text: string) => text.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-').trim();
+
+  const handleSaveCategory = async () => {
+      if (!catForm.title) return;
+      const slug = catForm.slug || slugify(catForm.title);
+      
+      if (editMode && selectedCategory) {
+          await supabase.from('help_categories').update({ ...catForm, slug }).eq('id', selectedCategory.id);
+          showSuccess("Catégorie mise à jour");
+      } else {
+          await supabase.from('help_categories').insert({ ...catForm, slug });
+          showSuccess("Catégorie créée");
+      }
+      setShowCatDialog(false);
+      fetchCategories();
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+      if(!confirm("Supprimer cette catégorie et tous ses articles ?")) return;
+      await supabase.from('help_categories').delete().eq('id', id);
+      fetchCategories();
+      setSelectedCategory(null);
+  };
+
+  // --- CONTENT LOGIC (ARTICLES) ---
+  const handleSaveArticle = async () => {
+      if (!artForm.title || !selectedCategory || !user) return;
+      const slug = artForm.slug || slugify(artForm.title);
+
+      if (editMode && selectedArticle) {
+          await supabase.from('help_articles').update({ ...artForm, slug }).eq('id', selectedArticle.id);
+          showSuccess("Article mis à jour");
+      } else {
+          await supabase.from('help_articles').insert({ 
+              ...artForm, 
+              slug, 
+              category_id: selectedCategory.id,
+              author_id: user.id
+          });
+          showSuccess("Article créé");
+      }
+      setShowArticleDialog(false);
+      if (selectedCategory) handleSelectCategory(selectedCategory); // Refresh list
+  };
+
+  const handleDeleteArticle = async (id: string) => {
+      if(!confirm("Supprimer cet article ?")) return;
+      await supabase.from('help_articles').delete().eq('id', id);
+      if (selectedCategory) handleSelectCategory(selectedCategory);
+  };
+
+  // --- RENDER ---
   return (
     <div className="flex h-screen bg-white font-sans overflow-hidden">
-      {/* SIDEBAR NAV */}
-      <div className="w-16 bg-gray-900 flex flex-col items-center py-6 gap-6 shrink-0 z-20">
-         <div className="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center text-white font-bold">S</div>
+      {/* MAIN SIDEBAR */}
+      <div className="w-16 bg-gray-900 flex flex-col items-center py-6 gap-6 shrink-0 z-30 shadow-xl">
+         <div className="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center text-white font-bold cursor-pointer" onClick={() => navigate('/?app=help')}>S</div>
          <div className="flex-1 flex flex-col gap-4 w-full px-2">
-            <button onClick={() => setActiveTab('support')} className={`p-3 rounded-xl transition-all ${activeTab === 'support' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
+            <button onClick={() => setActiveTab('support')} className={`p-3 rounded-xl transition-all group relative ${activeTab === 'support' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
                 <MessageSquare className="h-5 w-5" />
+                <div className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">Support</div>
             </button>
-            <button onClick={() => setActiveTab('content')} className={`p-3 rounded-xl transition-all ${activeTab === 'content' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
-                <FileText className="h-5 w-5" />
-            </button>
-            <button onClick={() => setActiveTab('users')} className={`p-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
-                <Users className="h-5 w-5" />
+            <button onClick={() => setActiveTab('content')} className={`p-3 rounded-xl transition-all group relative ${activeTab === 'content' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
+                <Layout className="h-5 w-5" />
+                <div className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">Contenu</div>
             </button>
          </div>
          <button onClick={() => navigate('/')} className="p-3 text-gray-500 hover:text-white"><LogOut className="h-5 w-5" /></button>
       </div>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex overflow-hidden">
-        
-        {/* TICKET LIST */}
-        <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50/50">
-            <div className="p-4 border-b border-gray-200 bg-white">
-                <h2 className="font-bold text-lg mb-4">Tickets</h2>
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input placeholder="Rechercher..." className="pl-9 bg-gray-50 border-gray-200" />
-                </div>
-                <div className="flex gap-2 mt-4 overflow-x-auto no-scrollbar pb-1">
-                    <Badge variant="outline" className="bg-white cursor-pointer hover:border-blue-500">Tous</Badge>
-                    <Badge variant="outline" className="bg-white cursor-pointer hover:border-green-500 text-green-600">Ouverts</Badge>
-                    <Badge variant="outline" className="bg-white cursor-pointer hover:border-gray-500 text-gray-500">Fermés</Badge>
-                </div>
-            </div>
-            <ScrollArea className="flex-1">
-                <div className="divide-y divide-gray-100">
-                    {tickets.map(ticket => (
-                        <button 
-                            key={ticket.id} 
-                            onClick={() => handleSelectTicket(ticket)}
-                            className={`w-full text-left p-4 hover:bg-white transition-all hover:shadow-sm ${selectedTicketId === ticket.id ? 'bg-white border-l-4 border-l-blue-600 shadow-sm' : 'border-l-4 border-l-transparent'}`}
-                        >
-                            <div className="flex justify-between items-start mb-1">
-                                <div className="flex items-center gap-2">
-                                    <Avatar className="h-6 w-6">
-                                        {ticket.profiles?.avatar_url && <AvatarImage src={ticket.profiles.avatar_url} />}
-                                        <AvatarFallback className="text-[10px]">{ticket.profiles?.first_name?.[0]}</AvatarFallback>
-                                    </Avatar>
-                                    <span className="text-sm font-semibold text-gray-900 truncate max-w-[100px]">{ticket.profiles?.first_name || 'Inconnu'}</span>
-                                </div>
-                                <span className="text-[10px] text-gray-400 whitespace-nowrap">
-                                    {new Date(ticket.last_message_at).toLocaleDateString()}
-                                </span>
-                            </div>
-                            <h3 className="text-sm font-medium text-gray-800 truncate mb-1">{ticket.subject}</h3>
-                            <div className="flex items-center gap-2">
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border capitalize ${getStatusColor(ticket.status)}`}>
-                                    {ticket.status}
-                                </span>
-                                <span className="text-xs text-gray-400 truncate">{ticket.customer_email}</span>
-                            </div>
-                        </button>
-                    ))}
-                </div>
-            </ScrollArea>
-        </div>
-
-        {/* CHAT AREA */}
-        <div className="flex-1 flex flex-col bg-white min-w-0">
-            {selectedTicket ? (
-                <>
-                    {/* Header Ticket */}
-                    <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
-                        <div className="min-w-0">
-                            <h2 className="font-bold text-gray-900 truncate flex items-center gap-3">
-                                {selectedTicket.subject}
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-normal border ${getStatusColor(selectedTicket.status)}`}>
-                                    {selectedTicket.status}
-                                </span>
-                            </h2>
-                            <p className="text-xs text-gray-500">Ticket #{selectedTicket.id.substring(0, 8)}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {selectedTicket.status !== 'closed' && (
-                                <Button variant="outline" size="sm" onClick={() => updateStatus('closed')} className="text-gray-600">
-                                    <CheckCircle2 className="mr-2 h-4 w-4" /> Clore
-                                </Button>
-                            )}
-                            {selectedTicket.status !== 'suspended' && (
-                                <Button variant="outline" size="sm" onClick={() => updateStatus('suspended')} className="text-orange-600">
-                                    <Ban className="mr-2 h-4 w-4" /> Suspendre
-                                </Button>
-                            )}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => updateStatus('open')}>Réouvrir</DropdownMenuItem>
-                                    <DropdownMenuItem className="text-red-600">Supprimer</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
+      {/* ==================== VIEW: SUPPORT ==================== */}
+      {activeTab === 'support' && (
+        <div className="flex-1 flex overflow-hidden">
+            {/* TICKET LIST */}
+            <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50/50">
+                <div className="p-4 border-b border-gray-200 bg-white">
+                    <h2 className="font-bold text-lg mb-4">Tickets</h2>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input placeholder="Rechercher..." className="pl-9 bg-gray-50 border-gray-200" />
                     </div>
-
-                    {/* Messages List */}
-                    <ScrollArea className="flex-1 bg-[#F8F9FA] p-6">
-                        <div className="space-y-6 max-w-3xl mx-auto">
-                            {messages.map((msg) => (
-                                <div key={msg.id} className={`flex gap-4 ${msg.is_staff_reply ? 'flex-row-reverse' : ''}`}>
-                                    <Avatar className="h-10 w-10 border-2 border-white shadow-sm shrink-0">
-                                        {msg.profiles?.avatar_url && <AvatarImage src={msg.profiles.avatar_url} />}
-                                        <AvatarFallback className={msg.is_staff_reply ? "bg-blue-600 text-white" : "bg-gray-200"}>
-                                            {msg.is_staff_reply ? 'S' : msg.sender_email[0].toUpperCase()}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <div className={`flex flex-col max-w-[80%] ${msg.is_staff_reply ? 'items-end' : 'items-start'}`}>
-                                        <div className="flex items-baseline gap-2 mb-1 px-1">
-                                            <span className="text-xs font-bold text-gray-700">{msg.is_staff_reply ? 'Staff Sivara' : (msg.profiles?.first_name || msg.sender_email)}</span>
-                                            <span className="text-[10px] text-gray-400">{new Date(msg.created_at).toLocaleString()}</span>
-                                        </div>
-                                        <div 
-                                            className={`p-4 rounded-2xl shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
-                                                msg.is_staff_reply 
-                                                ? 'bg-blue-600 text-white rounded-tr-sm' 
-                                                : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'
-                                            }`}
-                                            dangerouslySetInnerHTML={{ __html: msg.body }} // HTML from email
-                                        />
+                </div>
+                <ScrollArea className="flex-1">
+                    <div className="divide-y divide-gray-100">
+                        {tickets.map(ticket => (
+                            <button 
+                                key={ticket.id} 
+                                onClick={() => handleSelectTicket(ticket)}
+                                className={`w-full text-left p-4 hover:bg-white transition-all hover:shadow-sm ${selectedTicketId === ticket.id ? 'bg-white border-l-4 border-l-blue-600 shadow-sm' : 'border-l-4 border-l-transparent'}`}
+                            >
+                                <div className="flex justify-between items-start mb-1">
+                                    <div className="flex items-center gap-2">
+                                        <Avatar className="h-6 w-6">
+                                            {ticket.profiles?.avatar_url && <AvatarImage src={ticket.profiles.avatar_url} />}
+                                            <AvatarFallback className="text-[10px]">{ticket.profiles?.first_name?.[0]}</AvatarFallback>
+                                        </Avatar>
+                                        <span className="text-sm font-semibold text-gray-900 truncate max-w-[100px]">{ticket.profiles?.first_name || 'Inconnu'}</span>
                                     </div>
+                                    <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                                        {new Date(ticket.last_message_at).toLocaleDateString()}
+                                    </span>
                                 </div>
-                            ))}
-                            <div ref={messagesEndRef} />
-                        </div>
-                    </ScrollArea>
+                                <h3 className="text-sm font-medium text-gray-800 truncate mb-1">{ticket.subject}</h3>
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border capitalize ${getStatusColor(ticket.status)}`}>{ticket.status}</span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </ScrollArea>
+            </div>
 
-                    {/* Input Area */}
-                    <div className="p-4 border-t border-gray-200 bg-white">
-                        <div className="max-w-3xl mx-auto relative">
-                            <Textarea 
-                                value={replyText}
-                                onChange={(e) => setReplyText(e.target.value)}
-                                placeholder="Écrire une réponse..." 
-                                className="min-h-[100px] pr-24 resize-none bg-gray-50 border-gray-200 focus:bg-white transition-all rounded-xl"
-                            />
-                            <div className="absolute bottom-3 right-3 flex gap-2">
-                                <Button variant="ghost" size="icon" className="text-gray-400 hover:text-gray-600"><Paperclip className="h-4 w-4" /></Button>
-                                <Button 
-                                    onClick={() => handleSendReply()} 
-                                    disabled={isSending || !replyText.trim()}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4"
-                                >
-                                    {isSending ? <span className="animate-spin">...</span> : <Send className="h-4 w-4" />}
-                                </Button>
+            {/* CHAT AREA */}
+            <div className="flex-1 flex flex-col bg-white min-w-0">
+                {selectedTicketId ? (
+                    <>
+                        {/* Header */}
+                        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
+                            <div className="min-w-0">
+                                <h2 className="font-bold text-gray-900 truncate flex items-center gap-3">
+                                    {tickets.find(t => t.id === selectedTicketId)?.subject}
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-normal border ${getStatusColor(tickets.find(t => t.id === selectedTicketId)?.status || 'open')}`}>
+                                        {tickets.find(t => t.id === selectedTicketId)?.status}
+                                    </span>
+                                </h2>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" onClick={() => handleSendReply('closed')}>Clore le ticket</Button>
                             </div>
                         </div>
-                        <div className="max-w-3xl mx-auto mt-2 flex justify-between text-xs text-gray-400 px-1">
-                            <span>Markdown supporté</span>
-                            <div className="flex gap-4">
-                                <button onClick={() => handleSendReply('closed')} className="hover:text-blue-600 transition-colors">Envoyer et fermer</button>
+                        {/* Messages */}
+                        <ScrollArea className="flex-1 bg-[#F8F9FA] p-6">
+                            <div className="space-y-6 max-w-3xl mx-auto">
+                                {messages.map((msg) => (
+                                    <div key={msg.id} className={`flex gap-4 ${msg.is_staff_reply ? 'flex-row-reverse' : ''}`}>
+                                        <Avatar className="h-8 w-8 border shadow-sm shrink-0"><AvatarFallback>{msg.is_staff_reply ? 'S' : 'U'}</AvatarFallback></Avatar>
+                                        <div className={`flex flex-col max-w-[80%] ${msg.is_staff_reply ? 'items-end' : 'items-start'}`}>
+                                            <div className={`p-4 rounded-2xl shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${msg.is_staff_reply ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'}`} dangerouslySetInnerHTML={{ __html: msg.body }} />
+                                        </div>
+                                    </div>
+                                ))}
+                                <div ref={messagesEndRef} />
                             </div>
+                        </ScrollArea>
+                        {/* Input */}
+                        <div className="p-4 border-t border-gray-200 bg-white">
+                            <div className="max-w-3xl mx-auto relative">
+                                <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Répondre..." className="min-h-[100px] pr-24 resize-none bg-gray-50 border-gray-200 focus:bg-white rounded-xl" />
+                                <div className="absolute bottom-3 right-3">
+                                    <Button onClick={() => handleSendReply()} disabled={isSending || !replyText.trim()} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4">{isSending ? "..." : <Send className="h-4 w-4" />}</Button>
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400"><MessageSquare className="h-16 w-16 mb-4 text-gray-200" /><p>Sélectionnez un ticket</p></div>
+                )}
+            </div>
+            
+            {/* USER PROFILE SIDEBAR (Conditional) */}
+            {selectedTicketId && (
+                <div className="w-72 border-l border-gray-200 bg-white shrink-0 overflow-y-auto p-6">
+                    {/* User Stats */}
+                    <h3 className="font-bold text-sm uppercase text-gray-400 mb-4">Utilisateur</h3>
+                    <div className="space-y-4">
+                        <div className="bg-gray-50 p-3 rounded-lg border">
+                            <div className="text-xs text-gray-500">Fichiers Docs</div>
+                            <div className="font-bold text-xl">{userStats.files}</div>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded-lg border">
+                            <div className="text-xs text-gray-500">Dossiers Docs</div>
+                            <div className="font-bold text-xl">{userStats.folders}</div>
                         </div>
                     </div>
-                </>
-            ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                    <MessageSquare className="h-16 w-16 mb-4 text-gray-200" />
-                    <p>Sélectionnez un ticket pour commencer</p>
                 </div>
             )}
         </div>
+      )}
 
-        {/* RIGHT SIDEBAR (PROFILE) */}
-        {selectedTicket && (
-            <div className="w-80 border-l border-gray-200 bg-white shrink-0 overflow-y-auto">
-                <div className="p-6 flex flex-col items-center border-b border-gray-100">
-                    <div className="relative mb-4">
-                        <Avatar className="h-24 w-24 border-4 border-gray-50">
-                            {selectedTicket.profiles?.avatar_url && <AvatarImage src={selectedTicket.profiles.avatar_url} />}
-                            <AvatarFallback className="text-2xl bg-gray-100">{selectedTicket.profiles?.first_name?.[0]}</AvatarFallback>
-                        </Avatar>
-                        {selectedTicket.profiles?.is_pro && (
-                            <div className="absolute bottom-0 right-0 bg-black text-white p-1.5 rounded-full border-2 border-white" title="Client PRO">
-                                <Crown className="h-4 w-4 fill-current text-yellow-400" />
-                            </div>
-                        )}
-                    </div>
-                    <h2 className="text-xl font-bold text-gray-900 text-center">
-                        {selectedTicket.profiles?.first_name} {selectedTicket.profiles?.last_name}
-                    </h2>
-                    <p className="text-gray-500 text-sm mt-1">{selectedTicket.customer_email}</p>
-                    {selectedTicket.profiles?.is_pro ? (
-                        <Badge className="mt-3 bg-black hover:bg-gray-800">Sivara Pro</Badge>
-                    ) : (
-                        <Badge variant="outline" className="mt-3">Compte Gratuit</Badge>
-                    )}
+      {/* ==================== VIEW: CONTENT (CATEGORIES & ARTICLES) ==================== */}
+      {activeTab === 'content' && (
+        <div className="flex-1 flex overflow-hidden bg-gray-50">
+            
+            {/* LEFT: CATEGORIES LIST */}
+            <div className="w-1/3 max-w-sm border-r border-gray-200 bg-white flex flex-col">
+                <div className="p-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
+                    <h2 className="font-bold text-gray-900">Catégories</h2>
+                    <Button size="sm" variant="outline" onClick={() => { setCatForm({ title: '', description: '', slug: '', icon: 'HelpCircle', order: categories.length }); setEditMode(false); setShowCatDialog(true); }}>
+                        <Plus className="h-4 w-4 mr-2" /> Nouvelle
+                    </Button>
                 </div>
-
-                <div className="p-6 space-y-6">
-                    <div>
-                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Coordonnées</h3>
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-3 text-sm text-gray-600">
-                                <Phone className="h-4 w-4 text-gray-400" />
-                                <span>{selectedTicket.profiles?.phone_number || "Non renseigné"}</span>
+                <ScrollArea className="flex-1">
+                    <div className="p-3 space-y-2">
+                        {categories.map(cat => (
+                            <div 
+                                key={cat.id}
+                                onClick={() => handleSelectCategory(cat)}
+                                className={`p-3 rounded-lg cursor-pointer border transition-all group ${selectedCategory?.id === cat.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-300'}`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-md ${selectedCategory?.id === cat.id ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                                            <Folder className="h-4 w-4" />
+                                        </div>
+                                        <div>
+                                            <h3 className={`font-medium text-sm ${selectedCategory?.id === cat.id ? 'text-blue-900' : 'text-gray-700'}`}>{cat.title}</h3>
+                                            <p className="text-xs text-gray-400 line-clamp-1">{cat.description || 'Pas de description'}</p>
+                                        </div>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100"><MoreVertical className="h-3 w-3" /></Button></DropdownMenuTrigger>
+                                        <DropdownMenuContent>
+                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setCatForm(cat); setEditMode(true); setShowCatDialog(true); }}>Modifier</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }} className="text-red-600">Supprimer</DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-3 text-sm text-gray-600">
-                                <Clock className="h-4 w-4 text-gray-400" />
-                                <span>Client depuis {new Date().getFullYear()}</span>
-                            </div>
-                        </div>
+                        ))}
                     </div>
+                </ScrollArea>
+            </div>
 
-                    <div>
-                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Utilisation</h3>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-center">
-                                <FileIcon className="h-5 w-5 mx-auto mb-2 text-blue-500" />
-                                <div className="text-lg font-bold text-gray-900">{userStats.files}</div>
-                                <div className="text-[10px] text-gray-500 uppercase">Fichiers</div>
+            {/* RIGHT: ARTICLES LIST */}
+            <div className="flex-1 flex flex-col bg-gray-50">
+                {selectedCategory ? (
+                    <>
+                        <div className="p-6 pb-4 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900">{selectedCategory.title}</h2>
+                                <p className="text-gray-500 text-sm">Gérer les articles de cette section</p>
                             </div>
-                            <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-center">
-                                <Folder className="h-5 w-5 mx-auto mb-2 text-yellow-500" />
-                                <div className="text-lg font-bold text-gray-900">{userStats.folders}</div>
-                                <div className="text-[10px] text-gray-500 uppercase">Dossiers</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Actions rapides</h3>
-                        <div className="space-y-2">
-                            <Button variant="outline" className="w-full justify-start text-gray-600 h-9">
-                                <AlertCircle className="mr-2 h-4 w-4" /> Signaler le profil
+                            <Button onClick={() => { setArtForm({ title: '', slug: '', content: '', is_published: true }); setEditMode(false); setShowArticleDialog(true); }}>
+                                <Plus className="h-4 w-4 mr-2" /> Nouvel Article
                             </Button>
-                            <Button variant="outline" className="w-full justify-start text-gray-600 h-9">
-                                <Archive className="mr-2 h-4 w-4" /> Voir anciens tickets
-                            </Button>
                         </div>
+                        
+                        <ScrollArea className="flex-1 px-6 pb-6">
+                            {articles.length > 0 ? (
+                                <div className="grid gap-4">
+                                    {articles.map(article => (
+                                        <div key={article.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all flex justify-between items-center group">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${article.is_published ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                    <FileText className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-semibold text-gray-900">{article.title}</h3>
+                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                        <span className="font-mono bg-gray-100 px-1.5 rounded">/{article.slug}</span>
+                                                        <span>•</span>
+                                                        <span>{article.view_count} vues</span>
+                                                        <span>•</span>
+                                                        <span className={article.is_published ? "text-green-600" : "text-orange-500"}>
+                                                            {article.is_published ? "Publié" : "Brouillon"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button variant="ghost" size="sm" onClick={() => window.open(`/article/${article.slug}`, '_blank')}>
+                                                    <Eye className="h-4 w-4 text-gray-500" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => { setArtForm(article); setSelectedArticle(article); setEditMode(true); setShowArticleDialog(true); }}>
+                                                    <Edit2 className="h-4 w-4 text-blue-600" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => handleDeleteArticle(article.id)}>
+                                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl m-4 py-20">
+                                    <FileText className="h-12 w-12 mb-4 text-gray-300" />
+                                    <p>Aucun article dans cette catégorie</p>
+                                </div>
+                            )}
+                        </ScrollArea>
+                    </>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                        <Folder className="h-16 w-16 mb-4 text-gray-300" />
+                        <p>Sélectionnez une catégorie pour voir les articles</p>
                     </div>
+                )}
+            </div>
+        </div>
+      )}
+
+      {/* DIALOGS */}
+      <Dialog open={showCatDialog} onOpenChange={setShowCatDialog}>
+        <DialogContent>
+            <DialogHeader><DialogTitle>{editMode ? 'Modifier' : 'Nouvelle'} Catégorie</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-2">
+                <div className="space-y-2"><Label>Titre</Label><Input value={catForm.title} onChange={e => setCatForm({...catForm, title: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Description</Label><Input value={catForm.description} onChange={e => setCatForm({...catForm, description: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Slug (Optionnel)</Label><Input value={catForm.slug} onChange={e => setCatForm({...catForm, slug: e.target.value})} placeholder="auto-genere" /></div>
+            </div>
+            <DialogFooter><Button onClick={handleSaveCategory}>Enregistrer</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showArticleDialog} onOpenChange={setShowArticleDialog}>
+        <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+            <DialogHeader><DialogTitle>{editMode ? 'Modifier' : 'Nouvel'} Article</DialogTitle></DialogHeader>
+            <div className="flex-1 overflow-y-auto space-y-4 py-2 pr-2">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Titre</Label><Input value={artForm.title} onChange={e => setArtForm({...artForm, title: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Slug</Label><Input value={artForm.slug} onChange={e => setArtForm({...artForm, slug: e.target.value})} /></div>
+                </div>
+                <div className="space-y-2 h-full flex flex-col">
+                    <Label>Contenu (Markdown supporté)</Label>
+                    <Textarea className="flex-1 font-mono text-sm leading-relaxed" value={artForm.content} onChange={e => setArtForm({...artForm, content: e.target.value})} placeholder="# Titre..." />
                 </div>
             </div>
-        )}
-      </div>
+            <DialogFooter className="flex justify-between items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                    <Switch checked={artForm.is_published} onCheckedChange={c => setArtForm({...artForm, is_published: c})} />
+                    <Label>Publié</Label>
+                </div>
+                <Button onClick={handleSaveArticle}>Enregistrer</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 };
