@@ -13,7 +13,7 @@ import {
   MessageSquare, Search, Send, LogOut, 
   Folder, FileText, Plus, Edit2, Trash2, 
   Eye, Layout, ChevronRight, Loader2,
-  MoreVertical
+  MoreVertical, FolderOpen
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -81,7 +81,7 @@ const HelpAdmin = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   
-  // Content Dialogs
+  // Dialogs
   const [showCatDialog, setShowCatDialog] = useState(false);
   const [showArticleDialog, setShowArticleDialog] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -97,7 +97,6 @@ const HelpAdmin = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // VERIFICATION STAFF
@@ -105,15 +104,14 @@ const HelpAdmin = () => {
     const checkStaff = async () => {
         if (!user) return;
         try {
+            // Utilise RPC si possible ou fallback select, mais la fonction get_is_staff a réglé le souci RLS
             const { data, error } = await supabase.from('profiles').select('is_staff').eq('id', user.id).single();
             if (error || !data?.is_staff) {
-                console.warn("Accès refusé : utilisateur non staff", error);
                 navigate('/'); 
             } else {
                 setIsStaff(true);
             }
         } catch (e) {
-            console.error("Erreur vérification rôle", e);
             navigate('/');
         } finally {
             setIsCheckingRole(false);
@@ -132,102 +130,47 @@ const HelpAdmin = () => {
     
     if (activeTab === 'support') {
         fetchTickets();
-        
-        const channel = supabase
-        .channel('admin-support')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, () => fetchTickets())
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (payload) => {
-            if (payload.new.ticket_id === selectedTicketId) fetchMessages(selectedTicketId);
-        })
-        .subscribe();
-        
-        return () => { supabase.removeChannel(channel); };
     } else if (activeTab === 'content') {
         fetchCategories();
     }
-  }, [activeTab, isStaff, selectedTicketId]);
-
-  // --- SUPPORT LOGIC ---
-  const fetchTickets = async () => {
-    setIsLoadingTickets(true);
-    try {
-        const { data, error } = await supabase
-            .from('support_tickets')
-            .select(`
-                id, subject, status, customer_email, last_message_at,
-                profiles:user_id (first_name, last_name, avatar_url)
-            `)
-            .order('last_message_at', { ascending: false });
-
-        if (error) {
-            console.error("Erreur fetch tickets:", error);
-            showError("Impossible de charger les tickets");
-        } else {
-            setTickets(data as unknown as Ticket[] || []);
-        }
-    } catch (e) {
-        console.error("Exception fetch tickets:", e);
-    } finally {
-        setIsLoadingTickets(false);
-    }
-  };
-
-  const fetchMessages = async (ticketId: string) => {
-    const { data } = await supabase.from('support_messages')
-      .select(`*, profiles:sender_id(avatar_url, first_name)`)
-      .eq('ticket_id', ticketId).order('created_at', { ascending: true });
-    if (data) {
-        setMessages(data);
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    }
-  };
-
-  const selectTicket = (ticketId: string) => {
-      setSelectedTicketId(ticketId);
-      fetchMessages(ticketId);
-  };
-
-  const sendReply = async () => {
-      if (!selectedTicketId || !replyText.trim()) return;
-      setIsSending(true);
-      try {
-          await supabase.functions.invoke('support-outbound', {
-              body: { ticketId: selectedTicketId, messageBody: replyText, status: 'open' }
-          });
-          setReplyText('');
-          fetchMessages(selectedTicketId);
-          showSuccess("Envoyé");
-      } catch (e) { showError("Erreur d'envoi"); } finally { setIsSending(false); }
-  };
-
-  const closeTicket = async () => {
-      if (!selectedTicketId) return;
-      await supabase.from('support_tickets').update({ status: 'closed' }).eq('id', selectedTicketId);
-      fetchTickets();
-      showSuccess("Ticket fermé");
-  };
+  }, [activeTab, isStaff]);
 
   // --- CONTENT LOGIC ---
   const fetchCategories = async () => {
     setIsLoadingContent(true);
-    const { data } = await supabase.from('help_categories').select('*').order('order');
-    setCategories(data || []);
-    if (data && data.length > 0 && !selectedCategory) {
-        handleSelectCategory(data[0]);
+    try {
+        const { data, error } = await supabase.from('help_categories').select('*').order('order');
+        if (error) throw error;
+        setCategories(data || []);
+        
+        // Auto-select first category
+        if (data && data.length > 0 && !selectedCategory) {
+            handleSelectCategory(data[0]);
+        }
+    } catch (e) {
+        console.error("Erreur chargement catégories", e);
+        showError("Erreur chargement contenu");
+    } finally {
+        setIsLoadingContent(false);
     }
-    setIsLoadingContent(false);
   };
 
   const handleSelectCategory = async (cat: Category) => {
     setSelectedCategory(cat);
     setSelectedArticle(null);
-    const { data } = await supabase.from('help_articles').select('*').eq('category_id', cat.id).order('order');
-    setArticles(data || []);
+    try {
+        const { data, error } = await supabase.from('help_articles').select('*').eq('category_id', cat.id).order('order');
+        if (error) throw error;
+        setArticles(data || []);
+    } catch (e) {
+        console.error("Erreur articles", e);
+        setArticles([]);
+    }
   };
 
   const handleSaveCategory = async () => {
     try {
-        const slug = catForm.slug || catForm.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+        const slug = catForm.slug || catForm.title.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-');
         if (editMode && selectedCategory) {
             await supabase.from('help_categories').update({ ...catForm, slug }).eq('id', selectedCategory.id);
             showSuccess("Catégorie mise à jour");
@@ -241,7 +184,7 @@ const HelpAdmin = () => {
   };
 
   const handleDeleteCategory = async (id: string) => {
-      if (!confirm("Supprimer ?")) return;
+      if (!confirm("Supprimer cette catégorie et TOUS ses articles ?")) return;
       await supabase.from('help_categories').delete().eq('id', id);
       setSelectedCategory(null);
       fetchCategories();
@@ -250,7 +193,7 @@ const HelpAdmin = () => {
   const handleSaveArticle = async () => {
       try {
         if (!selectedCategory || !artForm.title) return;
-        const slug = artForm.slug || artForm.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+        const slug = artForm.slug || artForm.title.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-');
         
         const payload = {
             title: artForm.title,
@@ -278,8 +221,43 @@ const HelpAdmin = () => {
       if (selectedCategory) handleSelectCategory(selectedCategory);
   };
 
-  // --- RENDER ---
-  
+  // --- SUPPORT LOGIC ---
+  const fetchTickets = async () => {
+      const { data } = await supabase
+        .from('support_tickets')
+        .select(`*, profiles:user_id (first_name, last_name, avatar_url)`)
+        .order('last_message_at', { ascending: false });
+      
+      setTickets(data as unknown as Ticket[] || []);
+  };
+
+  const selectTicket = async (ticketId: string) => {
+      setSelectedTicketId(ticketId);
+      const { data } = await supabase.from('support_messages').select('*, profiles:sender_id(first_name, avatar_url)').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+      setMessages(data || []);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  };
+
+  const sendReply = async () => {
+      if (!selectedTicketId || !replyText.trim()) return;
+      setIsSending(true);
+      try {
+          await supabase.functions.invoke('support-outbound', {
+              body: { ticketId: selectedTicketId, messageBody: replyText, status: 'open' }
+          });
+          setReplyText('');
+          selectTicket(selectedTicketId);
+          showSuccess("Envoyé");
+      } catch (e) { showError("Erreur d'envoi"); } finally { setIsSending(false); }
+  };
+
+  const closeTicket = async () => {
+      if (!selectedTicketId) return;
+      await supabase.from('support_tickets').update({ status: 'closed' }).eq('id', selectedTicketId);
+      fetchTickets();
+      showSuccess("Ticket fermé");
+  };
+
   if (loading || isCheckingRole) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
 
   return (
@@ -294,7 +272,7 @@ const HelpAdmin = () => {
             className={`p-3 rounded-xl transition-all relative group ${activeTab === 'support' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
          >
             <MessageSquare className="h-5 w-5" />
-            <span className="absolute left-full ml-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">Support</span>
+            <span className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">Support</span>
          </button>
 
          <button 
@@ -302,7 +280,7 @@ const HelpAdmin = () => {
             className={`p-3 rounded-xl transition-all relative group ${activeTab === 'content' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
          >
             <Layout className="h-5 w-5" />
-            <span className="absolute left-full ml-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">Contenu</span>
+            <span className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">Contenu</span>
          </button>
 
          <div className="mt-auto">
@@ -316,19 +294,14 @@ const HelpAdmin = () => {
             {/* LISTE */}
             <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50">
                 <div className="p-4 border-b border-gray-200 bg-white">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="font-bold text-gray-900">Tickets</h2>
-                        <Button variant="ghost" size="icon" onClick={fetchTickets} disabled={isLoadingTickets}>
-                            <Loader2 className={`h-4 w-4 ${isLoadingTickets ? 'animate-spin' : ''}`} />
-                        </Button>
-                    </div>
+                    <h2 className="font-bold text-gray-900 mb-3">Tickets</h2>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input placeholder="Rechercher..." className="pl-9 bg-gray-50 border-gray-200" />
+                        <Input placeholder="Rechercher..." className="pl-9 bg-white" />
                     </div>
                 </div>
                 <ScrollArea className="flex-1">
-                    {tickets.length === 0 && !isLoadingTickets && (
+                    {tickets.length === 0 && (
                         <div className="p-8 text-center text-gray-400 text-sm">Aucun ticket trouvé.</div>
                     )}
                     {tickets.map(t => (
@@ -349,10 +322,7 @@ const HelpAdmin = () => {
                                 <span className="text-[10px] text-gray-400">{new Date(t.last_message_at).toLocaleDateString()}</span>
                             </div>
                             <div className="text-sm font-medium text-gray-700 truncate mb-1">{t.subject}</div>
-                            <div className="flex items-center justify-between">
-                                <Badge variant="outline" className={`text-[10px] capitalize ${t.status === 'open' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-600'}`}>{t.status}</Badge>
-                                <span className="text-[10px] text-gray-400 truncate max-w-[120px]">{t.customer_email}</span>
-                            </div>
+                            <Badge variant="outline" className={`text-[10px] capitalize ${t.status === 'open' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{t.status}</Badge>
                         </div>
                     ))}
                 </ScrollArea>
@@ -446,6 +416,9 @@ const HelpAdmin = () => {
                                 </DropdownMenu>
                             </div>
                         ))}
+                        {categories.length === 0 && !isLoadingContent && (
+                            <div className="text-center py-10 text-gray-400 text-sm">Aucune catégorie</div>
+                        )}
                     </div>
                 </ScrollArea>
             </div>
@@ -477,7 +450,7 @@ const HelpAdmin = () => {
                                                 <div className="min-w-0">
                                                     <h3 className="font-semibold text-gray-900 truncate">{article.title}</h3>
                                                     <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                        <span className="font-mono">/{article.slug}</span>
+                                                        <span className="font-mono bg-gray-100 px-1.5 rounded">/{article.slug}</span>
                                                         <span>•</span>
                                                         <span>{article.view_count} vues</span>
                                                         <span>•</span>
@@ -507,7 +480,7 @@ const HelpAdmin = () => {
                                     ))}
                                 </div>
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                                <div className="flex flex-col items-center justify-center h-full text-gray-400 border-2 border-dashed border-gray-200 rounded-xl m-4 py-20">
                                     <FileText className="h-12 w-12 mb-4 text-gray-300" />
                                     <p>Aucun article dans cette catégorie</p>
                                 </div>
@@ -515,8 +488,8 @@ const HelpAdmin = () => {
                         </ScrollArea>
                     </>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-400">
-                        <Folder className="h-16 w-16 mb-4 text-gray-300" />
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                        <FolderOpen className="h-16 w-16 mb-4 text-gray-300" />
                         <p>Sélectionnez une catégorie pour gérer les articles</p>
                     </div>
                 )}
