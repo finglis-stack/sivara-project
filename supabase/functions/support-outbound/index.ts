@@ -10,6 +10,8 @@ const corsHeaders = {
 
 // @ts-ignore
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+// @ts-ignore
+const RESEND_FROM_EMAIL = Deno.env.get('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -111,6 +113,8 @@ serve(async (req) => {
       </html>
     `;
 
+    console.log(`Envoi de ${RESEND_FROM_EMAIL} vers ${ticket.customer_email}`);
+
     // 4. Envoi effectif via Resend
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -119,7 +123,7 @@ serve(async (req) => {
         'Authorization': `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: 'Sivara Support <support@sivara.ca>',
+        from: `Sivara Support <${RESEND_FROM_EMAIL}>`,
         to: [ticket.customer_email],
         subject: `[Ticket #${ticketRef}] ${ticket.subject}`,
         html: emailHtml
@@ -127,19 +131,17 @@ serve(async (req) => {
     });
 
     if (!resendRes.ok) {
-        const err = await resendRes.text();
-        console.error("Resend API Error:", err);
-        // On ne throw pas forcément ici pour ne pas bloquer l'UI admin si l'email plante,
-        // mais on devrait idéalement le signaler. Pour l'instant on log.
-        // Si tu veux bloquer l'envoi admin en cas d'erreur email, décommente la ligne suivante:
-        // throw new Error(`Erreur envoi email: ${err}`);
+        const errText = await resendRes.text();
+        console.error("Resend API Error:", errText);
+        // CRITIQUE : On renvoie l'erreur au client pour que vous sachiez que ça a planté
+        throw new Error(`Erreur Resend: ${errText}`);
     }
 
-    // 5. Enregistrer le message en base (Historique)
+    // 5. Enregistrer le message en base (Historique) SEULEMENT SI l'email est parti
     await supabase.from('support_messages').insert({
       ticket_id: ticketId,
       sender_id: user.id,
-      sender_email: 'support@sivara.ca',
+      sender_email: RESEND_FROM_EMAIL,
       body: formattedBody,
       is_staff_reply: true
     });
