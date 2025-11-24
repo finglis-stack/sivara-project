@@ -2,15 +2,28 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Calendar, Clock, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, ThumbsUp, ThumbsDown, Lock } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import UserMenu from '@/components/UserMenu';
 
 const HelpArticle = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [article, setArticle] = useState<any>(null);
   const [category, setCategory] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isStaff, setIsStaff] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+        supabase.from('profiles').select('is_staff').eq('id', user.id).single()
+        .then(({ data }) => {
+            if (data?.is_staff) setIsStaff(true);
+        });
+    }
+  }, [user]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -43,13 +56,48 @@ const HelpArticle = () => {
     fetchData();
   }, [slug, navigate]);
 
+  const handleLogin = () => {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocal) window.location.href = '/?app=account&path=/profile';
+    else window.location.href = 'https://account.sivara.ca/profile';
+  };
+
   if (isLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
 
   return (
     <div className="min-h-screen bg-white font-sans pb-20">
+      {/* NAVBAR GLOBAL */}
+      <nav className="sticky top-0 w-full z-50 border-b border-gray-100 bg-white/80 backdrop-blur-md">
+        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
+            <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-sm">
+              <span className="text-white font-bold text-lg">H</span>
+            </div>
+            <span className="font-bold text-lg tracking-tight text-gray-900">Sivara Help</span>
+          </div>
+          <div className="flex items-center gap-4">
+            {isStaff && (
+              <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="text-gray-600 hover:bg-gray-100">
+                <Lock className="w-4 h-4 mr-2" /> Admin
+              </Button>
+            )}
+            {user ? (
+              <UserMenu />
+            ) : (
+              <Button 
+                onClick={handleLogin}
+                className="bg-gray-900 text-white hover:bg-gray-800 rounded-full px-6 font-medium"
+              >
+                Connexion
+              </Button>
+            )}
+          </div>
+        </div>
+      </nav>
+
       <div className="max-w-3xl mx-auto px-6 py-8">
         {/* Breadcrumb nav */}
-        <div className="flex items-center text-sm text-gray-500 mb-8 gap-2">
+        <div className="flex items-center text-sm text-gray-500 mb-8 gap-2 flex-wrap">
             <Button variant="link" className="p-0 h-auto text-gray-500 hover:text-indigo-600" onClick={() => navigate('/')}>Aide</Button>
             <span>/</span>
             <Button variant="link" className="p-0 h-auto text-gray-500 hover:text-indigo-600" onClick={() => navigate(`/category/${category?.slug}`)}>{category?.title}</Button>
@@ -57,7 +105,7 @@ const HelpArticle = () => {
             <span className="text-gray-900 font-medium truncate max-w-[200px]">{article?.title}</span>
         </div>
 
-        <h1 className="text-4xl font-bold text-gray-900 mb-6">{article?.title}</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-6 leading-tight">{article?.title}</h1>
         
         <div className="flex items-center gap-4 text-sm text-gray-500 mb-8 pb-8 border-b border-gray-100">
             <div className="flex items-center gap-1">
@@ -70,10 +118,10 @@ const HelpArticle = () => {
         </div>
 
         {/* Content */}
-        <div className="prose prose-indigo max-w-none prose-lg">
+        <div className="prose prose-indigo max-w-none prose-lg text-gray-700">
             {/* Rendu simple du contenu (saut de lignes) */}
             {article?.content.split('\n').map((line: string, i: number) => (
-                <p key={i} className="mb-4">{line}</p>
+                <p key={i} className="mb-4 leading-relaxed">{line}</p>
             ))}
         </div>
 
