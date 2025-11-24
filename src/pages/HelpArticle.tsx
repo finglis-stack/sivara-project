@@ -6,6 +6,7 @@ import { ArrowLeft, Calendar, Clock, ThumbsUp, ThumbsDown, Lock } from 'lucide-r
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from '@/components/UserMenu';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const HelpArticle = () => {
   const { slug } = useParams();
@@ -13,6 +14,7 @@ const HelpArticle = () => {
   const { user } = useAuth();
   const [article, setArticle] = useState<any>(null);
   const [category, setCategory] = useState<any>(null);
+  const [author, setAuthor] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStaff, setIsStaff] = useState(false);
 
@@ -30,9 +32,19 @@ const HelpArticle = () => {
       if (!slug) return;
       
       try {
+        // On récupère l'article, la catégorie ET le profil de l'auteur via la foreign key author_id
         const { data, error } = await supabase
           .from('help_articles')
-          .select('*, help_categories(*)')
+          .select(`
+            *, 
+            help_categories(*),
+            profiles:author_id (
+              first_name,
+              last_name,
+              avatar_url,
+              job_title
+            )
+          `)
           .eq('slug', slug)
           .single();
         
@@ -43,6 +55,7 @@ const HelpArticle = () => {
         
         setArticle(data);
         setCategory(data.help_categories);
+        setAuthor(data.profiles); // Supabase map la relation sur le nom de la table
         
         // Incrémenter vue
         await supabase.rpc('increment_view_count', { article_id: data.id });
@@ -60,6 +73,13 @@ const HelpArticle = () => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     if (isLocal) window.location.href = '/?app=account&path=/profile';
     else window.location.href = 'https://account.sivara.ca/profile';
+  };
+
+  const getAuthorName = () => {
+    if (!author) return 'Staff Sivara';
+    const first = author.first_name || '';
+    const lastInitial = author.last_name ? `${author.last_name[0]}.` : '';
+    return `${first} ${lastInitial}`.trim() || 'Staff Sivara';
   };
 
   if (isLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
@@ -107,32 +127,53 @@ const HelpArticle = () => {
 
         <h1 className="text-4xl font-bold text-gray-900 mb-6 leading-tight">{article?.title}</h1>
         
-        <div className="flex items-center gap-4 text-sm text-gray-500 mb-8 pb-8 border-b border-gray-100">
-            <div className="flex items-center gap-1">
-                <Calendar className="h-4 w-4" />
-                <span>Mis à jour le {new Date(article?.updated_at).toLocaleDateString()}</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 py-6 mb-8 border-y border-gray-100">
+            {/* Author Section */}
+            <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10 border border-gray-200">
+                    {author?.avatar_url && <AvatarImage src={author.avatar_url} />}
+                    <AvatarFallback className="bg-indigo-50 text-indigo-600 text-xs">
+                        {author?.first_name?.[0] || 'S'}
+                    </AvatarFallback>
+                </Avatar>
+                <div>
+                    <p className="text-sm font-semibold text-gray-900 leading-none mb-1">
+                        {getAuthorName()}
+                    </p>
+                    <p className="text-xs text-gray-500 font-medium">
+                        {author?.job_title || 'Support Specialist'}
+                    </p>
+                </div>
             </div>
-            <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs uppercase font-bold tracking-wide">
-                {article?.language === 'en' ? 'English' : 'Français'}
+
+            {/* Meta Section */}
+            <div className="flex items-center gap-4 text-sm text-gray-500">
+                <div className="flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span>{new Date(article?.updated_at).toLocaleDateString()}</span>
+                </div>
+                <div className="h-4 w-px bg-gray-200"></div>
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-xs uppercase font-bold tracking-wide">
+                    {article?.language === 'en' ? 'English' : 'Français'}
+                </div>
             </div>
         </div>
 
         {/* Content */}
         <div className="prose prose-indigo max-w-none prose-lg text-gray-700">
-            {/* Rendu simple du contenu (saut de lignes) */}
             {article?.content.split('\n').map((line: string, i: number) => (
                 <p key={i} className="mb-4 leading-relaxed">{line}</p>
             ))}
         </div>
 
-        {/* Feedback (Visuel uniquement pour l'instant) */}
+        {/* Feedback */}
         <div className="mt-16 pt-8 border-t border-gray-100 text-center">
             <p className="text-gray-600 mb-4 font-medium">Cet article vous a-t-il été utile ?</p>
             <div className="flex justify-center gap-4">
-                <Button variant="outline" className="gap-2 hover:text-green-600 hover:border-green-200 hover:bg-green-50">
+                <Button variant="outline" className="gap-2 hover:text-green-600 hover:border-green-200 hover:bg-green-50 transition-all">
                     <ThumbsUp className="h-4 w-4" /> Oui
                 </Button>
-                <Button variant="outline" className="gap-2 hover:text-red-600 hover:border-red-200 hover:bg-red-50">
+                <Button variant="outline" className="gap-2 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-all">
                     <ThumbsDown className="h-4 w-4" /> Non
                 </Button>
             </div>
