@@ -41,44 +41,51 @@ const sendRejectionEmail = async (email: string) => {
 serve(async (req) => {
   try {
     const payload = await req.json();
-    // Le payload initial contient l'ID
-    const initialData = payload.data || payload;
-    const emailId = initialData.id;
-
-    console.log(`[Inbound] Webhook reçu pour ID: ${emailId}. Attente de 2s...`);
     
-    // Pause de 2 secondes pour laisser le temps à Resend de traiter
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Extraction robuste de l'ID (Resend utilise parfois 'id' et parfois 'email_id' selon le type d'événement)
+    const dataObj = payload.data || payload;
+    const emailId = dataObj.id || dataObj.email_id || payload.id;
 
-    let emailData = initialData;
-
-    // Si on a un ID, on va chercher le contenu complet via l'API
-    if (emailId) {
-        try {
-            const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${RESEND_API_KEY}`
-                }
-            });
-            
-            if (res.ok) {
-                emailData = await res.json();
-                console.log(`[Inbound] Contenu récupéré via API pour ${emailId}`);
-            } else {
-                console.error(`[Inbound] Echec API Resend: ${res.status}`);
-            }
-        } catch (e) {
-            console.error(`[Inbound] Erreur fetch API: ${e.message}`);
-        }
+    console.log(`[Inbound] Webhook reçu. ID extrait: ${emailId}`);
+    
+    if (!emailId) {
+        console.error("[Inbound] ID MANQUANT. Payload dump:", JSON.stringify(payload));
+        return new Response("No email ID found in webhook", { status: 200 });
     }
 
-    const from = emailData.from?.email || emailData.from; // L'API renvoie parfois un objet { email: "..." }
+    // Pause pour laisser Resend traiter l'email (ingestion)
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Récupération du contenu complet via API
+    let emailData = dataObj;
+    
+    try {
+        console.log(`[Inbound] Fetching content for ${emailId}...`);
+        const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${RESEND_API_KEY}`
+            }
+        });
+        
+        if (res.ok) {
+            emailData = await res.json();
+            console.log(`[Inbound] Contenu récupéré avec succès.`);
+        } else {
+            const errText = await res.text();
+            console.error(`[Inbound] Echec API Resend (${res.status}): ${errText}`);
+        }
+    } catch (e) {
+        console.error(`[Inbound] Erreur fetch API: ${e.message}`);
+    }
+
+    // Extraction des champs
+    const from = emailData.from?.email || emailData.from || "inconnu@unknown.com";
     let subject = emailData.subject || '(Sans sujet)';
     let html = emailData.html;
     let text = emailData.text;
 
-    // Logique de contenu (inchangée mais utilisant les données fraîches)
+    // Logique de contenu
     let bodyContent = html;
     if (!bodyContent || bodyContent.trim() === '') {
         bodyContent = text ? text.replace(/\n/g, '<br/>') : '';
@@ -94,16 +101,16 @@ serve(async (req) => {
         bodyContent = '<p><em>(Contenu vide ou illisible)</em></p>';
     }
 
-    // Nettoyage email
+    // Nettoyage email expediteur
     let email = from;
-    // Si c'est une chaine "Nom <email>", on extrait
     if (typeof from === 'string') {
-        email = from.match(/<(.+)>/)?.[1] || from;
+        // Extrait l'email si format "Nom <email@domaine.com>"
+        const match = from.match(/<(.+)>/);
+        if (match) email = match[1];
     }
+    email = email.trim().toLowerCase();
 
-    console.log(`[Inbound] Traitement pour: ${email}`);
-
-    if (!email) return new Response("No sender found", { status: 200 });
+    console.log(`[Inbound] Traitement pour l'expéditeur: ${email}`);
 
     const supabase = createClient(
       // @ts-ignore
@@ -113,26 +120,29 @@ serve(async (req) => {
     );
 
     // 1. VÉRIFICATION CLIENT
-    const { data: users } = await supabase
+    // On cherche dans profiles (email ou contact_email)
+    const { data: profile } = await supabase
         .from('profiles')
         .select('id')
         .or(`email.eq.${email},contact_email.eq.${email}`)
         .maybeSingle();
 
-    let userId = users?.id;
+    let userId = profile?.id;
     
+    // Fallback: Recherche dans Auth Users (admin)
     if (!userId) {
         const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
-        const authUser = authUsers.find((u: any) => u.email?.toLowerCase() === email.toLowerCase().trim());
+        const authUser = authUsers.find((u: any) => u.email?.toLowerCase() === email);
         if (authUser) userId = authUser.id;
     }
 
     if (!userId) {
       await sendRejectionEmail(email);
-      return new Response(JSON.stringify({ error: 'User not found' }), { status: 200 });
+      return new Response(JSON.stringify({ error: 'User not found, rejection sent' }), { status: 200 });
     }
 
-    // 2. LOGIQUE TICKET
+    // 2. LOGIQUE TICKET (Thread)
+    // On cherche le dernier ticket ouvert de cet utilisateur
     const { data: existingTicket } = await supabase
       .from('support_tickets')
       .select('id')
@@ -145,12 +155,14 @@ serve(async (req) => {
     let ticketId = existingTicket?.id;
 
     if (ticketId) {
+      // Mise à jour ticket existant
       await supabase.from('support_tickets').update({
         last_message_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        status: 'open'
+        status: 'open' // On réouvre si c'était suspendu
       }).eq('id', ticketId);
     } else {
+      // Nouveau ticket
       const { data: newTicket, error: createError } = await supabase
         .from('support_tickets')
         .insert({
@@ -168,13 +180,15 @@ serve(async (req) => {
     }
 
     // 3. INSERTION MESSAGE
-    await supabase.from('support_messages').insert({
+    const { error: msgError } = await supabase.from('support_messages').insert({
       ticket_id: ticketId,
       sender_id: userId,
       sender_email: email,
       body: bodyContent,
       is_staff_reply: false
     });
+
+    if (msgError) throw msgError;
 
     return new Response(JSON.stringify({ success: true, ticketId }), { status: 200 });
 
