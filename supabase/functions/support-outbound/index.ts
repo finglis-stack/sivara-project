@@ -34,7 +34,7 @@ serve(async (req) => {
     // Récupérer le profil du staff pour la signature
     const { data: staffProfile } = await supabase
         .from('profiles')
-        .select('is_staff, first_name, last_name, job_title')
+        .select('is_staff, first_name, last_name, job_title, avatar_url')
         .eq('id', user.id)
         .single();
 
@@ -53,6 +53,11 @@ serve(async (req) => {
     
     // Conversion des sauts de ligne en <br> pour l'HTML
     const formattedBody = messageBody.replace(/\n/g, '<br/>');
+
+    // Logique Avatar : Image ou Initiale
+    const avatarHtml = staffProfile.avatar_url 
+      ? `<img src="${staffProfile.avatar_url}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; float: left; margin-right: 15px; border: 1px solid #e4e4e7;" alt="${staffName}" />`
+      : `<div class="staff-avatar">${staffProfile.first_name?.[0] || 'S'}</div>`;
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -92,7 +97,7 @@ serve(async (req) => {
               
               <div class="signature">
                 <div style="overflow: hidden;">
-                   <div class="staff-avatar">${staffProfile.first_name?.[0] || 'S'}</div>
+                   ${avatarHtml}
                    <div style="padding-top: 2px;">
                       <span class="staff-name">${staffName}</span>
                       <span class="staff-role">${staffRole} • Sivara Canada</span>
