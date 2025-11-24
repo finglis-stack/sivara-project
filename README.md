@@ -58,6 +58,15 @@ Un format de fichier conteneur propriétaire conçu pour la migration de donnée
         4. Insertion d'un **nouveau** document en base de données.
     *   **Résilience :** Ce processus permet de restaurer des données même si l'enregistrement original a été supprimé des serveurs (Deep Backup), car le fichier contient tout le nécessaire pour reconstruire l'information de manière autonome et sécurisée.
 
+### 6. Centre d'Assistance Unifié - `help.sivara.ca`
+Une plateforme de support hybride combinant base de connaissances publique et système de billetterie sécurisé.
+
+*   **CMS Headless :** Gestion dynamique des articles et catégories d'aide. Les contenus sont servis via une API haute performance avec mise en cache.
+*   **Ticketing System Omnicanal :**
+    *   **Inbound Email Processing :** Les emails envoyés au support sont interceptés par des Webhooks Edge (Resend), analysés et convertis automatiquement en tickets structurés.
+    *   **Outbound Transactionnel :** Les réponses des agents sont envoyées via une infrastructure SMTP réputée, avec injection de modèles HTML responsifs et signatures dynamiques.
+*   **Interface Agent Temps Réel :** Dashboard administrateur permettant la gestion des tickets, la rédaction de réponses et le suivi des métriques clients, le tout synchronisé via WebSockets.
+
 ---
 
 ## 🛡️ Conformité Légale et Loi 25 (Québec)
