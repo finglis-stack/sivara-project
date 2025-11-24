@@ -2,23 +2,20 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+// @ts-ignore: Deno types
+import { Resend } from 'npm:resend@3.2.0';
 
 // @ts-ignore
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+const resend = new Resend(RESEND_API_KEY);
 
 const sendRejectionEmail = async (email: string) => {
   console.log(`[Support] Envoi rejet à ${email}`);
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-    },
-    body: JSON.stringify({
-      from: 'Sivara Support <support@sivara.ca>',
-      to: [email],
-      subject: 'Action requise : Compte client nécessaire',
-      html: `
+  await resend.emails.send({
+    from: 'Sivara Support <support@sivara.ca>',
+    to: [email],
+    subject: 'Action requise : Compte client nécessaire',
+    html: `
         <div style="font-family: sans-serif; color: #111; padding: 20px;">
           <h2 style="margin-top:0;">Bonjour,</h2>
           <p>Nous avons bien reçu votre message.</p>
@@ -34,7 +31,6 @@ const sendRejectionEmail = async (email: string) => {
           <p style="color: #666; font-size: 12px;">Sivara Canada - Automated Security System</p>
         </div>
       `
-    }),
   });
 };
 
@@ -42,48 +38,40 @@ serve(async (req) => {
   try {
     const payload = await req.json();
     
-    // Extraction robuste de l'ID (Resend utilise parfois 'id' et parfois 'email_id' selon le type d'événement)
+    // Extraction robuste de l'ID (supporte structure évènement et structure directe)
     const dataObj = payload.data || payload;
     const emailId = dataObj.id || dataObj.email_id || payload.id;
 
     console.log(`[Inbound] Webhook reçu. ID extrait: ${emailId}`);
     
     if (!emailId) {
-        console.error("[Inbound] ID MANQUANT. Payload dump:", JSON.stringify(payload));
-        return new Response("No email ID found in webhook", { status: 200 });
+        console.error("[Inbound] ID MANQUANT. Payload dump:", JSON.stringify(payload).substring(0, 200));
+        return new Response("No email ID found in webhook", { status: 200 }); // 200 to stop retries on bad payloads
     }
 
-    // Pause pour laisser Resend traiter l'email (ingestion)
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Pause pour laisser Resend traiter l'email (ingestion & disponibilité API)
+    console.log(`[Inbound] Attente de 3s pour propagation API...`);
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Récupération du contenu complet via API
-    let emailData = dataObj;
-    
-    try {
-        console.log(`[Inbound] Fetching content for ${emailId}...`);
-        const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${RESEND_API_KEY}`
-            }
-        });
-        
-        if (res.ok) {
-            emailData = await res.json();
-            console.log(`[Inbound] Contenu récupéré avec succès.`);
-        } else {
-            const errText = await res.text();
-            console.error(`[Inbound] Echec API Resend (${res.status}): ${errText}`);
-        }
-    } catch (e) {
-        console.error(`[Inbound] Erreur fetch API: ${e.message}`);
+    // Récupération du contenu complet via API SDK
+    // Note: On utilise le SDK qui gère mieux les endpoints que le fetch manuel
+    const { data: emailData, error: fetchError } = await resend.emails.get(emailId);
+
+    if (fetchError || !emailData) {
+        console.error("[Inbound] Echec récupération contenu:", fetchError);
+        // Fallback sur les données du webhook si l'API échoue (mieux que rien)
+        console.log("[Inbound] Utilisation des données du webhook en fallback (potentiellement incomplètes)");
+    } else {
+        console.log(`[Inbound] Contenu récupéré avec succès via API.`);
     }
 
-    // Extraction des champs
-    const from = emailData.from?.email || emailData.from || "inconnu@unknown.com";
-    let subject = emailData.subject || '(Sans sujet)';
-    let html = emailData.html;
-    let text = emailData.text;
+    // Fusionner les données (priorité à l'API, sinon webhook)
+    const finalData = emailData || dataObj;
+
+    const from = finalData.from?.email || finalData.from || "inconnu@unknown.com";
+    let subject = finalData.subject || '(Sans sujet)';
+    let html = finalData.html;
+    let text = finalData.text;
 
     // Logique de contenu
     let bodyContent = html;
@@ -91,14 +79,14 @@ serve(async (req) => {
         bodyContent = text ? text.replace(/\n/g, '<br/>') : '';
     }
 
+    if (!bodyContent || bodyContent.trim() === '') {
+        bodyContent = '<p><em>(Contenu vide ou illisible)</em></p>';
+    }
+
     if (subject.length > 150) {
         const oldSubject = subject;
         subject = oldSubject.substring(0, 50) + '...';
         bodyContent = `<p><strong>Sujet original :</strong> ${oldSubject}</p><hr/>${bodyContent}`;
-    }
-
-    if (!bodyContent || bodyContent.trim() === '') {
-        bodyContent = '<p><em>(Contenu vide ou illisible)</em></p>';
     }
 
     // Nettoyage email expediteur
@@ -120,7 +108,6 @@ serve(async (req) => {
     );
 
     // 1. VÉRIFICATION CLIENT
-    // On cherche dans profiles (email ou contact_email)
     const { data: profile } = await supabase
         .from('profiles')
         .select('id')
@@ -190,6 +177,7 @@ serve(async (req) => {
 
     if (msgError) throw msgError;
 
+    console.log(`[Inbound] Succès. Ticket: ${ticketId}`);
     return new Response(JSON.stringify({ success: true, ticketId }), { status: 200 });
 
   } catch (error) {
