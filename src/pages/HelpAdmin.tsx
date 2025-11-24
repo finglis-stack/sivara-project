@@ -71,6 +71,8 @@ interface Ticket {
 
 interface Message {
   id: string;
+  ticket_id: string;
+  sender_id: string;
   body: string;
   created_at: string;
   is_staff_reply: boolean;
@@ -199,6 +201,67 @@ const HelpAdmin = () => {
     else fetchCategories();
   }, [activeTab, isStaff]);
 
+  // REALTIME SUBSCRIPTION
+  useEffect(() => {
+    if (!isStaff || activeTab !== 'support') return;
+
+    const channel = supabase.channel('admin-support')
+        .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'support_tickets' }, 
+            async (payload) => {
+                // Recharger la liste pour avoir les profils à jour (JOIN)
+                // C'est plus simple que de gérer le merge manuel du profil
+                const { data } = await supabase
+                    .from('support_tickets')
+                    .select(`*, profiles:user_id (id, first_name, last_name, avatar_url, phone_country_code, phone_number, is_pro, account_type)`)
+                    .order('last_message_at', { ascending: false });
+                
+                if (data) setTickets(data as unknown as Ticket[]);
+                
+                // Mettre à jour le ticket sélectionné si c'est lui qui a changé
+                if (payload.new && (payload.new as any).id === selectedTicketId) {
+                    // On garde les profils existants pour éviter le clignotement
+                    setSelectedTicket(prev => prev ? { ...prev, ...payload.new as any } : null);
+                }
+            }
+        )
+        .on('postgres_changes', 
+            { event: 'INSERT', schema: 'public', table: 'support_messages' }, 
+            async (payload) => {
+                const newMessage = payload.new as Message;
+                
+                // Si le message concerne le ticket ouvert
+                if (newMessage.ticket_id === selectedTicketId) {
+                    // On doit récupérer le profil de l'envoyeur pour l'avatar
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('first_name, avatar_url')
+                        .eq('id', newMessage.sender_id)
+                        .single();
+                    
+                    const messageWithProfile = {
+                        ...newMessage,
+                        profiles: profile
+                    };
+
+                    setMessages(prev => {
+                        // Éviter les doublons si on a fait un ajout optimiste (via ID temporaire)
+                        const exists = prev.some(m => m.id === newMessage.id);
+                        if (exists) return prev;
+                        return [...prev, messageWithProfile as any];
+                    });
+                    
+                    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+                }
+            }
+        )
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+  }, [isStaff, activeTab, selectedTicketId]); // Dépendance selectedTicketId importante pour le filtrage message
+
   // ================= SUPPORT LOGIC =================
 
   const fetchTickets = async () => {
@@ -242,8 +305,7 @@ const HelpAdmin = () => {
   const updateTicketStatus = async (status: 'open' | 'closed' | 'suspended') => {
       if (!selectedTicketId) return;
       await supabase.from('support_tickets').update({ status }).eq('id', selectedTicketId);
-      setTickets(prev => prev.map(t => t.id === selectedTicketId ? { ...t, status } : t));
-      if (selectedTicket) setSelectedTicket({ ...selectedTicket, status });
+      // Le realtime mettra à jour l'UI automatiquement
       showSuccess(`Ticket ${status}`);
   };
 
@@ -254,31 +316,13 @@ const HelpAdmin = () => {
       setIsSending(true);
       
       try {
-          // Optimistic
-          const tempId = 'temp-' + Date.now();
-          const newMessage: Message = {
-              id: tempId,
-              body: textToSend.replace(/\n/g, '<br/>'),
-              created_at: new Date().toISOString(),
-              is_staff_reply: true,
-              sender_email: 'support@sivara.ca',
-              profiles: { first_name: myProfile?.first_name || 'Staff', avatar_url: myProfile?.avatar_url || null }
-          };
-          setMessages(prev => [...prev, newMessage]);
-          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-
+          // Suppression de l'ajout optimiste ici car le Realtime va le gérer
+          // Cela évite les conflits d'ID et doublons si le serveur répond vite
+          
           await supabase.functions.invoke('support-outbound', {
               body: { ticketId: selectedTicketId, messageBody: textToSend, status: 'open' }
           });
           
-          // Refresh
-          const { data } = await supabase.from('support_messages').select(`*, profiles:sender_id(first_name, avatar_url)`).eq('ticket_id', selectedTicketId).order('created_at', { ascending: true });
-          setMessages(data || []);
-          
-          if (selectedTicket?.status !== 'open') {
-             setTickets(prev => prev.map(t => t.id === selectedTicketId ? { ...t, status: 'open' } : t));
-             setSelectedTicket(prev => prev ? { ...prev, status: 'open' } : null);
-          }
           showSuccess("Envoyé");
       } catch (e) { showError("Erreur d'envoi"); } 
       finally { setIsSending(false); }

@@ -41,43 +41,69 @@ const sendRejectionEmail = async (email: string) => {
 serve(async (req) => {
   try {
     const payload = await req.json();
-    
-    // Extraction des données (supporte format direct ou wrapper Resend)
-    // On cherche partout pour être sûr de ne rien rater
-    const data = payload.data || payload;
-    
-    const from = data.from;
-    let subject = data.subject || '(Sans sujet)';
-    let html = data.html;
-    let text = data.text;
+    // Le payload initial contient l'ID
+    const initialData = payload.data || payload;
+    const emailId = initialData.id;
 
-    // CORRECTION CONTENU VIDE
-    // Si html est vide, on prend text. Si text est vide, on force un contenu.
+    console.log(`[Inbound] Webhook reçu pour ID: ${emailId}. Attente de 2s...`);
+    
+    // Pause de 2 secondes pour laisser le temps à Resend de traiter
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    let emailData = initialData;
+
+    // Si on a un ID, on va chercher le contenu complet via l'API
+    if (emailId) {
+        try {
+            const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${RESEND_API_KEY}`
+                }
+            });
+            
+            if (res.ok) {
+                emailData = await res.json();
+                console.log(`[Inbound] Contenu récupéré via API pour ${emailId}`);
+            } else {
+                console.error(`[Inbound] Echec API Resend: ${res.status}`);
+            }
+        } catch (e) {
+            console.error(`[Inbound] Erreur fetch API: ${e.message}`);
+        }
+    }
+
+    const from = emailData.from?.email || emailData.from; // L'API renvoie parfois un objet { email: "..." }
+    let subject = emailData.subject || '(Sans sujet)';
+    let html = emailData.html;
+    let text = emailData.text;
+
+    // Logique de contenu (inchangée mais utilisant les données fraîches)
     let bodyContent = html;
     if (!bodyContent || bodyContent.trim() === '') {
         bodyContent = text ? text.replace(/\n/g, '<br/>') : '';
     }
 
-    // CORRECTION SUJET TROP LONG (Le corps est dans le sujet)
-    // Si le sujet fait plus de 150 caractères, c'est probablement le message entier
     if (subject.length > 150) {
         const oldSubject = subject;
-        subject = oldSubject.substring(0, 50) + '...'; // On tronque pour le titre
-        // On remet tout le contenu dans le corps
+        subject = oldSubject.substring(0, 50) + '...';
         bodyContent = `<p><strong>Sujet original :</strong> ${oldSubject}</p><hr/>${bodyContent}`;
     }
 
-    // Sécurité finale : si vraiment vide
     if (!bodyContent || bodyContent.trim() === '') {
-        bodyContent = '<p><em>(Le contenu du message n\'a pas pu être extrait automatiquement. Voir les headers techniques)</em></p>';
+        bodyContent = '<p><em>(Contenu vide ou illisible)</em></p>';
     }
 
-    if (!from) return new Response("No sender found", { status: 200 });
+    // Nettoyage email
+    let email = from;
+    // Si c'est une chaine "Nom <email>", on extrait
+    if (typeof from === 'string') {
+        email = from.match(/<(.+)>/)?.[1] || from;
+    }
 
-    // Nettoyage email "Nom <email@domain.com>" -> "email@domain.com"
-    const email = from.match(/<(.+)>/)?.[1] || from;
-    
-    console.log(`[Inbound] Email entrant: ${email}`);
+    console.log(`[Inbound] Traitement pour: ${email}`);
+
+    if (!email) return new Response("No sender found", { status: 200 });
 
     const supabase = createClient(
       // @ts-ignore
@@ -86,14 +112,13 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. VÉRIFICATION CLIENT STRICTE
-    const { data: users, error: userError } = await supabase
+    // 1. VÉRIFICATION CLIENT
+    const { data: users } = await supabase
         .from('profiles')
         .select('id')
-        .or(`email.eq.${email},contact_email.eq.${email}`) // Au cas où on ajoute un champ contact_email plus tard
+        .or(`email.eq.${email},contact_email.eq.${email}`)
         .maybeSingle();
 
-    // Fallback: Si pas trouvé dans profiles, chercher dans auth.users via admin API
     let userId = users?.id;
     
     if (!userId) {
@@ -108,7 +133,6 @@ serve(async (req) => {
     }
 
     // 2. LOGIQUE TICKET
-    // On cherche un ticket qui n'est PAS fermé (open ou suspended)
     const { data: existingTicket } = await supabase
       .from('support_tickets')
       .select('id')
@@ -121,16 +145,12 @@ serve(async (req) => {
     let ticketId = existingTicket?.id;
 
     if (ticketId) {
-      // UPDATE TICKET EXISTANT
-      console.log(`[Inbound] Ajout au ticket existant: ${ticketId}`);
       await supabase.from('support_tickets').update({
         last_message_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        status: 'open' // On réouvre si c'était "suspended"
+        status: 'open'
       }).eq('id', ticketId);
     } else {
-      // NOUVEAU TICKET
-      console.log(`[Inbound] Création nouveau ticket pour ${userId}`);
       const { data: newTicket, error: createError } = await supabase
         .from('support_tickets')
         .insert({
