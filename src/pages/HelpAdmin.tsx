@@ -14,7 +14,7 @@ import {
   Folder, FileText, Plus, Edit2, Trash2, 
   Eye, Layout, ChevronRight, Loader2,
   MoreVertical, Phone, Mail, User, HardDrive,
-  ShieldCheck, AlertCircle, PauseCircle, CheckCircle2, Smartphone
+  ShieldCheck, AlertCircle, PauseCircle, CheckCircle2, Smartphone, GripVertical
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -25,6 +25,26 @@ import {
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import { Card } from '@/components/ui/card';
+
+// DND Imports
+import {
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // --- TYPES ---
 interface Profile {
@@ -66,9 +86,53 @@ interface CustomerStats {
   folderCount: number;
 }
 
-// ... (Keep existing Category/Article types)
-interface Category { id: string; title: string; description: string; slug: string; order: number; }
-interface Article { id: string; title: string; slug: string; content: string; is_published: boolean; view_count: number; category_id: string; }
+interface Category { 
+    id: string; 
+    title: string; 
+    description: string; 
+    slug: string; 
+    order: number; 
+}
+
+interface Article { 
+    id: string; 
+    title: string; 
+    slug: string; 
+    content: string; 
+    is_published: boolean; 
+    view_count: number; 
+    category_id: string;
+    order: number;
+}
+
+// --- DND COMPONENT ---
+const SortableItem = ({ id, children, className }: { id: string, children: React.ReactNode, className?: string }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative' as 'relative',
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={className}>
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-2 text-gray-400 hover:text-gray-600">
+        <GripVertical className="h-4 w-4" />
+      </div>
+      {children}
+    </div>
+  );
+};
 
 const HelpAdmin = () => {
   const navigate = useNavigate();
@@ -77,10 +141,10 @@ const HelpAdmin = () => {
   const [isStaff, setIsStaff] = useState(false);
   const [isCheckingRole, setIsCheckingRole] = useState(true);
   
-  // Staff Info (Moi)
+  // Staff Info
   const [myProfile, setMyProfile] = useState<Profile | null>(null);
 
-  // Support State
+  // --- SUPPORT STATE ---
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -91,10 +155,27 @@ const HelpAdmin = () => {
   const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Content State (Simplifié pour cette vue)
+  // --- CONTENT STATE ---
   const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  
+  // Content Dialogs & Forms
+  const [showCatDialog, setShowCatDialog] = useState(false);
+  const [showArticleDialog, setShowArticleDialog] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [catForm, setCatForm] = useState({ title: '', description: '', slug: '', order: 0 });
+  const [artForm, setArtForm] = useState<Partial<Article>>({ title: '', slug: '', content: '', is_published: false });
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
 
-  // VERIFICATION STAFF & LOAD MY PROFILE
+  // DND Sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // VERIFICATION STAFF
   useEffect(() => {
     const checkStaff = async () => {
         if (!user) return;
@@ -103,7 +184,7 @@ const HelpAdmin = () => {
             if (error || !data?.is_staff) { navigate('/'); } 
             else { 
                 setIsStaff(true); 
-                setMyProfile(data as any); // Store my own profile for optimistic UI
+                setMyProfile(data as any); 
             }
         } catch (e) { navigate('/'); } 
         finally { setIsCheckingRole(false); }
@@ -115,9 +196,11 @@ const HelpAdmin = () => {
   useEffect(() => {
     if (!isStaff) return;
     if (activeTab === 'support') fetchTickets();
+    else fetchCategories();
   }, [activeTab, isStaff]);
 
-  // --- SUPPORT LOGIC ---
+  // ================= SUPPORT LOGIC =================
+
   const fetchTickets = async () => {
     setIsLoadingTickets(true);
     const { data, error } = await supabase
@@ -153,7 +236,6 @@ const HelpAdmin = () => {
       setMessages(data || []);
       
       if (ticket.user_id) fetchCustomerStats(ticket.user_id);
-      
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   };
 
@@ -162,17 +244,17 @@ const HelpAdmin = () => {
       await supabase.from('support_tickets').update({ status }).eq('id', selectedTicketId);
       setTickets(prev => prev.map(t => t.id === selectedTicketId ? { ...t, status } : t));
       if (selectedTicket) setSelectedTicket({ ...selectedTicket, status });
-      showSuccess(`Ticket ${status === 'suspended' ? 'suspendu' : status === 'open' ? 'réouvert' : 'fermé'}`);
+      showSuccess(`Ticket ${status}`);
   };
 
   const sendReply = async () => {
       if (!selectedTicketId || !replyText.trim()) return;
       const textToSend = replyText;
-      setReplyText(''); // Clear immédiat
+      setReplyText(''); 
       setIsSending(true);
       
       try {
-          // Optimistic Update: On ajoute le message tout de suite
+          // Optimistic
           const tempId = 'temp-' + Date.now();
           const newMessage: Message = {
               id: tempId,
@@ -180,34 +262,170 @@ const HelpAdmin = () => {
               created_at: new Date().toISOString(),
               is_staff_reply: true,
               sender_email: 'support@sivara.ca',
-              profiles: {
-                  first_name: myProfile?.first_name || 'Staff',
-                  avatar_url: myProfile?.avatar_url || null
-              }
+              profiles: { first_name: myProfile?.first_name || 'Staff', avatar_url: myProfile?.avatar_url || null }
           };
           setMessages(prev => [...prev, newMessage]);
           setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
-          // Envoi réel
           await supabase.functions.invoke('support-outbound', {
               body: { ticketId: selectedTicketId, messageBody: textToSend, status: 'open' }
           });
           
-          // Refresh propre après envoi
-          const { data } = await supabase.from('support_messages')
-            .select(`*, profiles:sender_id(first_name, avatar_url)`)
-            .eq('ticket_id', selectedTicketId)
-            .order('created_at', { ascending: true });
+          // Refresh
+          const { data } = await supabase.from('support_messages').select(`*, profiles:sender_id(first_name, avatar_url)`).eq('ticket_id', selectedTicketId).order('created_at', { ascending: true });
           setMessages(data || []);
           
           if (selectedTicket?.status !== 'open') {
              setTickets(prev => prev.map(t => t.id === selectedTicketId ? { ...t, status: 'open' } : t));
              setSelectedTicket(prev => prev ? { ...prev, status: 'open' } : null);
           }
-          
           showSuccess("Envoyé");
       } catch (e) { showError("Erreur d'envoi"); } 
       finally { setIsSending(false); }
+  };
+
+  // ================= CONTENT LOGIC =================
+
+  const fetchCategories = async () => {
+    setIsLoadingContent(true);
+    const { data } = await supabase.from('help_categories').select('*').order('order');
+    setCategories(data || []);
+    
+    // Si on a des catégories et aucune sélectionnée, on prend la première
+    if (data && data.length > 0 && !selectedCategory) {
+        handleSelectCategory(data[0]);
+    } else if (selectedCategory) {
+        // Rafraîchir la catégorie sélectionnée
+        const updated = data?.find(c => c.id === selectedCategory.id);
+        if (updated) handleSelectCategory(updated);
+    }
+    setIsLoadingContent(false);
+  };
+
+  const handleSelectCategory = async (cat: Category) => {
+    setSelectedCategory(cat);
+    const { data } = await supabase.from('help_articles').select('*').eq('category_id', cat.id).order('order');
+    setArticles(data || []);
+  };
+
+  // DND: Reorder Categories
+  const handleDragEndCategories = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const oldIndex = categories.findIndex((c) => c.id === active.id);
+      const newIndex = categories.findIndex((c) => c.id === over?.id);
+      
+      const newItems = arrayMove(categories, oldIndex, newIndex);
+      setCategories(newItems);
+
+      // Update DB
+      const updates = newItems.map((cat, index) => ({ id: cat.id, order: index }));
+      for (const update of updates) {
+          await supabase.from('help_categories').update({ order: update.order }).eq('id', update.id);
+      }
+    }
+  };
+
+  // DND: Reorder Articles
+  const handleDragEndArticles = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const oldIndex = articles.findIndex((a) => a.id === active.id);
+      const newIndex = articles.findIndex((a) => a.id === over?.id);
+      
+      const newItems = arrayMove(articles, oldIndex, newIndex);
+      setArticles(newItems);
+
+      // Update DB
+      const updates = newItems.map((art, index) => ({ id: art.id, order: index }));
+      for (const update of updates) {
+          await supabase.from('help_articles').update({ order: update.order }).eq('id', update.id);
+      }
+    }
+  };
+
+  // CRUD: Category
+  const openCategoryDialog = (cat?: Category) => {
+      if (cat) {
+          setEditMode(true);
+          setCatForm({ title: cat.title, description: cat.description, slug: cat.slug, order: cat.order });
+          setSelectedCategory(cat); // Temporaire pour edit
+      } else {
+          setEditMode(false);
+          setCatForm({ title: '', description: '', slug: '', order: categories.length });
+      }
+      setShowCatDialog(true);
+  };
+
+  const handleSaveCategory = async () => {
+    try {
+        const slug = catForm.slug || catForm.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+        if (editMode && selectedCategory) {
+            await supabase.from('help_categories').update({ ...catForm, slug }).eq('id', selectedCategory.id);
+            showSuccess("Catégorie mise à jour");
+        } else {
+            await supabase.from('help_categories').insert({ ...catForm, slug });
+            showSuccess("Catégorie créée");
+        }
+        setShowCatDialog(false);
+        fetchCategories();
+    } catch (e) { showError("Erreur sauvegarde"); }
+  };
+
+  const handleDeleteCategory = async (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      if (!confirm("Supprimer cette catégorie et tous ses articles ?")) return;
+      await supabase.from('help_categories').delete().eq('id', id);
+      setSelectedCategory(null);
+      fetchCategories();
+  };
+
+  // CRUD: Article
+  const openArticleDialog = (art?: Article) => {
+      if (art) {
+          setEditMode(true);
+          setSelectedArticle(art);
+          setArtForm({ title: art.title, slug: art.slug, content: art.content, is_published: art.is_published });
+      } else {
+          setEditMode(false);
+          setSelectedArticle(null);
+          setArtForm({ title: '', slug: '', content: '', is_published: true });
+      }
+      setShowArticleDialog(true);
+  };
+
+  const handleSaveArticle = async () => {
+      try {
+        if (!selectedCategory || !artForm.title) return;
+        const slug = artForm.slug || artForm.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+        
+        const payload = {
+            title: artForm.title,
+            slug,
+            content: artForm.content,
+            is_published: artForm.is_published,
+            category_id: selectedCategory.id
+        };
+
+        if (editMode && selectedArticle) {
+            await supabase.from('help_articles').update(payload).eq('id', selectedArticle.id);
+            showSuccess("Article mis à jour");
+        } else {
+            // Get max order
+            const maxOrder = articles.length > 0 ? Math.max(...articles.map(a => a.order)) : -1;
+            await supabase.from('help_articles').insert({ ...payload, author_id: user?.id, order: maxOrder + 1 });
+            showSuccess("Article créé");
+        }
+        setShowArticleDialog(false);
+        handleSelectCategory(selectedCategory);
+      } catch (e) { showError("Erreur sauvegarde article"); }
+  };
+
+  const handleDeleteArticle = async (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      if (!confirm("Supprimer l'article ?")) return;
+      await supabase.from('help_articles').delete().eq('id', id);
+      if (selectedCategory) handleSelectCategory(selectedCategory);
   };
 
   if (loading || isCheckingRole) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
@@ -215,7 +433,7 @@ const HelpAdmin = () => {
   return (
     <div className="flex h-screen bg-white font-sans overflow-hidden">
       
-      {/* SIDEBAR NAVIGATION */}
+      {/* SIDEBAR */}
       <div className="w-20 bg-gray-900 flex flex-col items-center py-6 gap-4 shrink-0 z-30">
          <div className="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center text-white font-bold mb-6 cursor-pointer" onClick={() => navigate('/')}>S</div>
          <button onClick={() => setActiveTab('support')} className={`p-3 rounded-xl transition-all relative group ${activeTab === 'support' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}>
@@ -230,7 +448,7 @@ const HelpAdmin = () => {
       {/* ================= SUPPORT VIEW ================= */}
       {activeTab === 'support' && (
         <div className="flex-1 flex overflow-hidden">
-            {/* 1. TICKET LIST */}
+            {/* LIST */}
             <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50">
                 <div className="p-4 border-b border-gray-200 bg-white shadow-sm z-10">
                     <h2 className="font-bold text-gray-900 mb-3 text-lg">Tickets</h2>
@@ -267,7 +485,7 @@ const HelpAdmin = () => {
                 </ScrollArea>
             </div>
 
-            {/* 2. CHAT AREA */}
+            {/* CHAT */}
             <div className="flex-1 flex flex-col bg-white relative">
                 {selectedTicket ? (
                     <>
@@ -346,7 +564,7 @@ const HelpAdmin = () => {
                 )}
             </div>
 
-            {/* 3. CUSTOMER INFO SIDEBAR */}
+            {/* CLIENT INFO SIDEBAR */}
             {selectedTicket && selectedTicket.profiles && (
                 <div className="w-80 bg-white border-l border-gray-200 flex flex-col animate-in slide-in-from-right duration-300">
                     <div className="p-6 flex flex-col items-center border-b border-gray-100">
@@ -432,15 +650,105 @@ const HelpAdmin = () => {
         </div>
       )}
 
-      {/* --- VIEW: CONTENT --- */}
+      {/* ================= CONTENT VIEW (CMS) ================= */}
       {activeTab === 'content' && (
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
-            <div className="text-center text-gray-400">
-                <Layout className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                <p>Module de contenu (déjà implémenté précédemment)</p>
+        <div className="flex-1 flex overflow-hidden">
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndCategories}>
+                <div className="w-72 border-r border-gray-200 bg-gray-50 flex flex-col">
+                    <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+                        <h2 className="font-bold text-gray-900">Catégories</h2>
+                        <Button variant="ghost" size="icon" onClick={() => openCategoryDialog()}><Plus className="h-4 w-4" /></Button>
+                    </div>
+                    <ScrollArea className="flex-1">
+                        <SortableContext items={categories.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                            <div className="p-2 space-y-1">
+                                {categories.map(cat => (
+                                    <SortableItem key={cat.id} id={cat.id} className={`flex items-center p-2 rounded-lg cursor-pointer group ${selectedCategory?.id === cat.id ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'hover:bg-gray-100 text-gray-600'}`}>
+                                        <div className="flex-1 truncate" onClick={() => handleSelectCategory(cat)}>{cat.title}</div>
+                                        <div className="flex opacity-0 group-hover:opacity-100">
+                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); openCategoryDialog(cat); }}><Edit2 className="h-3 w-3" /></Button>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500" onClick={(e) => handleDeleteCategory(e, cat.id)}><Trash2 className="h-3 w-3" /></Button>
+                                        </div>
+                                    </SortableItem>
+                                ))}
+                            </div>
+                        </SortableContext>
+                    </ScrollArea>
+                </div>
+            </DndContext>
+
+            <div className="flex-1 flex flex-col bg-white">
+                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">{selectedCategory ? selectedCategory.title : 'Sélectionnez une catégorie'}</h1>
+                        <p className="text-sm text-gray-500">{selectedCategory?.description}</p>
+                    </div>
+                    {selectedCategory && (
+                        <Button onClick={() => openArticleDialog()} className="bg-indigo-600 hover:bg-indigo-700"><Plus className="mr-2 h-4 w-4" /> Nouvel article</Button>
+                    )}
+                </div>
+
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndArticles}>
+                    <ScrollArea className="flex-1 p-6">
+                        <SortableContext items={articles.map(a => a.id)} strategy={verticalListSortingStrategy}>
+                            <div className="space-y-2">
+                                {articles.map(article => (
+                                    <SortableItem key={article.id} id={article.id} className="flex items-center p-4 bg-white border border-gray-200 rounded-xl hover:shadow-md transition-all group">
+                                        <div className="flex-1 min-w-0 pl-2">
+                                            <h3 className="font-semibold text-gray-900 truncate">{article.title}</h3>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                <Badge variant={article.is_published ? 'default' : 'secondary'} className="text-[10px] h-5">{article.is_published ? 'Publié' : 'Brouillon'}</Badge>
+                                                <span className="text-xs text-gray-400 flex items-center gap-1"><Eye className="h-3 w-3" /> {article.view_count}</span>
+                                                <span className="text-xs text-gray-400 font-mono">{article.slug}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button variant="outline" size="sm" onClick={() => openArticleDialog(article)}>Editer</Button>
+                                            <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-50" onClick={(e) => handleDeleteArticle(e, article.id)}><Trash2 className="h-4 w-4" /></Button>
+                                        </div>
+                                    </SortableItem>
+                                ))}
+                            </div>
+                        </SortableContext>
+                    </ScrollArea>
+                </DndContext>
             </div>
         </div>
       )}
+
+      {/* --- DIALOGS (CMS) --- */}
+      <Dialog open={showCatDialog} onOpenChange={setShowCatDialog}>
+        <DialogContent>
+            <DialogHeader><DialogTitle>{editMode ? 'Modifier' : 'Nouvelle'} Catégorie</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+                <div className="space-y-2"><Label>Titre</Label><Input value={catForm.title} onChange={e => setCatForm({...catForm, title: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Description</Label><Input value={catForm.description} onChange={e => setCatForm({...catForm, description: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Slug (Optionnel)</Label><Input value={catForm.slug} onChange={e => setCatForm({...catForm, slug: e.target.value})} placeholder="auto-genéré" /></div>
+            </div>
+            <DialogFooter><Button onClick={handleSaveCategory}>Enregistrer</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showArticleDialog} onOpenChange={setShowArticleDialog}>
+        <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+            <DialogHeader><DialogTitle>{editMode ? 'Modifier' : 'Nouvel'} Article</DialogTitle></DialogHeader>
+            <div className="flex-1 overflow-y-auto space-y-4 py-4 pr-2">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Titre</Label><Input value={artForm.title} onChange={e => setArtForm({...artForm, title: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Slug</Label><Input value={artForm.slug} onChange={e => setArtForm({...artForm, slug: e.target.value})} placeholder="auto-genéré" /></div>
+                </div>
+                <div className="flex items-center space-x-2 bg-gray-50 p-3 rounded-lg">
+                    <Switch id="pub" checked={artForm.is_published} onCheckedChange={c => setArtForm({...artForm, is_published: c})} />
+                    <Label htmlFor="pub" className="cursor-pointer">Publier cet article immédiatement</Label>
+                </div>
+                <div className="space-y-2 h-full flex flex-col">
+                    <Label>Contenu (Markdown)</Label>
+                    <Textarea className="flex-1 font-mono text-sm leading-relaxed" value={artForm.content} onChange={e => setArtForm({...artForm, content: e.target.value})} />
+                </div>
+            </div>
+            <DialogFooter><Button onClick={handleSaveArticle}>Enregistrer</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
