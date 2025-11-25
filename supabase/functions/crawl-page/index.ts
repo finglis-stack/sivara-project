@@ -4,6 +4,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 // @ts-ignore: Deno types
 import { removeStopwords, fra, eng } from 'https://esm.sh/stopword@3.0.1'
+// @ts-ignore: Deno types
+import { decode } from 'https://esm.sh/html-entities@2.5.2'
 
 // --- FIX IMPORTS NATURAL (Default Exports) ---
 // @ts-ignore: Deno types
@@ -88,6 +90,7 @@ class CryptoService {
   async generateBlindIndex(text: string): Promise<string[]> {
     if (!this.searchKey) throw new Error('Search key not initialized');
     const tokens = new Set<string>();
+    // Note: decode() has already been called on 'text' before passing it here
     const normalizedText = TitaniumTokenizer.normalize(text);
     const words = normalizedText.split(' ');
     const usefulWords = TitaniumTokenizer.filterStopwords(words);
@@ -137,6 +140,7 @@ function extractMetadata(html: string, url: string): { title: string, descriptio
   }
   const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i);
   const description = descMatch ? descMatch[1].trim() : '';
+  
   let content = html
     .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, " ")
     .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, " ")
@@ -145,9 +149,14 @@ function extractMetadata(html: string, url: string): { title: string, descriptio
     .replace(/\s+/g, ' ')     
     .trim();
 
+  // --- CLEANING: Decode HTML Entities (Fix for special chars like ' or é) ---
+  title = decode(title);
+  const cleanDescription = decode(description);
+  content = decode(content);
+
   return {
     title: title.substring(0, 255),
-    description: description.substring(0, 500),
+    description: cleanDescription.substring(0, 500),
     content: content.substring(0, 10000)
   };
 }
@@ -161,7 +170,9 @@ function extractLinks(html: string, baseUrl: string): string[] {
   while ((match = regex.exec(html)) !== null) {
     try {
       const link = match[1];
-      const absoluteUrl = new URL(link, baseUrl).href;
+      // Decode potential entities in URL (e.g. &amp; -> &)
+      const decodedLink = decode(link);
+      const absoluteUrl = new URL(decodedLink, baseUrl).href;
       const urlObj = new URL(absoluteUrl);
 
       if (!['http:', 'https:'].includes(urlObj.protocol)) continue;
@@ -218,7 +229,7 @@ serve(async (req) => {
     if (!isAllowedLanguage(rawHtml)) throw new Error('Language not supported');
 
     // 2. PARSE
-    await logToDb(queueId, `Parsing...`, 'PARSING', 'info');
+    await logToDb(queueId, `Parsing & Cleaning (UTF-8)...`, 'PARSING', 'info');
     const metadata = extractMetadata(rawHtml, url);
     const urlObj = new URL(url);
 
