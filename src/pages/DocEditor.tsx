@@ -20,7 +20,7 @@ import {
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
-  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey
+  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool
 } from 'lucide-react';
 
 import {
@@ -39,7 +39,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-// ... (Keep existing constants: FontSize, CURSOR_COLORS, FONT_FAMILIES, FONT_SIZES, AVAILABLE_ICONS, COLOR_PALETTE)
 const FontSize = Extension.create({
   name: 'fontSize',
   addOptions() { return { types: ['textStyle'] }; },
@@ -60,7 +59,7 @@ const FontSize = Extension.create({
   },
 });
 
-// --- TYPES (Keep existing types) ---
+// --- TYPES ---
 interface Document {
   id: string;
   title: string;
@@ -170,7 +169,6 @@ const DocEditor = () => {
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
-  // ... (Keep Editor init and basic useEffects)
   const editor = useEditor({
     extensions: [
       StarterKit, Underline, TextStyle, FontFamily, FontSize,
@@ -186,14 +184,28 @@ const DocEditor = () => {
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
       contentRef.current = html;
+      
       if (!isUpdatingFromRemoteRef.current) {
-        if (channelRef.current && user) {
-          channelRef.current.send({
-            type: 'broadcast',
-            event: 'content_update',
-            payload: { content: html, sender: user.id }
-          });
-        }
+        // BROADCAST SÉCURISÉ : On chiffre le delta avant l'envoi
+        const broadcastSecurely = async () => {
+            if (channelRef.current && user) {
+                try {
+                    // Chiffrement E2EE côté client avant émission WebSocket
+                    // Le serveur Supabase ne verra qu'une bouillie chiffrée
+                    const { encrypted, iv } = await encryptionService.encrypt(html);
+                    
+                    channelRef.current.send({
+                        type: 'broadcast',
+                        event: 'content_update',
+                        payload: { content: encrypted, iv: iv, sender: user.id }
+                    });
+                } catch (e) {
+                    console.error("Erreur chiffrement broadcast", e);
+                }
+            }
+        };
+        broadcastSecurely();
+
         if (permission === 'write') {
           handleContentChange(html);
         }
@@ -224,13 +236,16 @@ const DocEditor = () => {
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
   useEffect(() => { if (id && user && !isLoading && !decryptionError) { setupRealtime(); } }, [id, user, isLoading, decryptionError, userProfile]);
 
-  // ... (Keep setupRealtime, handleMouseMove, cursor cleanup)
   const setupRealtime = () => {
     if (!id || !user) return;
     const myPresenceState = { id: user.id, email: user.email, color: myColorRef.current, avatar_url: userProfile?.avatar_url, name: user.email?.split('@')[0] || 'Anonyme', online_at: Date.now() };
+    
     if (channelRef.current) { channelRef.current.track(myPresenceState); return; }
+    
     const channel = supabase.channel(`doc:${id}`, { config: { presence: { key: user.id, }, }, });
-    channel.on('presence', { event: 'sync' }, () => {
+    
+    channel
+      .on('presence', { event: 'sync' }, () => {
         const newState = channel.presenceState();
         const users: Collaborator[] = [];
         for (const key in newState) {
@@ -243,19 +258,33 @@ const DocEditor = () => {
            }
         }
         setCollaborators(users);
-      }).on('broadcast', { event: 'cursor-pos' }, ({ payload }) => {
+      })
+      .on('broadcast', { event: 'cursor-pos' }, ({ payload }) => {
         if (payload.id !== user.id) {
             setCursors(prev => ({ ...prev, [payload.id]: { x: payload.x, y: payload.y, color: payload.color, name: payload.name, last_updated: Date.now() } }));
         }
-      }).on('broadcast', { event: 'content_update' }, ({ payload }) => {
+      })
+      .on('broadcast', { event: 'content_update' }, async ({ payload }) => {
         if (payload.sender !== user.id && editor) {
            isUpdatingFromRemoteRef.current = true;
-           const { from, to } = editor.state.selection;
-           editor.commands.setContent(payload.content);
-           editor.commands.setTextSelection({ from, to });
+           
+           try {
+               // DÉCHIFFREMENT LOCAL DU BROADCAST
+               // Le contenu arrive chiffré du serveur, on le déchiffre ici
+               const decryptedContent = await encryptionService.decrypt(payload.content, payload.iv);
+               
+               const { from, to } = editor.state.selection;
+               editor.commands.setContent(decryptedContent);
+               editor.commands.setTextSelection({ from, to });
+           } catch (e) {
+               console.error("Erreur déchiffrement broadcast", e);
+           }
+           
            setTimeout(() => isUpdatingFromRemoteRef.current = false, 50);
         }
-      }).subscribe(async (status) => { if (status === 'SUBSCRIBED') { await channel.track(myPresenceState); } });
+      })
+      .subscribe(async (status) => { if (status === 'SUBSCRIBED') { await channel.track(myPresenceState); } });
+    
     channelRef.current = channel;
   };
 
@@ -285,7 +314,6 @@ const DocEditor = () => {
      return () => clearInterval(interval);
   }, []);
 
-  // ... (Keep fetchDocumentAndInitCrypto, fetchAccessList, handleSave, etc.)
   const fetchDocumentAndInitCrypto = async () => {
     try {
       const { data: doc, error } = await supabase.from('documents').select('*').eq('id', id).single();
@@ -323,11 +351,25 @@ const DocEditor = () => {
   };
 
   const fetchAccessList = async () => { const { data } = await supabase.from('document_access').select('*').eq('document_id', id); setAccessList(data || []); };
+  
   const handleSave = async (key: string, value: string) => { if (!id || permission !== 'write') return; try { setIsSaving(true); const { encrypted: encTitle, iv } = await encryptionService.encrypt(titleRef.current); const { encrypted: encContent } = await encryptionService.encrypt(editor?.getHTML() || '', iv); await supabase.from('documents').update({ title: encTitle, content: encContent, encryption_iv: iv, updated_at: new Date().toISOString(), ...((key === 'icon') ? { icon: value } : {}), ...((key === 'color') ? { color: value } : {}) }).eq('id', id); } catch(e) { console.error(e); } finally { setIsSaving(false); } };
+  
   const handleContentChange = (content: string) => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = setTimeout(() => handleSave('content', content), 500); };
+  
   const updateVisibility = async (visibility: 'private' | 'limited' | 'public') => { if (!document) return; await supabase.from('documents').update({ visibility }).eq('id', id); setDocument({ ...document, visibility }); showSuccess(`Visibilité changée`); };
   const updatePublicPermission = async (perm: 'read' | 'write') => { if (!document) return; await supabase.from('documents').update({ public_permission: perm }).eq('id', id); setDocument({ ...document, public_permission: perm }); };
-  const inviteUser = async () => { if (!newInviteEmail) return; const { error } = await supabase.from('document_access').insert({ document_id: id, email: newInviteEmail.toLowerCase().trim(), permission: invitePermission }); if (error) showError("Erreur invitation"); else { showSuccess("Invitation envoyée"); setNewInviteEmail(''); fetchAccessList(); } };
+  
+  const inviteUser = async () => { 
+      if (!newInviteEmail) return; 
+      const { error } = await supabase.from('document_access').insert({ 
+          document_id: id, 
+          email: newInviteEmail.toLowerCase().trim(), 
+          permission: invitePermission 
+      }); 
+      if (error) showError("Erreur invitation"); 
+      else { showSuccess("Invitation envoyée"); setNewInviteEmail(''); fetchAccessList(); } 
+  };
+  
   const removeAccess = async (accessId: string) => { await supabase.from('document_access').delete().eq('id', accessId); fetchAccessList(); };
   
   const copyShareLink = () => { 
@@ -340,10 +382,8 @@ const DocEditor = () => {
     window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`; 
   };
 
-  // --- EXPORT PROPRIÉTAIRE AVEC OPTION MOT DE PASSE ---
   const handleExportSivara = async () => {
     if (!document || !user) return;
-    
     try {
         let encryptedTitle = document.title;
         let encryptedContent = document.content;
@@ -351,10 +391,8 @@ const DocEditor = () => {
         let isPasswordProtected = false;
         let salt = null;
 
-        // Si un mot de passe est fourni, on rechiffre TOUT avec ce mot de passe
         if (exportPassword) {
             const saltValue = crypto.randomUUID();
-            // Initialiser le service avec le mot de passe temporairement
             await encryptionService.initialize(exportPassword, saltValue);
             
             const { encrypted: encTitle, iv: newIv } = await encryptionService.encrypt(titleRef.current);
@@ -366,7 +404,6 @@ const DocEditor = () => {
             isPasswordProtected = true;
             salt = saltValue;
 
-            // Restaurer la clé de l'utilisateur
             await encryptionService.initialize(user.id);
         }
 
@@ -380,7 +417,7 @@ const DocEditor = () => {
             exported_at: new Date().toISOString(),
             icon: document.icon || 'FileText',
             color: document.color || '#3B82F6',
-            salt: salt // Pour V2 seulement
+            salt: salt 
         };
         
         const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
@@ -396,7 +433,6 @@ const DocEditor = () => {
     } catch (e) {
         console.error(e);
         showError("Erreur lors de l'exportation");
-        // En cas d'erreur, on s'assure de restaurer le service
         if (user) await encryptionService.initialize(user.id);
     }
   };
@@ -409,11 +445,9 @@ const DocEditor = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F3F4F6] pt-[env(safe-area-inset-top)]">
-      {/* Header Responsive */}
       <header className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
-            {/* Left - Compact on Mobile */}
             <div className="flex items-center gap-2 sm:gap-4 flex-1 overflow-hidden">
               <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="shrink-0"><ArrowLeft className="h-5 w-5" /></Button>
               
@@ -433,7 +467,6 @@ const DocEditor = () => {
               </div>
             </div>
 
-            {/* Right */}
             <div className="flex items-center gap-1 sm:gap-3 shrink-0 ml-2">
               <div className="flex -space-x-2 mr-1 sm:mr-4">
                   {collaborators.slice(0, 3).map(collab => (
@@ -462,7 +495,6 @@ const DocEditor = () => {
           </div>
         </div>
         
-        {/* Toolbar Scrollable */}
         {permission === 'write' && (
             <div className="border-t border-gray-200 bg-[#F8F9FA] px-2 sm:px-4 py-2 flex justify-start sm:justify-center items-center gap-2 shadow-inner overflow-x-auto no-scrollbar">
                 <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 px-2 py-1 gap-1 sm:gap-2 min-w-max">
@@ -491,7 +523,6 @@ const DocEditor = () => {
         )}
       </header>
 
-      {/* Editor Area */}
       <div 
         className="flex-1 relative overflow-y-auto cursor-text" 
         onClick={() => permission === 'write' && editor?.commands.focus()}
@@ -510,7 +541,6 @@ const DocEditor = () => {
         </div>
       </div>
 
-      {/* Dialogs... (kept same) */}
       <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
         <DialogContent className="sm:max-w-[500px] max-w-[95vw]">
           <DialogHeader><DialogTitle>Partager</DialogTitle><DialogDescription>Gérez les accès.</DialogDescription></DialogHeader>
@@ -531,15 +561,38 @@ const DocEditor = () => {
                 <Button variant="outline" className="w-full" onClick={copyShareLink}><Copy className="mr-2 h-4 w-4" /> Copier le lien</Button>
             </TabsContent>
             <TabsContent value="invites" className="space-y-4 py-4">
-                <div className="flex gap-2"><Input placeholder="email..." value={newInviteEmail} onChange={(e) => setNewInviteEmail(e.target.value)} /><Button onClick={inviteUser}><UserPlus className="h-4 w-4" /></Button></div>
-                <div className="space-y-2 mt-4 max-h-40 overflow-y-auto">{accessList.map(access => <div key={access.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded"><span>{access.email}</span><Trash2 className="h-4 w-4 text-red-500 cursor-pointer" onClick={() => removeAccess(access.id)} /></div>)}</div>
+                <div className="flex gap-2">
+                    <Input placeholder="email..." value={newInviteEmail} onChange={(e) => setNewInviteEmail(e.target.value)} className="flex-1" />
+                    
+                    <Select value={invitePermission} onValueChange={(v: any) => setInvitePermission(v)}>
+                      <SelectTrigger className="w-[110px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="read">Lecture</SelectItem>
+                        <SelectItem value="write">Écriture</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Button onClick={inviteUser}><UserPlus className="h-4 w-4" /></Button>
+                </div>
+                <div className="space-y-2 mt-4 max-h-40 overflow-y-auto">
+                    {accessList.map(access => (
+                        <div key={access.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded border border-gray-100">
+                            <div className="flex items-center gap-2">
+                                <span>{access.email}</span>
+                                <Badge variant="outline" className="text-[10px] h-5">{access.permission === 'read' ? 'Lecture' : 'Écriture'}</Badge>
+                            </div>
+                            <Trash2 className="h-4 w-4 text-red-500 cursor-pointer hover:text-red-700" onClick={() => removeAccess(access.id)} />
+                        </div>
+                    ))}
+                </div>
             </TabsContent>
           </Tabs>
         </DialogContent>
       </Dialog>
       <Dialog open={showIconPicker} onOpenChange={setShowIconPicker}><DialogContent className="max-w-[95vw]"><DialogHeader><DialogTitle>Icône</DialogTitle></DialogHeader><div className="grid grid-cols-6 gap-2">{AVAILABLE_ICONS.map(i => <button key={i.name} onClick={() => { setSelectedIcon(i.name); handleSave('icon', i.name); setShowIconPicker(false); }} className={`p-2 rounded hover:bg-gray-100 ${selectedIcon === i.name ? 'bg-blue-50 ring-1' : ''}`}><i.icon className="h-6 w-6 mx-auto" /></button>)}</div><div className="border-t pt-4 mt-2"><Label>Couleur</Label><div className="flex gap-2 mt-2 overflow-x-auto pb-2">{COLOR_PALETTE.map(c => <button key={c.value} onClick={() => { setSelectedColor(c.value); handleSave('color', c.value); }} className={`h-6 w-6 shrink-0 rounded-full ${selectedColor === c.value ? 'ring-2 ring-offset-2 ring-black' : ''}`} style={{ backgroundColor: c.value }} />)}</div></div></DialogContent></Dialog>
       
-      {/* Export Password Dialog */}
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
         <DialogContent>
             <DialogHeader>
