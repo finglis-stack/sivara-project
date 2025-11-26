@@ -190,8 +190,6 @@ const DocEditor = () => {
         const broadcastSecurely = async () => {
             if (channelRef.current && user) {
                 try {
-                    // Chiffrement E2EE côté client avant émission WebSocket
-                    // Le serveur Supabase ne verra qu'une bouillie chiffrée
                     const { encrypted, iv } = await encryptionService.encrypt(html);
                     
                     channelRef.current.send({
@@ -234,13 +232,27 @@ const DocEditor = () => {
   }, [id, user, editor, authLoading]);
 
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
+  
+  // Update realtime presence when ID, user, or userProfile changes
   useEffect(() => { if (id && user && !isLoading && !decryptionError) { setupRealtime(); } }, [id, user, isLoading, decryptionError, userProfile]);
 
   const setupRealtime = () => {
     if (!id || !user) return;
-    const myPresenceState = { id: user.id, email: user.email, color: myColorRef.current, avatar_url: userProfile?.avatar_url, name: user.email?.split('@')[0] || 'Anonyme', online_at: Date.now() };
     
-    if (channelRef.current) { channelRef.current.track(myPresenceState); return; }
+    const myPresenceState = { 
+        id: user.id, 
+        email: user.email, 
+        color: myColorRef.current, 
+        avatar_url: userProfile?.avatar_url, // Ensure this is used
+        name: user.email?.split('@')[0] || 'Anonyme', 
+        online_at: Date.now() 
+    };
+    
+    // If channel exists, just update the tracking state (e.g. if avatar loaded later)
+    if (channelRef.current) { 
+        channelRef.current.track(myPresenceState); 
+        return; 
+    }
     
     const channel = supabase.channel(`doc:${id}`, { config: { presence: { key: user.id, }, }, });
     
@@ -253,7 +265,14 @@ const DocEditor = () => {
            if (presences && presences.length > 0) {
              const userData = presences[0]; 
              if (userData.id !== user.id) {
-                users.push({ id: userData.id, email: userData.email, color: userData.color, avatar_url: userData.avatar_url, name: userData.name, online_at: userData.online_at });
+                users.push({ 
+                    id: userData.id, 
+                    email: userData.email, 
+                    color: userData.color, 
+                    avatar_url: userData.avatar_url, 
+                    name: userData.name, 
+                    online_at: userData.online_at 
+                });
              }
            }
         }
@@ -267,19 +286,12 @@ const DocEditor = () => {
       .on('broadcast', { event: 'content_update' }, async ({ payload }) => {
         if (payload.sender !== user.id && editor) {
            isUpdatingFromRemoteRef.current = true;
-           
            try {
-               // DÉCHIFFREMENT LOCAL DU BROADCAST
-               // Le contenu arrive chiffré du serveur, on le déchiffre ici
                const decryptedContent = await encryptionService.decrypt(payload.content, payload.iv);
-               
                const { from, to } = editor.state.selection;
                editor.commands.setContent(decryptedContent);
                editor.commands.setTextSelection({ from, to });
-           } catch (e) {
-               console.error("Erreur déchiffrement broadcast", e);
-           }
-           
+           } catch (e) { console.error("Broadcast decrypt error", e); }
            setTimeout(() => isUpdatingFromRemoteRef.current = false, 50);
         }
       })
@@ -328,23 +340,39 @@ const DocEditor = () => {
       }
       const hashKey = window.location.hash.replace('#key=', '');
       if (!hashKey || hashKey === 'share') { await encryptionService.initialize(doc.owner_id); }
+      
       const isDocOwner = user?.id === doc.owner_id;
       setIsOwner(isDocOwner);
+      
+      // --- FIX PERMISSION LOGIC ---
       let userPermission: 'read' | 'write' = 'read';
-      if (isDocOwner) userPermission = 'write';
-      else if (doc.visibility === 'public') userPermission = doc.public_permission;
-      else if (user) {
-         const { data: access } = await supabase.from('document_access').select('permission').eq('document_id', id).eq('email', user.email).single();
+      
+      if (isDocOwner) {
+          userPermission = 'write';
+      } else if (doc.visibility === 'public') {
+          userPermission = doc.public_permission;
+      } else if (user) {
+         // FIX: Use ilike for case-insensitive email match
+         const { data: access } = await supabase.from('document_access')
+            .select('permission')
+            .eq('document_id', id)
+            .ilike('email', user.email) // Important: Handles casing diffs
+            .maybeSingle();
+         
          if (access) userPermission = access.permission;
       }
+      
       setPermission(userPermission);
-      if (userPermission === 'read') editor?.setEditable(false);
+      // FIX: Force editor editable state based on calculated permission
+      editor?.setEditable(userPermission === 'write');
+
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
       try {
           decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
           decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
       } catch (e) { setDecryptionError(true); decryptedTitle = "Document sécurisé"; decryptedContent = ""; }
+      
       setDocument(doc); setTitle(decryptedTitle); contentRef.current = decryptedContent; setSelectedIcon(doc.icon || 'FileText'); setSelectedColor(doc.color || '#3B82F6'); editor?.commands.setContent(decryptedContent);
       if (isDocOwner) fetchAccessList();
     } catch (error) { showError("Document inaccessible ou privé"); navigate('/'); } finally { setIsLoading(false); }
