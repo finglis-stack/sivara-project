@@ -169,6 +169,7 @@ const DocEditor = () => {
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
+  // --- EDITOR SETUP ---
   const editor = useEditor({
     extensions: [
       StarterKit, Underline, TextStyle, FontFamily, FontSize,
@@ -176,6 +177,7 @@ const DocEditor = () => {
       Placeholder.configure({ placeholder: 'Commencez à écrire...' }),
     ],
     content: '',
+    editable: false, // Start as readonly until permission verified
     editorProps: {
       attributes: {
         class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[90vh] bg-white py-8 px-4 sm:px-12 md:px-16 shadow-sm mb-8 rounded-lg',
@@ -186,20 +188,17 @@ const DocEditor = () => {
       contentRef.current = html;
       
       if (!isUpdatingFromRemoteRef.current) {
-        // BROADCAST SÉCURISÉ : On chiffre le delta avant l'envoi
+        // BROADCAST SÉCURISÉ
         const broadcastSecurely = async () => {
             if (channelRef.current && user) {
                 try {
                     const { encrypted, iv } = await encryptionService.encrypt(html);
-                    
                     channelRef.current.send({
                         type: 'broadcast',
                         event: 'content_update',
                         payload: { content: encrypted, iv: iv, sender: user.id }
                     });
-                } catch (e) {
-                    console.error("Erreur chiffrement broadcast", e);
-                }
+                } catch (e) { console.error("Erreur chiffrement broadcast", e); }
             }
         };
         broadcastSecurely();
@@ -211,9 +210,21 @@ const DocEditor = () => {
     },
   });
 
+  // --- PERMISSION EFFECT ---
+  // Force l'état de l'éditeur quand la permission change
+  useEffect(() => {
+    if (editor && !isLoading) {
+      console.log(`[Permissions] Mise à jour de l'éditeur. Permission: ${permission}`);
+      editor.setEditable(permission === 'write');
+    }
+  }, [editor, permission, isLoading]);
+
+  // --- INIT ---
   useEffect(() => {
     if (!id || authLoading) return;
+    
     const init = async () => {
+      // Fonts setup
       if (!window.document.getElementById('sivara-google-fonts')) {
         const link = window.document.createElement('link');
         link.id = 'sivara-google-fonts';
@@ -221,20 +232,29 @@ const DocEditor = () => {
         link.href = 'https://fonts.googleapis.com/css2?family=Courier+Prime&family=Inter:wght@300;400;500;600&family=Lato:wght@300;400;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&family=Montserrat:wght@300;400;600&family=Open+Sans:wght@300;400;600&family=Playfair+Display:wght@400;600&family=Roboto:wght@300;400;500&display=swap';
         window.document.head.appendChild(link);
       }
+
+      // User Profile setup
       if (user) {
         const { data } = await supabase.from('profiles').select('avatar_url').eq('id', user.id).single();
         setUserProfile(data);
       }
+
       await fetchDocumentAndInitCrypto();
     };
     init();
+    
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
   }, [id, user, editor, authLoading]);
 
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
   
-  // Update realtime presence when ID, user, or userProfile changes
-  useEffect(() => { if (id && user && !isLoading && !decryptionError) { setupRealtime(); } }, [id, user, isLoading, decryptionError, userProfile]);
+  // Sync Realtime only when everything is ready (including profile)
+  useEffect(() => { 
+      if (id && user && !isLoading && !decryptionError) { 
+          // Petit délai pour s'assurer que setUserProfile a eu le temps de se propager si fetché
+          setTimeout(() => setupRealtime(), 500);
+      } 
+  }, [id, user, isLoading, decryptionError, userProfile]);
 
   const setupRealtime = () => {
     if (!id || !user) return;
@@ -243,13 +263,13 @@ const DocEditor = () => {
         id: user.id, 
         email: user.email, 
         color: myColorRef.current, 
-        avatar_url: userProfile?.avatar_url, // Ensure this is used
+        avatar_url: userProfile?.avatar_url, 
         name: user.email?.split('@')[0] || 'Anonyme', 
         online_at: Date.now() 
     };
     
-    // If channel exists, just update the tracking state (e.g. if avatar loaded later)
     if (channelRef.current) { 
+        // Update existing presence (e.g. if avatar loaded late)
         channelRef.current.track(myPresenceState); 
         return; 
     }
@@ -338,13 +358,14 @@ const DocEditor = () => {
         }
         throw new Error("Document inaccessible");
       }
+      
       const hashKey = window.location.hash.replace('#key=', '');
       if (!hashKey || hashKey === 'share') { await encryptionService.initialize(doc.owner_id); }
       
       const isDocOwner = user?.id === doc.owner_id;
       setIsOwner(isDocOwner);
       
-      // --- FIX PERMISSION LOGIC ---
+      // --- ROBUST PERMISSION LOGIC ---
       let userPermission: 'read' | 'write' = 'read';
       
       if (isDocOwner) {
@@ -352,19 +373,23 @@ const DocEditor = () => {
       } else if (doc.visibility === 'public') {
           userPermission = doc.public_permission;
       } else if (user) {
-         // FIX: Use ilike for case-insensitive email match
-         const { data: access } = await supabase.from('document_access')
-            .select('permission')
-            .eq('document_id', id)
-            .ilike('email', user.email) // Important: Handles casing diffs
-            .maybeSingle();
+         // Récupération de TOUS les accès pour ce doc pour filtrer en JS (plus fiable que SQL ilike)
+         const { data: accessEntries } = await supabase
+            .from('document_access')
+            .select('email, permission')
+            .eq('document_id', id);
          
-         if (access) userPermission = access.permission;
+         if (accessEntries && user.email) {
+             const myAccess = accessEntries.find(a => a.email.toLowerCase() === user.email!.toLowerCase());
+             if (myAccess) {
+                 userPermission = myAccess.permission;
+             }
+         }
       }
       
+      console.log(`[Auth] Mode: ${userPermission}`);
       setPermission(userPermission);
-      // FIX: Force editor editable state based on calculated permission
-      editor?.setEditable(userPermission === 'write');
+      // Note: editor.setEditable est aussi géré par le useEffect dédié maintenant
 
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
@@ -373,9 +398,23 @@ const DocEditor = () => {
           decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
       } catch (e) { setDecryptionError(true); decryptedTitle = "Document sécurisé"; decryptedContent = ""; }
       
-      setDocument(doc); setTitle(decryptedTitle); contentRef.current = decryptedContent; setSelectedIcon(doc.icon || 'FileText'); setSelectedColor(doc.color || '#3B82F6'); editor?.commands.setContent(decryptedContent);
+      setDocument(doc); 
+      setTitle(decryptedTitle); 
+      contentRef.current = decryptedContent; 
+      setSelectedIcon(doc.icon || 'FileText'); 
+      setSelectedColor(doc.color || '#3B82F6'); 
+      
+      if (editor) {
+          editor.commands.setContent(decryptedContent);
+          editor.setEditable(userPermission === 'write');
+      }
+      
       if (isDocOwner) fetchAccessList();
-    } catch (error) { showError("Document inaccessible ou privé"); navigate('/'); } finally { setIsLoading(false); }
+    } catch (error) { 
+        console.error(error);
+        showError("Document inaccessible ou privé"); 
+        navigate('/'); 
+    } finally { setIsLoading(false); }
   };
 
   const fetchAccessList = async () => { const { data } = await supabase.from('document_access').select('*').eq('document_id', id); setAccessList(data || []); };
