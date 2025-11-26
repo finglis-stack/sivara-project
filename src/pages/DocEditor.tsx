@@ -169,7 +169,6 @@ const DocEditor = () => {
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
-  // --- EDITOR SETUP ---
   const editor = useEditor({
     extensions: [
       StarterKit, Underline, TextStyle, FontFamily, FontSize,
@@ -251,7 +250,6 @@ const DocEditor = () => {
   // Sync Realtime only when everything is ready (including profile)
   useEffect(() => { 
       if (id && user && !isLoading && !decryptionError) { 
-          // Petit délai pour s'assurer que setUserProfile a eu le temps de se propager si fetché
           setTimeout(() => setupRealtime(), 500);
       } 
   }, [id, user, isLoading, decryptionError, userProfile]);
@@ -370,21 +368,36 @@ const DocEditor = () => {
       
       if (isDocOwner) {
           userPermission = 'write';
-      } else if (doc.visibility === 'public') {
-          userPermission = doc.public_permission;
-      } else if (user) {
-         // Récupération de TOUS les accès pour ce doc pour filtrer en JS (plus fiable que SQL ilike)
-         const { data: accessEntries } = await supabase
-            .from('document_access')
-            .select('email, permission')
-            .eq('document_id', id);
-         
-         if (accessEntries && user.email) {
-             const myAccess = accessEntries.find(a => a.email.toLowerCase() === user.email!.toLowerCase());
-             if (myAccess) {
-                 userPermission = myAccess.permission;
+      } else {
+          // 1. Check for specific access entry (Priority)
+          let explicitPermission = null;
+          if (user && user.email) {
+             const { data: accessEntries } = await supabase
+                .from('document_access')
+                .select('email, permission')
+                .eq('document_id', id);
+             
+             if (accessEntries) {
+                 const myAccess = accessEntries.find(a => a.email.toLowerCase() === user.email!.toLowerCase());
+                 if (myAccess) {
+                     explicitPermission = myAccess.permission;
+                 }
              }
-         }
+          }
+
+          // 2. Apply Hierarchy: Explicit Write > Public Write > Public Read > Explicit Read
+          if (explicitPermission === 'write') {
+              userPermission = 'write';
+          } else if (doc.visibility === 'public' && doc.public_permission === 'write') {
+              userPermission = 'write';
+          } else if (explicitPermission === 'read') {
+              userPermission = 'read';
+          } else if (doc.visibility === 'public') {
+              userPermission = 'read';
+          } else {
+              // Limited/Private and no explicit access
+              throw new Error("Document inaccessible");
+          }
       }
       
       console.log(`[Auth] Mode: ${userPermission}`);
