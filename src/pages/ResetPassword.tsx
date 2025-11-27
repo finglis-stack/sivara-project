@@ -15,20 +15,60 @@ const ResetPassword = () => {
   const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
-    // Supabase détecte automatiquement les tokens dans l'URL (hash)
-    // et établit la session "recovery" avant même d'arriver ici.
-    const checkSession = async () => {
+    const initializeRecoverySession = async () => {
+      // 1. Vérifier si une session est déjà active
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (!session) {
-        // Si pas de session, le lien est invalide ou expiré
-        showError("Lien de récupération invalide ou expiré.");
-        navigate('/login');
-      } else {
+      if (session) {
         setSessionChecked(true);
+        return;
       }
+
+      // 2. Si pas de session, on regarde si les tokens sont dans l'URL (Hash)
+      // C'est souvent le cas si l'auto-détection a échoué ou a été trop lente
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token')) {
+        try {
+          const params = new URLSearchParams(hash.substring(1)); // Enlève le '#'
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+
+          if (accessToken && refreshToken) {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+
+            if (!error) {
+              setSessionChecked(true);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("Erreur parsing hash:", e);
+        }
+      }
+
+      // 3. Écouter l'événement de récupération (Fallback final)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+          setSessionChecked(true);
+        }
+      });
+
+      // Si après tout ça on a rien au bout de 2 secondes, on redirige
+      setTimeout(async () => {
+        const { data: { session: finalCheck } } = await supabase.auth.getSession();
+        if (!finalCheck) {
+           showError("Lien invalide ou expiré.");
+           navigate('/login');
+        }
+      }, 4000); // Délai généreux pour laisser le temps au process PKCE
+
+      return () => subscription.unsubscribe();
     };
-    checkSession();
+
+    initializeRecoverySession();
   }, [navigate]);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -40,18 +80,23 @@ const ResetPassword = () => {
 
     setLoading(true);
     try {
-      // Met à jour le mot de passe de l'utilisateur actuellement connecté (via le lien magique)
+      // Double vérification de la session avant l'envoi
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+         throw new Error("Session perdue. Veuillez recliquer sur le lien dans votre email.");
+      }
+
       const { error } = await supabase.auth.updateUser({ password: password });
 
       if (error) throw error;
 
       showSuccess("Mot de passe mis à jour avec succès !");
       
-      // Redirection vers le profil
       setTimeout(() => {
         navigate('/profile');
       }, 1500);
     } catch (error: any) {
+      console.error(error);
       showError(error.message || "Erreur lors de la mise à jour");
     } finally {
       setLoading(false);
@@ -60,8 +105,9 @@ const ResetPassword = () => {
 
   if (!sessionChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-4">
         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        <p className="text-sm text-gray-500">Vérification du lien sécurisé...</p>
       </div>
     );
   }
@@ -82,7 +128,7 @@ const ResetPassword = () => {
           </div>
           <CardTitle className="text-xl font-bold">Nouveau mot de passe</CardTitle>
           <CardDescription>
-            Sécurisez votre compte Sivara.
+            Votre identité est vérifiée.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6 pt-4">
@@ -97,6 +143,7 @@ const ResetPassword = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="h-11"
+                autoFocus
               />
             </div>
             <Button type="submit" className="w-full h-11 bg-black hover:bg-gray-800" disabled={loading}>
