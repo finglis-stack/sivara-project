@@ -29,6 +29,7 @@ import HelpLanding from "./pages/HelpLanding";
 import HelpAdmin from "./pages/HelpAdmin";
 import HelpCategory from "./pages/HelpCategory";
 import HelpArticle from "./pages/HelpArticle";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,7 @@ const AppRoutes = () => {
         <>
           <Route path="/" element={<Navigate to="/profile" replace />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/checkout" element={<Checkout />} />
@@ -179,6 +181,13 @@ const App = () => {
         const hash = window.location.hash;
         if (hash && hash.includes('access_token')) {
           try {
+            // NOTE: Si c'est un lien de recovery, on laisse Supabase le gérer
+            // La page ResetPassword fera le check de session elle-même.
+            // On ne fait rien ici pour éviter de "consommer" le hash trop tôt si on est sur la mauvaise route.
+            if (hash.includes('type=recovery')) {
+                return; 
+            }
+
             const params = new URLSearchParams(hash.substring(1));
             const accessToken = params.get('access_token');
             const refreshToken = params.get('refresh_token');
