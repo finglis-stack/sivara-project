@@ -1,15 +1,27 @@
 import { Button } from '@/components/ui/button';
 import { 
   ArrowRight, Cpu, Wifi, Fingerprint, HardDrive, 
-  Monitor, Battery, Layers, ShieldCheck, ChevronRight, Laptop
+  Monitor, Battery, Layers, ShieldCheck, ChevronRight, Laptop, Package
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from '@/components/UserMenu';
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 const DeviceLanding = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [isVendor, setIsVendor] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+        supabase.from('profiles').select('is_vendor').eq('id', user.id).single()
+        .then(({ data }) => {
+            if (data?.is_vendor) setIsVendor(true);
+        });
+    }
+  }, [user]);
 
   const navigateToAuth = (path: string) => {
     const hostname = window.location.hostname;
@@ -45,6 +57,17 @@ const DeviceLanding = () => {
           <div className="flex items-center gap-4 sm:gap-6">
             <a href="#specs" className="text-sm font-medium text-white/80 hover:text-white transition-colors hidden sm:block shadow-sm">Spécifications</a>
             
+            {isVendor && (
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => navigate('/admin')}
+                    className="text-white hover:bg-white/10 hidden sm:flex"
+                >
+                    <Package className="h-4 w-4 mr-2" /> Espace Vendeur
+                </Button>
+            )}
+
             {user ? (
                 <div className="text-white">
                     <UserMenu />

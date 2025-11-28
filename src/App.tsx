@@ -31,6 +31,7 @@ import HelpCategory from "./pages/HelpCategory";
 import HelpArticle from "./pages/HelpArticle";
 import ResetPassword from "./pages/ResetPassword";
 import DeviceLanding from "./pages/DeviceLanding";
+import DeviceAdmin from "./pages/DeviceAdmin";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ const AppRoutes = () => {
       if (appParam === 'www') return 'www';
       if (appParam === 'help') return 'help';
       if (appParam === 'device') return 'device';
+      if (appParam === 'device-admin') return 'device-admin';
       return 'mobile-launcher';
     }
 
@@ -61,6 +63,7 @@ const AppRoutes = () => {
       if (appParam === 'www') return 'www';
       if (appParam === 'help') return 'help';
       if (appParam === 'device') return 'device';
+      if (appParam === 'device-admin') return 'device-admin';
       if (appParam === 'mobile') return 'mobile-launcher';
       return 'dev-portal';
     }
@@ -117,7 +120,24 @@ const AppRoutes = () => {
 
       {/* --- APPLICATION: DEVICE --- */}
       {currentApp === 'device' && (
-        <Route path="*" element={<DeviceLanding />} />
+        <>
+            <Route path="/" element={<DeviceLanding />} />
+            <Route path="/admin" element={
+                <ProtectedRoute>
+                    <DeviceAdmin />
+                </ProtectedRoute>
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+        </>
+      )}
+      
+      {/* --- APPLICATION: DEVICE ADMIN (Direct Access via ?app=device-admin) --- */}
+      {currentApp === 'device-admin' && (
+         <Route path="*" element={
+            <ProtectedRoute>
+                <DeviceAdmin />
+            </ProtectedRoute>
+         } />
       )}
 
       {/* --- APPLICATION: DOCS --- */}
