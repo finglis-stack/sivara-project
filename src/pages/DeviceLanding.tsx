@@ -71,37 +71,36 @@ const DeviceLanding = () => {
       </nav>
 
       {/* Hero Section - PS3 Style (Dark Abstract) */}
-      <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-[#050505]">
+      <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-[#080808]">
         
-        {/* Animated Background Waves (PS3 XMB Style) */}
-        {/* Note: Opacité augmentée et Blur réduit pour la visibilité */}
+        {/* Animated Background Waves (PS3 XMB Style - Bold Ribbons) */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            {/* Ruban Principal (Blanc/Gris) */}
-            <div className="absolute top-[40%] -left-[10%] w-[120%] h-[40vh] bg-gradient-to-b from-white/10 to-transparent blur-xl rounded-[100%] border-t border-white/20 animate-wave-slow transform -rotate-12 opacity-60"></div>
+            {/* Ruban Principal Épais (Blanc Spectral) */}
+            <div className="absolute top-[20%] -left-[20%] w-[140%] h-[70vh] rounded-[100%] border-t-[3px] border-white/30 bg-gradient-to-b from-white/10 to-transparent blur-md animate-wave-undulate opacity-50"></div>
             
-            {/* Ruban Secondaire (Bleu Nuit subtil) */}
-            <div className="absolute top-[50%] -left-[10%] w-[120%] h-[40vh] bg-gradient-to-b from-blue-900/20 to-transparent blur-2xl rounded-[100%] border-t border-blue-500/10 animate-wave-slower transform -rotate-6 opacity-50"></div>
+            {/* Ruban Secondaire (Bleu Profond) */}
+            <div className="absolute top-[35%] -left-[10%] w-[120%] h-[60vh] rounded-[100%] border-t-[4px] border-blue-400/20 bg-gradient-to-b from-blue-600/10 to-transparent blur-lg animate-wave-undulate-slow opacity-40 mix-blend-screen"></div>
             
-            {/* Ligne de contour fine (Netteté) */}
-            <div className="absolute top-[45%] -left-[10%] w-[120%] h-[40vh] rounded-[100%] border-t-[2px] border-white/10 animate-wave-slow transform -rotate-12 opacity-40"></div>
+            {/* Ruban de fond (Large et lent) */}
+            <div className="absolute top-[10%] -left-[30%] w-[160%] h-[90vh] rounded-[100%] border-t-[1px] border-white/10 blur-xl animate-wave-undulate opacity-30 delay-1000"></div>
         </div>
 
         <div className="container mx-auto px-6 relative z-10 py-12">
             <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-20">
                 
                 {/* Gauche : Texte */}
-                <div className="flex-1 text-center lg:text-left space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/80 text-sm font-medium">
+                <div className="flex-1 text-center lg:text-left space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000 relative">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-white/90 text-sm font-medium shadow-2xl">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
                         Design Industriel
                     </div>
                     
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.1]">
+                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.1] drop-shadow-2xl">
                         Sivara Book. <br/>
-                        <span className="text-white/50">L'Art de la Puissance.</span>
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-100 to-gray-500">L'Art de la Puissance.</span>
                     </h1>
                     
-                    <p className="text-xl text-white/60 font-light max-w-2xl mx-auto lg:mx-0 leading-relaxed">
+                    <p className="text-xl text-white/70 font-light max-w-2xl mx-auto lg:mx-0 leading-relaxed drop-shadow-md">
                         Ryzen 7 AI. Écran tactile 2.5K. Zorin OS. <br/>
                         Le tout dans un châssis aluminium ultra-fin.
                     </p>
@@ -109,14 +108,14 @@ const DeviceLanding = () => {
                     <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-4">
                         <Button 
                             onClick={handleBuy}
-                            className="h-14 px-10 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold shadow-[0_0_30px_rgba(255,255,255,0.15)]"
+                            className="h-14 px-10 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold shadow-[0_0_40px_rgba(255,255,255,0.1)]"
                         >
                             Commander
                             <ArrowRight className="ml-2 h-5 w-5" />
                         </Button>
                         <Button 
                             variant="outline"
-                            className="h-14 px-10 text-white border-white/20 bg-transparent hover:bg-white/5 text-lg rounded-full"
+                            className="h-14 px-10 text-white border-white/20 bg-transparent hover:bg-white/5 text-lg rounded-full backdrop-blur-sm"
                             onClick={() => document.getElementById('specs')?.scrollIntoView({ behavior: 'smooth' })}
                         >
                             Détails
@@ -124,10 +123,10 @@ const DeviceLanding = () => {
                     </div>
                 </div>
 
-                {/* Droite : Laptop (Taille contrôlée) */}
+                {/* Droite : Laptop */}
                 <div className="flex-1 relative w-full max-w-lg lg:max-w-xl animate-in fade-in slide-in-from-right-8 duration-1000 delay-200">
-                    {/* Glow Effect derrière l'ordi - Plus subtil */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+                    {/* Glow Effect propre derrière l'ordi */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[100%] bg-gradient-to-tr from-blue-500/10 to-purple-500/5 blur-[90px] rounded-full pointer-events-none"></div>
                     
                     <img 
                         src="/sivara-book.png" 

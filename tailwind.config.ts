@@ -77,25 +77,21 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
-        // Animation fluide style "ruban"
-        "wave-drift": {
-            "0%": { transform: "translate(0, 0) rotate(0deg) scale(1)" },
-            "33%": { transform: "translate(50px, -30px) rotate(2deg) scale(1.05)" },
-            "66%": { transform: "translate(-20px, 20px) rotate(-1deg) scale(0.95)" },
-            "100%": { transform: "translate(0, 0) rotate(0deg) scale(1)" },
+        // Animation fluide style "ruban" PS3
+        "wave-undulate": {
+            "0%, 100%": { transform: "rotate(-12deg) translateY(0) scaleY(1)" },
+            "50%": { transform: "rotate(-10deg) translateY(-20px) scaleY(1.1)" },
         },
-        "wave-drift-reverse": {
-            "0%": { transform: "translate(0, 0) rotate(0deg) scale(1)" },
-            "33%": { transform: "translate(-40px, 30px) rotate(-2deg) scale(1.05)" },
-            "66%": { transform: "translate(30px, -20px) rotate(1deg) scale(0.95)" },
-            "100%": { transform: "translate(0, 0) rotate(0deg) scale(1)" },
+        "wave-undulate-slow": {
+            "0%, 100%": { transform: "rotate(-15deg) translateY(0) scale(1)" },
+            "50%": { transform: "rotate(-18deg) translateY(30px) scale(1.05)" },
         }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "wave-slow": "wave-drift 15s ease-in-out infinite",
-        "wave-slower": "wave-drift-reverse 20s ease-in-out infinite",
+        "wave-undulate": "wave-undulate 8s ease-in-out infinite",
+        "wave-undulate-slow": "wave-undulate-slow 12s ease-in-out infinite",
       },
     },
   },
