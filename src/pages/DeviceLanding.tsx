@@ -76,7 +76,7 @@ const DeviceLanding = () => {
         {/* Background Image Full Screen */}
         <div 
             className="absolute inset-0 bg-cover bg-center z-0"
-            style={{ backgroundImage: 'url(/device-hero.jpg)' }}
+            style={{ backgroundImage: 'url(/device-hero-new.jpg)' }}
         >
             {/* Dark Overlay Uniforme */}
             <div className="absolute inset-0 bg-black/40"></div>
