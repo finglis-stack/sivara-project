@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink, RefreshCw, Globe } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink, RefreshCw, Globe, Laptop } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import {
   Dialog,
@@ -161,6 +161,9 @@ const Profile = () => {
      } else if (app === 'www') {
          if (isLocal) window.location.href = '/?app=www';
          else window.location.href = 'https://sivara.ca';
+     } else if (app === 'device') {
+         if (isLocal) window.location.href = '/?app=device';
+         else window.location.href = 'https://device.sivara.ca';
      }
   };
 
@@ -383,6 +386,14 @@ const Profile = () => {
                   <Globe className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
                 </div>
                 <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Moteur</h3></div>
+              </div>
+            </button>
+            <button onClick={() => navigateToApp('device')} className="group relative bg-white border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left active:scale-95">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-zinc-50 rounded-xl flex items-center justify-center group-hover:bg-zinc-100 transition-colors">
+                  <Laptop className="h-5 w-5 sm:h-6 sm:w-6 text-zinc-900" />
+                </div>
+                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Book</h3></div>
               </div>
             </button>
           </div>

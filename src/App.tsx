@@ -30,6 +30,7 @@ import HelpAdmin from "./pages/HelpAdmin";
 import HelpCategory from "./pages/HelpCategory";
 import HelpArticle from "./pages/HelpArticle";
 import ResetPassword from "./pages/ResetPassword";
+import DeviceLanding from "./pages/DeviceLanding";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const AppRoutes = () => {
       if (appParam === 'mail') return 'mail';
       if (appParam === 'www') return 'www';
       if (appParam === 'help') return 'help';
+      if (appParam === 'device') return 'device';
       return 'mobile-launcher';
     }
 
@@ -58,6 +60,7 @@ const AppRoutes = () => {
       if (appParam === 'mail') return 'mail';
       if (appParam === 'www') return 'www';
       if (appParam === 'help') return 'help';
+      if (appParam === 'device') return 'device';
       if (appParam === 'mobile') return 'mobile-launcher';
       return 'dev-portal';
     }
@@ -67,6 +70,7 @@ const AppRoutes = () => {
     if (hostname.startsWith('account.')) return 'account';
     if (hostname.startsWith('mail.')) return 'mail';
     if (hostname.startsWith('help.')) return 'help';
+    if (hostname.startsWith('device.')) return 'device';
     return 'www';
   }, [searchParams, hostname]);
 
@@ -109,6 +113,11 @@ const AppRoutes = () => {
           <Route path="/article/:slug" element={<HelpArticle />} />
           <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
         </>
+      )}
+
+      {/* --- APPLICATION: DEVICE --- */}
+      {currentApp === 'device' && (
+        <Route path="*" element={<DeviceLanding />} />
       )}
 
       {/* --- APPLICATION: DOCS --- */}
