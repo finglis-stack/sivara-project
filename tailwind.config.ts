@@ -70,41 +70,32 @@ export default {
       },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
         },
+        // Animation fluide style "ruban"
         "wave-drift": {
-            "0%, 100%": { transform: "translate(0, 0) rotate(0deg)" },
-            "50%": { transform: "translate(30px, -20px) rotate(2deg)" },
+            "0%": { transform: "translate(0, 0) rotate(0deg) scale(1)" },
+            "33%": { transform: "translate(50px, -30px) rotate(2deg) scale(1.05)" },
+            "66%": { transform: "translate(-20px, 20px) rotate(-1deg) scale(0.95)" },
+            "100%": { transform: "translate(0, 0) rotate(0deg) scale(1)" },
         },
         "wave-drift-reverse": {
-            "0%, 100%": { transform: "translate(0, 0) rotate(0deg)" },
-            "50%": { transform: "translate(-30px, 20px) rotate(-2deg)" },
-        },
-        "wave-flow": {
-            "0%": { transform: "translateX(-5%) rotate(-5deg)" },
-            "50%": { transform: "translateX(5%) rotate(0deg)" },
-            "100%": { transform: "translateX(-5%) rotate(-5deg)" },
+            "0%": { transform: "translate(0, 0) rotate(0deg) scale(1)" },
+            "33%": { transform: "translate(-40px, 30px) rotate(-2deg) scale(1.05)" },
+            "66%": { transform: "translate(30px, -20px) rotate(1deg) scale(0.95)" },
+            "100%": { transform: "translate(0, 0) rotate(0deg) scale(1)" },
         }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "wave-slow": "wave-drift 10s ease-in-out infinite",
-        "wave-slower": "wave-drift-reverse 15s ease-in-out infinite",
-        "wave-flow": "wave-flow 20s ease-in-out infinite",
+        "wave-slow": "wave-drift 15s ease-in-out infinite",
+        "wave-slower": "wave-drift-reverse 20s ease-in-out infinite",
       },
     },
   },

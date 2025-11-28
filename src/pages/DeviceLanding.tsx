@@ -43,7 +43,7 @@ const DeviceLanding = () => {
             <span className="font-medium text-lg tracking-wide drop-shadow-md">Sivara Book</span>
           </div>
           <div className="flex items-center gap-4 sm:gap-6">
-            <a href="#specs" className="text-sm font-medium text-white/70 hover:text-white transition-colors hidden sm:block">Spécifications</a>
+            <a href="#specs" className="text-sm font-medium text-white/80 hover:text-white transition-colors hidden sm:block shadow-sm">Spécifications</a>
             
             {user ? (
                 <div className="text-white">
@@ -54,13 +54,13 @@ const DeviceLanding = () => {
                     <Button 
                     variant="ghost" 
                     onClick={() => navigateToAuth('/login')}
-                    className="text-white hover:bg-white/10 font-medium"
+                    className="text-white hover:bg-white/20 font-medium"
                     >
                     Connexion
                     </Button>
                     <Button 
                     onClick={() => navigateToAuth('/onboarding')}
-                    className="bg-white text-black hover:bg-gray-200 rounded-full px-6 border-0 transition-all"
+                    className="bg-white text-black hover:bg-gray-100 rounded-full px-6 border-2 border-transparent hover:border-white/50 transition-all"
                     >
                     Précommander
                     </Button>
@@ -71,16 +71,19 @@ const DeviceLanding = () => {
       </nav>
 
       {/* Hero Section - PS3 Style (Dark Abstract) */}
-      <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-[#0a0a0a]">
+      <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-[#050505]">
         
         {/* Animated Background Waves (PS3 XMB Style) */}
+        {/* Note: Opacité augmentée et Blur réduit pour la visibilité */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            {/* Wave 1 */}
-            <div className="absolute top-[30%] -left-[10%] w-[120%] h-[60vh] rounded-[100%] border-t border-white/10 bg-gradient-to-b from-white/5 to-transparent blur-3xl animate-wave-slow transform -rotate-12 opacity-40"></div>
-            {/* Wave 2 */}
-            <div className="absolute top-[40%] -left-[10%] w-[120%] h-[60vh] rounded-[100%] border-t border-white/5 bg-gradient-to-b from-blue-500/5 to-transparent blur-2xl animate-wave-slower transform -rotate-6 opacity-30"></div>
-            {/* Wave 3 (Accent) */}
-            <div className="absolute top-[35%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] border-t border-white/5 bg-gradient-to-b from-white/5 to-transparent blur-xl animate-wave-flow transform -rotate-3 opacity-20"></div>
+            {/* Ruban Principal (Blanc/Gris) */}
+            <div className="absolute top-[40%] -left-[10%] w-[120%] h-[40vh] bg-gradient-to-b from-white/10 to-transparent blur-xl rounded-[100%] border-t border-white/20 animate-wave-slow transform -rotate-12 opacity-60"></div>
+            
+            {/* Ruban Secondaire (Bleu Nuit subtil) */}
+            <div className="absolute top-[50%] -left-[10%] w-[120%] h-[40vh] bg-gradient-to-b from-blue-900/20 to-transparent blur-2xl rounded-[100%] border-t border-blue-500/10 animate-wave-slower transform -rotate-6 opacity-50"></div>
+            
+            {/* Ligne de contour fine (Netteté) */}
+            <div className="absolute top-[45%] -left-[10%] w-[120%] h-[40vh] rounded-[100%] border-t-[2px] border-white/10 animate-wave-slow transform -rotate-12 opacity-40"></div>
         </div>
 
         <div className="container mx-auto px-6 relative z-10 py-12">
@@ -106,7 +109,7 @@ const DeviceLanding = () => {
                     <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-4">
                         <Button 
                             onClick={handleBuy}
-                            className="h-14 px-10 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold"
+                            className="h-14 px-10 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold shadow-[0_0_30px_rgba(255,255,255,0.15)]"
                         >
                             Commander
                             <ArrowRight className="ml-2 h-5 w-5" />
@@ -124,7 +127,7 @@ const DeviceLanding = () => {
                 {/* Droite : Laptop (Taille contrôlée) */}
                 <div className="flex-1 relative w-full max-w-lg lg:max-w-xl animate-in fade-in slide-in-from-right-8 duration-1000 delay-200">
                     {/* Glow Effect derrière l'ordi - Plus subtil */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[100%] bg-white/5 blur-[80px] rounded-full pointer-events-none"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
                     
                     <img 
                         src="/sivara-book.png" 
