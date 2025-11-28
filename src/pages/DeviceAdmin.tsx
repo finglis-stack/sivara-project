@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { showSuccess, showError } from '@/utils/toast';
 import { 
   Package, Plus, Search, Barcode, Laptop, ArrowLeft, 
-  Trash2, Edit2, CheckCircle2, AlertCircle, Box, DollarSign
+  Trash2, Edit2, CheckCircle2, AlertCircle, Box, DollarSign, Upload, Globe, Shield, Loader2
 } from 'lucide-react';
 
 interface Product {
@@ -24,6 +24,8 @@ interface Product {
   base_price: number;
   image_url: string;
   specs: any;
+  availability?: string;
+  warranty_type?: string;
 }
 
 interface Unit {
@@ -39,6 +41,7 @@ const DeviceAdmin = () => {
   const navigate = useNavigate();
   const [isVendor, setIsVendor] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Data State
   const [products, setProducts] = useState<Product[]>([]);
@@ -48,9 +51,17 @@ const DeviceAdmin = () => {
   // UI State
   const [showProductDialog, setShowProductDialog] = useState(false);
   const [showUnitDialog, setShowUnitDialog] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Forms
-  const [prodForm, setProdForm] = useState<Partial<Product>>({ name: '', description: '', base_price: 0, image_url: '' });
+  const [prodForm, setProdForm] = useState<Partial<Product>>({ 
+      name: '', 
+      description: '', 
+      base_price: 0, 
+      image_url: '', 
+      availability: 'Global', 
+      warranty_type: 'standard' 
+  });
   const [unitForm, setUnitForm] = useState<Partial<Unit>>({ serial_number: '', status: 'available', condition: 'new' });
 
   // 1. Check Vendor Role
@@ -86,24 +97,54 @@ const DeviceAdmin = () => {
     fetchUnits(product.id);
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    try {
+        setIsUploading(true);
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `${user.id}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('device-products')
+            .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage.from('device-products').getPublicUrl(filePath);
+        setProdForm(prev => ({ ...prev, image_url: publicUrl }));
+        showSuccess("Image uploadée");
+    } catch (error) {
+        console.error(error);
+        showError("Erreur lors de l'upload");
+    } finally {
+        setIsUploading(false);
+    }
+  };
+
   // 3. Product Actions
   const handleSaveProduct = async () => {
     try {
         if (!prodForm.name || !prodForm.base_price) return;
         
+        const payload = {
+            ...prodForm,
+            vendor_id: user?.id,
+            // Mock specs for now, could be expanded later
+            specs: { cpu: "Ryzen 7", ram: "32GB" } 
+        };
+
         if (selectedProduct && showProductDialog) {
-             // Edit logic here if needed
+             // Edit logic here if needed (not requested but structure ready)
         } else {
-            const { error } = await supabase.from('device_products').insert({
-                ...prodForm,
-                vendor_id: user?.id,
-                specs: { cpu: "Ryzen 7", ram: "32GB" } // Mock specs for now
-            });
+            const { error } = await supabase.from('device_products').insert(payload);
             if (error) throw error;
             showSuccess("Produit créé");
         }
         setShowProductDialog(false);
-        setProdForm({ name: '', description: '', base_price: 0, image_url: '' });
+        setProdForm({ name: '', description: '', base_price: 0, image_url: '', availability: 'Global', warranty_type: 'standard' });
         fetchProducts();
     } catch (e) {
         showError("Erreur lors de la sauvegarde");
@@ -191,7 +232,7 @@ const DeviceAdmin = () => {
                                     onClick={() => handleSelectProduct(product)}
                                     className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors flex items-start gap-4 ${selectedProduct?.id === product.id ? 'bg-blue-50 border-l-4 border-blue-600' : 'border-l-4 border-transparent'}`}
                                 >
-                                    <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                                    <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden relative">
                                         {product.image_url ? <img src={product.image_url} className="w-full h-full object-cover" /> : <Laptop className="h-6 w-6 text-gray-400" />}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -199,7 +240,10 @@ const DeviceAdmin = () => {
                                             <h3 className="font-bold text-gray-900 truncate">{product.name}</h3>
                                             <span className="text-xs font-mono text-gray-500">${product.base_price}</span>
                                         </div>
-                                        <p className="text-xs text-gray-500 line-clamp-1 mt-1">{product.description}</p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <Badge variant="outline" className="text-[10px] h-4 px-1">{product.availability}</Badge>
+                                            <Badge variant="secondary" className="text-[10px] h-4 px-1">{product.warranty_type === 'extended' ? 'Garantie Étendue' : 'Standard'}</Badge>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -219,10 +263,18 @@ const DeviceAdmin = () => {
                 {selectedProduct ? (
                     <>
                         <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                                <Box className="h-5 w-5 text-gray-400" />
-                                Stock : {selectedProduct.name}
-                            </h2>
+                            <div className="flex items-center gap-4">
+                                {selectedProduct.image_url && <img src={selectedProduct.image_url} className="h-12 w-12 rounded-lg object-cover border border-gray-200" />}
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                        {selectedProduct.name}
+                                    </h2>
+                                    <p className="text-sm text-gray-500 flex items-center gap-2">
+                                        <Globe className="h-3 w-3" /> {selectedProduct.availability} • 
+                                        <Shield className="h-3 w-3" /> {selectedProduct.warranty_type === 'extended' ? 'Garantie Étendue (SLA 24h)' : 'Garantie 2 ans'}
+                                    </p>
+                                </div>
+                            </div>
                             <div className="flex gap-2">
                                 <Button variant="outline" size="sm" onClick={() => handleDeleteProduct(selectedProduct.id)} className="text-red-600 hover:bg-red-50 border-red-200">
                                     <Trash2 className="h-4 w-4 mr-2" /> Supprimer Produit
@@ -289,14 +341,54 @@ const DeviceAdmin = () => {
 
         {/* Dialog Création Produit */}
         <Dialog open={showProductDialog} onOpenChange={setShowProductDialog}>
-            <DialogContent>
+            <DialogContent className="max-w-2xl">
                 <DialogHeader><DialogTitle>Nouveau Produit</DialogTitle></DialogHeader>
-                <div className="space-y-4 py-2">
-                    <div className="space-y-2"><Label>Nom du modèle</Label><Input value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} placeholder="ex: Sivara Book Pro" /></div>
-                    <div className="space-y-2"><Label>Description courte</Label><Textarea value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} placeholder="Caractéristiques principales..." /></div>
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+                    <div className="space-y-4">
+                        <div className="space-y-2"><Label>Nom du modèle</Label><Input value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} placeholder="ex: Sivara Book Pro" /></div>
+                        <div className="space-y-2"><Label>Description courte</Label><Textarea value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} placeholder="Caractéristiques principales..." /></div>
                         <div className="space-y-2"><Label>Prix de base ($)</Label><Input type="number" value={prodForm.base_price} onChange={e => setProdForm({...prodForm, base_price: parseFloat(e.target.value)})} /></div>
-                        <div className="space-y-2"><Label>Image URL (Optionnel)</Label><Input value={prodForm.image_url} onChange={e => setProdForm({...prodForm, image_url: e.target.value})} placeholder="https://..." /></div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Image du produit</Label>
+                            <div 
+                                className="border-2 border-dashed border-gray-200 rounded-lg h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                {prodForm.image_url ? (
+                                    <img src={prodForm.image_url} className="h-full w-full object-cover rounded-lg" />
+                                ) : (
+                                    <>
+                                        {isUploading ? <Loader2 className="h-6 w-6 animate-spin text-gray-400" /> : <Upload className="h-6 w-6 text-gray-400" />}
+                                        <span className="text-xs text-gray-500 mt-2">Cliquez pour uploader</span>
+                                    </>
+                                )}
+                            </div>
+                            <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Disponibilité (Pays)</Label>
+                            <Input value={prodForm.availability} onChange={e => setProdForm({...prodForm, availability: e.target.value})} placeholder="ex: Canada, France, US" />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Type de Garantie</Label>
+                            <Select value={prodForm.warranty_type} onValueChange={(v) => setProdForm({...prodForm, warranty_type: v})}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="standard">Standard (2 ans)</SelectItem>
+                                    <SelectItem value="extended">Étendue (SLA 24h + Pièces + Main d'œuvre)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-gray-500 leading-tight">
+                                {prodForm.warranty_type === 'extended' 
+                                    ? "Inclut: Intervention sur site, remplacement express, support prioritaire." 
+                                    : "Garantie légale standard contre les défauts de fabrication."}
+                            </p>
+                        </div>
                     </div>
                 </div>
                 <DialogFooter><Button onClick={handleSaveProduct}>Créer la fiche</Button></DialogFooter>

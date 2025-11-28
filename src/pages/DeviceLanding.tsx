@@ -62,7 +62,7 @@ const DeviceLanding = () => {
                     variant="ghost" 
                     size="sm" 
                     onClick={() => navigate('/admin')}
-                    className="text-white hover:bg-white/10 hidden sm:flex"
+                    className="text-white hover:bg-white/20 hover:text-white transition-colors hidden sm:flex"
                 >
                     <Package className="h-4 w-4 mr-2" /> Espace Vendeur
                 </Button>
