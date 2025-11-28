@@ -73,16 +73,16 @@ const DeviceLanding = () => {
       {/* Hero Section - PS3 Style (Dark Abstract) */}
       <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-[#080808]">
         
-        {/* Animated Background Waves (PS3 XMB Style - Bold Ribbons) */}
+        {/* Animated Background Waves (PS3 XMB Style - Thin Lines) */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            {/* Ruban Principal Épais (Blanc Spectral) */}
-            <div className="absolute top-[20%] -left-[20%] w-[140%] h-[70vh] rounded-[100%] border-t-[3px] border-white/30 bg-gradient-to-b from-white/10 to-transparent blur-md animate-wave-undulate opacity-50"></div>
+            {/* Ligne Principale (Très fine et nette) */}
+            <div className="absolute top-[40%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] border-t-[1px] border-white/40 shadow-[0_0_15px_rgba(255,255,255,0.1)] animate-wave-undulate opacity-70"></div>
             
-            {/* Ruban Secondaire (Bleu Profond) */}
-            <div className="absolute top-[35%] -left-[10%] w-[120%] h-[60vh] rounded-[100%] border-t-[4px] border-blue-400/20 bg-gradient-to-b from-blue-600/10 to-transparent blur-lg animate-wave-undulate-slow opacity-40 mix-blend-screen"></div>
+            {/* Écho lumineux (Légèrement décalé) */}
+            <div className="absolute top-[42%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] border-t-[1px] border-white/10 blur-[1px] animate-wave-undulate-slow opacity-40"></div>
             
-            {/* Ruban de fond (Large et lent) */}
-            <div className="absolute top-[10%] -left-[30%] w-[160%] h-[90vh] rounded-[100%] border-t-[1px] border-white/10 blur-xl animate-wave-undulate opacity-30 delay-1000"></div>
+            {/* Lueur d'ambiance (Pas de masse, juste une aura) */}
+            <div className="absolute top-[38%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] bg-gradient-to-b from-white/5 to-transparent blur-3xl animate-wave-undulate opacity-20"></div>
         </div>
 
         <div className="container mx-auto px-6 relative z-10 py-12">
