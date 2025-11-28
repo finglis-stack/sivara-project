@@ -34,7 +34,7 @@ const DeviceLanding = () => {
   return (
     <div className="min-h-screen bg-white font-sans selection:bg-blue-900 selection:text-white overflow-x-hidden">
       {/* Navbar Transparente */}
-      <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-white/10 backdrop-blur-md border-b border-white/10 text-white">
+      <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-black/10 backdrop-blur-md border-b border-white/10 text-white">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
             <div className="h-9 w-9 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 shadow-inner">
@@ -46,7 +46,7 @@ const DeviceLanding = () => {
             <a href="#specs" className="text-sm font-medium text-white/80 hover:text-white transition-colors hidden sm:block shadow-sm">Spécifications</a>
             
             {user ? (
-                <div className="text-black">
+                <div className="text-white">
                     <UserMenu />
                 </div>
             ) : (
@@ -70,59 +70,59 @@ const DeviceLanding = () => {
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <div className="relative min-h-screen flex flex-col justify-center pt-28 pb-20 overflow-hidden">
-        {/* Background Image */}
+      {/* Hero Section Immersive */}
+      <div className="relative min-h-screen flex flex-col justify-center pt-24 pb-20 overflow-hidden">
+        {/* Background Image Full Screen */}
         <div 
             className="absolute inset-0 bg-cover bg-center z-0"
             style={{ backgroundImage: 'url(/device-hero.jpg)' }}
         >
-            <div className="absolute inset-0 bg-black/20"></div>
-            {/* Gradient plus prononcé vers le blanc pour que le texte du bas soit lisible si besoin */}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-white/90"></div>
+            <div className="absolute inset-0 bg-black/30"></div>
         </div>
 
-        {/* Laptop Image - En PREMIER et PLUS PETIT */}
-        <div className="relative z-10 w-full max-w-3xl mx-auto px-6 mb-8 animate-in fade-in slide-in-from-top-8 duration-1000">
-            <img 
-                src="/sivara-book.png" 
-                alt="Sivara Book" 
-                className="w-full h-auto object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-700"
-            />
-        </div>
-
-        {/* Text Content - En DESSOUS */}
-        <div className="container mx-auto px-6 text-center relative z-10">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/50 backdrop-blur-md border border-white/20 text-white text-sm font-medium shadow-lg mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                Disponible en précommande
+        <div className="relative z-10 container mx-auto px-6 flex flex-col items-center">
+            
+            {/* Laptop Image - En haut, plus petit */}
+            <div className="w-full max-w-3xl mb-8 animate-in fade-in zoom-in duration-1000">
+                <img 
+                    src="/sivara-book.png" 
+                    alt="Sivara Book" 
+                    className="w-full h-auto object-contain drop-shadow-2xl hover:scale-[1.02] transition-transform duration-700"
+                />
             </div>
-            
-            {/* Texte sombre car sur fond devenant blanc, ou texte blanc avec ombre forte */}
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-gray-900 mb-6 leading-tight animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300">
-                La puissance brute. <br/>
-                <span className="font-light text-gray-700">Sans compromis.</span>
-            </h1>
-            
-            <p className="text-lg text-gray-600 font-medium max-w-2xl mx-auto mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-400">
-                Ryzen 7 AI. Écran tactile 2.5K. Zorin OS. <br/>
-                Le tout dans un châssis aluminium ultra-fin.
-            </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-500">
-                <Button 
-                    onClick={handleBuy}
-                    className="h-14 px-10 bg-black text-white hover:bg-gray-800 text-lg rounded-full shadow-lg transition-all hover:scale-105 font-bold"
-                >
-                    Commander
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
+            {/* Text Content - En dessous, blanc */}
+            <div className="text-center max-w-4xl mx-auto">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-medium shadow-lg mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    Disponible en précommande
+                </div>
+                
+                <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white mb-6 leading-tight drop-shadow-2xl animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300">
+                    La puissance brute. <br/>
+                    <span className="font-light text-white/90">Sans compromis.</span>
+                </h1>
+                
+                <p className="text-lg md:text-xl text-white/80 font-light max-w-2xl mx-auto mb-10 leading-relaxed drop-shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-400">
+                    Ryzen 7 AI. Écran tactile 2.5K. Zorin OS. <br/>
+                    Le tout dans un châssis aluminium ultra-fin.
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-500">
+                    <Button 
+                        onClick={handleBuy}
+                        className="h-14 px-10 bg-white text-black hover:bg-gray-100 text-lg rounded-full shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all hover:scale-105 font-bold"
+                    >
+                        Commander
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                </div>
             </div>
         </div>
       </div>
 
       {/* Specs Grid */}
-      <div id="specs" className="py-24 bg-white relative z-20 shadow-[0_-20px_40px_rgba(0,0,0,0.05)]">
+      <div id="specs" className="py-24 bg-white relative z-20 shadow-[0_-20px_40px_rgba(0,0,0,0.1)]">
         <div className="container mx-auto px-6">
             <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-gray-900 mb-6">Ingénierie de précision.</h2>
