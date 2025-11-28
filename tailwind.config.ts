@@ -85,10 +85,26 @@ export default {
             height: "0",
           },
         },
+        "wave-drift": {
+            "0%, 100%": { transform: "translate(0, 0) rotate(0deg)" },
+            "50%": { transform: "translate(30px, -20px) rotate(2deg)" },
+        },
+        "wave-drift-reverse": {
+            "0%, 100%": { transform: "translate(0, 0) rotate(0deg)" },
+            "50%": { transform: "translate(-30px, 20px) rotate(-2deg)" },
+        },
+        "wave-flow": {
+            "0%": { transform: "translateX(-5%) rotate(-5deg)" },
+            "50%": { transform: "translateX(5%) rotate(0deg)" },
+            "100%": { transform: "translateX(-5%) rotate(-5deg)" },
+        }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "wave-slow": "wave-drift 10s ease-in-out infinite",
+        "wave-slower": "wave-drift-reverse 15s ease-in-out infinite",
+        "wave-flow": "wave-flow 20s ease-in-out infinite",
       },
     },
   },

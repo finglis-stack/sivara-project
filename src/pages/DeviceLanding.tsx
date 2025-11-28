@@ -34,16 +34,16 @@ const DeviceLanding = () => {
   return (
     <div className="min-h-screen bg-white font-sans selection:bg-blue-900 selection:text-white overflow-x-hidden">
       {/* Navbar Transparente */}
-      <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-white/5 backdrop-blur-md border-b border-white/10 text-white">
+      <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-white/5 backdrop-blur-md border-b border-white/5 text-white">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
-            <div className="h-9 w-9 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 shadow-inner">
+            <div className="h-9 w-9 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/10 shadow-inner">
               <span className="font-bold text-lg text-white">S</span>
             </div>
             <span className="font-medium text-lg tracking-wide drop-shadow-md">Sivara Book</span>
           </div>
           <div className="flex items-center gap-4 sm:gap-6">
-            <a href="#specs" className="text-sm font-medium text-white/80 hover:text-white transition-colors hidden sm:block shadow-sm">Spécifications</a>
+            <a href="#specs" className="text-sm font-medium text-white/70 hover:text-white transition-colors hidden sm:block">Spécifications</a>
             
             {user ? (
                 <div className="text-white">
@@ -54,13 +54,13 @@ const DeviceLanding = () => {
                     <Button 
                     variant="ghost" 
                     onClick={() => navigateToAuth('/login')}
-                    className="text-white hover:bg-white/20 font-medium"
+                    className="text-white hover:bg-white/10 font-medium"
                     >
                     Connexion
                     </Button>
                     <Button 
                     onClick={() => navigateToAuth('/onboarding')}
-                    className="bg-white text-black hover:bg-gray-100 rounded-full px-6 border-2 border-transparent hover:border-white/50 transition-all"
+                    className="bg-white text-black hover:bg-gray-200 rounded-full px-6 border-0 transition-all"
                     >
                     Précommander
                     </Button>
@@ -70,16 +70,17 @@ const DeviceLanding = () => {
         </div>
       </nav>
 
-      {/* Hero Section Immersive - Split Layout */}
-      <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
+      {/* Hero Section - PS3 Style (Dark Abstract) */}
+      <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-[#0a0a0a]">
         
-        {/* Background Image Full Screen */}
-        <div 
-            className="absolute inset-0 bg-cover bg-center z-0"
-            style={{ backgroundImage: 'url(/device-hero-new.jpg)' }}
-        >
-            {/* Dark Overlay Uniforme */}
-            <div className="absolute inset-0 bg-black/40"></div>
+        {/* Animated Background Waves (PS3 XMB Style) */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            {/* Wave 1 */}
+            <div className="absolute top-[30%] -left-[10%] w-[120%] h-[60vh] rounded-[100%] border-t border-white/10 bg-gradient-to-b from-white/5 to-transparent blur-3xl animate-wave-slow transform -rotate-12 opacity-40"></div>
+            {/* Wave 2 */}
+            <div className="absolute top-[40%] -left-[10%] w-[120%] h-[60vh] rounded-[100%] border-t border-white/5 bg-gradient-to-b from-blue-500/5 to-transparent blur-2xl animate-wave-slower transform -rotate-6 opacity-30"></div>
+            {/* Wave 3 (Accent) */}
+            <div className="absolute top-[35%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] border-t border-white/5 bg-gradient-to-b from-white/5 to-transparent blur-xl animate-wave-flow transform -rotate-3 opacity-20"></div>
         </div>
 
         <div className="container mx-auto px-6 relative z-10 py-12">
@@ -87,17 +88,17 @@ const DeviceLanding = () => {
                 
                 {/* Gauche : Texte */}
                 <div className="flex-1 text-center lg:text-left space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-medium shadow-lg">
-                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                        Disponible en précommande
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/80 text-sm font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                        Design Industriel
                     </div>
                     
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.1] drop-shadow-2xl">
+                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.1]">
                         Sivara Book. <br/>
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-200 via-white to-blue-200">L'Art de la Puissance.</span>
+                        <span className="text-white/50">L'Art de la Puissance.</span>
                     </h1>
                     
-                    <p className="text-xl text-white/80 font-light max-w-2xl mx-auto lg:mx-0 leading-relaxed drop-shadow-md">
+                    <p className="text-xl text-white/60 font-light max-w-2xl mx-auto lg:mx-0 leading-relaxed">
                         Ryzen 7 AI. Écran tactile 2.5K. Zorin OS. <br/>
                         Le tout dans un châssis aluminium ultra-fin.
                     </p>
@@ -105,14 +106,14 @@ const DeviceLanding = () => {
                     <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-4">
                         <Button 
                             onClick={handleBuy}
-                            className="h-14 px-10 bg-white text-black hover:bg-gray-100 text-lg rounded-full shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all hover:scale-105 font-bold"
+                            className="h-14 px-10 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold"
                         >
                             Commander
                             <ArrowRight className="ml-2 h-5 w-5" />
                         </Button>
                         <Button 
                             variant="outline"
-                            className="h-14 px-10 text-white border-white/30 bg-transparent hover:bg-white/10 text-lg rounded-full backdrop-blur-sm"
+                            className="h-14 px-10 text-white border-white/20 bg-transparent hover:bg-white/5 text-lg rounded-full"
                             onClick={() => document.getElementById('specs')?.scrollIntoView({ behavior: 'smooth' })}
                         >
                             Détails
@@ -122,8 +123,8 @@ const DeviceLanding = () => {
 
                 {/* Droite : Laptop (Taille contrôlée) */}
                 <div className="flex-1 relative w-full max-w-lg lg:max-w-xl animate-in fade-in slide-in-from-right-8 duration-1000 delay-200">
-                    {/* Glow Effect derrière l'ordi */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-blue-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+                    {/* Glow Effect derrière l'ordi - Plus subtil */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[100%] bg-white/5 blur-[80px] rounded-full pointer-events-none"></div>
                     
                     <img 
                         src="/sivara-book.png" 
