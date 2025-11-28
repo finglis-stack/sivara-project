@@ -192,31 +192,42 @@ const App = () => {
           try {
             // NOTE: Si c'est un lien de recovery, on laisse Supabase le gérer
             // La page ResetPassword fera le check de session elle-même.
-            // On ne fait rien ici pour éviter de "consommer" le hash trop tôt si on est sur la mauvaise route.
             if (hash.includes('type=recovery')) {
                 return; 
             }
 
-            const params = new URLSearchParams(hash.substring(1));
+            // Extraction manuelle robuste des tokens
+            const params = new URLSearchParams(hash.substring(1)); // Enlève le '#'
             const accessToken = params.get('access_token');
             const refreshToken = params.get('refresh_token');
 
             if (accessToken && refreshToken) {
+              console.log("[Auth] Token détecté dans URL, tentative de restauration...");
+              
               const { error } = await supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken,
               });
               
-              if (!error) {
+              if (error) {
+                console.error("[Auth] Erreur restauration session:", error);
+              } else {
+                console.log("[Auth] Session restaurée avec succès.");
+                // Nettoyage de l'URL pour la propreté
                 window.history.replaceState(null, '', window.location.pathname + window.location.search);
+                
+                // Forcer un rafraîchissement de l'utilisateur pour être sûr
+                await supabase.auth.getUser();
               }
             }
           } catch (e) {
-            console.error("Erreur restauration session", e);
+            console.error("[Auth] Erreur critique parsing hash", e);
           }
         }
       };
-      handleHashSession();
+      
+      // Petit délai pour laisser le temps au contexte de s'initialiser si besoin
+      setTimeout(handleHashSession, 100);
     }
   }, []);
 

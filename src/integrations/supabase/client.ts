@@ -16,7 +16,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storageKey: 'sivara-auth-token',
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // IMPORTANT: On désactive la détection auto pour éviter les conflits avec notre logique 
+    // de gestion de hash manuelle dans App.tsx (Cross-Domain Fallback)
+    detectSessionInUrl: false, 
     flowType: 'pkce',
     storage: {
       getItem: (key) => {
