@@ -409,7 +409,6 @@ const DeviceLanding = () => {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="text-sm font-medium text-gray-500 line-through">${unit.price}</div>
                                         <div className="font-bold text-black text-lg">Dispo</div>
                                     </div>
                                 </Label>
