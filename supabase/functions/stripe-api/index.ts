@@ -30,7 +30,7 @@ serve(async (req) => {
       throw new Error('Non authentifié');
     }
 
-    const { action, priceId, isTrial: requestedTrial } = await req.json()
+    const { action, priceId, isTrial: requestedTrial, unitId, successUrl, cancelUrl } = await req.json()
 
     // --- CONFIG ---
     if (action === 'get_config') {
@@ -58,7 +58,111 @@ serve(async (req) => {
 
     let customerId = profile?.stripe_customer_id
 
-    // --- SYNC SUBSCRIPTION ---
+    // Gestion Client Inconnu
+    if (customerId) {
+        try {
+            const existingCustomer = await stripe.customers.retrieve(customerId);
+            if (existingCustomer.deleted) customerId = null;
+        } catch (e) {
+            customerId = null;
+        }
+    }
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { supabase_uuid: user.id },
+      })
+      customerId = customer.id
+      
+      const serviceClient = createClient(
+        // @ts-ignore
+        Deno.env.get('SUPABASE_URL') ?? '',
+        // @ts-ignore
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      )
+      await serviceClient.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
+    }
+
+    // --- DEVICE CHECKOUT (Location Matériel) ---
+    if (action === 'create_device_checkout') {
+      if (!unitId) throw new Error("Unit ID manquant");
+
+      // 1. Récupérer le prix réel depuis la DB (Sécurité)
+      const serviceClient = createClient(
+        // @ts-ignore
+        Deno.env.get('SUPABASE_URL') ?? '',
+        // @ts-ignore
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      const { data: unit } = await serviceClient
+        .from('device_units')
+        .select('*, product:product_id(name)')
+        .eq('id', unitId)
+        .single();
+        
+      if (!unit) throw new Error("Unité introuvable");
+
+      // 2. Calculs Financiers (Mêmes que frontend)
+      const price = unit.unit_price;
+      const taxRate = 0.14975; // Taxes QC
+      const totalWithTax = price * (1 + taxRate);
+      
+      const upfront = totalWithTax * 0.20; // 20% Dépôt
+      const remainder = totalWithTax - upfront;
+      const monthly = remainder / 16; // 16 mois
+
+      // 3. Création Session Stripe
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'cad',
+              product_data: {
+                name: `Dépôt & Activation - ${unit.product.name}`,
+                description: `S/N: ${unit.serial_number} - Dépôt de garantie (20%)`,
+                // images: ['https://sivara.ca/public/sivara-book.png'], 
+              },
+              unit_amount: Math.round(upfront * 100), // En cents
+            },
+            quantity: 1,
+          },
+          {
+            price_data: {
+              currency: 'cad',
+              product_data: {
+                name: `Abonnement Mensuel - ${unit.product.name}`,
+                description: "Engagement 16 mois",
+              },
+              unit_amount: Math.round(monthly * 100), // En cents
+              recurring: {
+                interval: 'month',
+                interval_count: 1
+              }
+            },
+            quantity: 1,
+          }
+        ],
+        mode: 'subscription',
+        success_url: `${successUrl}&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: cancelUrl,
+        metadata: {
+            type: 'device_rental',
+            unit_id: unitId,
+            supabase_user_id: user.id
+        }
+      });
+
+      // On marque l'unité comme 'reserved' temporairement
+      await serviceClient.from('device_units').update({ status: 'reserved' }).eq('id', unitId);
+
+      return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // --- SYNC SUBSCRIPTION (Logiciel) ---
     if (action === 'sync_subscription') {
         if (!customerId) throw new Error("Aucun ID client Stripe associé");
 
@@ -109,54 +213,22 @@ serve(async (req) => {
         );
     }
 
-    // Gestion Client Inconnu
-    if (customerId) {
-        try {
-            const existingCustomer = await stripe.customers.retrieve(customerId);
-            if (existingCustomer.deleted) customerId = null;
-        } catch (e) {
-            customerId = null;
-        }
-    }
-
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        metadata: { supabase_uuid: user.id },
-      })
-      customerId = customer.id
-      
-      const serviceClient = createClient(
-        // @ts-ignore
-        Deno.env.get('SUPABASE_URL') ?? '',
-        // @ts-ignore
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      )
-      await serviceClient.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
-    }
-
-    // --- SUBSCRIPTION INTENT (CORRECTION ICI) ---
+    // --- CREATE SUBSCRIPTION INTENT (Logiciel) ---
     if (action === 'create_subscription_intent') {
       if (!priceId) throw new Error("Price ID manquant");
 
       const isTrialAllowed = requestedTrial && !profile?.has_used_trial && !profile?.is_pro;
 
-      // FIX: On cherche TOUS les statuts, pas juste incomplete
-      // Cela évite de recréer un abonnement si l'utilisateur est déjà en trialing ou active
       const existingSubs = await stripe.subscriptions.list({
         customer: customerId,
         price: priceId,
-        limit: 10, // Marge de sécurité
+        limit: 10,
         status: 'all', 
         expand: ['data.latest_invoice.payment_intent', 'data.pending_setup_intent']
       });
 
       let subscription;
-
-      // 1. Priorité aux abonnements déjà actifs ou en essai (pour ne pas dupliquer)
       const activeOrTrialing = existingSubs.data.find((s: any) => ['active', 'trialing'].includes(s.status));
-      
-      // 2. Sinon, on cherche un incomplet (panier abandonné)
       const incomplete = existingSubs.data.find((s: any) => s.status === 'incomplete');
 
       if (activeOrTrialing) {
@@ -164,7 +236,6 @@ serve(async (req) => {
       } else if (incomplete) {
           subscription = incomplete;
       } else {
-          // 3. Rien n'existe, on crée
           subscription = await stripe.subscriptions.create({
               customer: customerId,
               items: [{ price: priceId }],
@@ -176,8 +247,6 @@ serve(async (req) => {
       }
 
       let clientSecret;
-      
-      // Logique de récupération du secret un peu plus robuste
       if (subscription.pending_setup_intent) {
         // @ts-ignore
         clientSecret = subscription.pending_setup_intent.client_secret;
@@ -186,14 +255,10 @@ serve(async (req) => {
         clientSecret = subscription.latest_invoice.payment_intent.client_secret;
       } 
       
-      // Si l'abonnement est déjà actif/payé, il n'y a peut-être pas de secret nécessaire
-      // Le frontend devra gérer le cas où clientSecret est null si l'utilisateur recharge la page Checkout alors qu'il est déjà pro
-      
       return new Response(
         JSON.stringify({ 
           subscriptionId: subscription.id, 
           clientSecret: clientSecret,
-          // Si on a récupéré un abo existant qui est déjà en trialing, on renvoie true
           isTrialActive: isTrialAllowed || subscription.status === 'trialing'
         }), 
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

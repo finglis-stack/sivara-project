@@ -1,11 +1,11 @@
 import { Button } from '@/components/ui/button';
 import { 
   ArrowRight, ShieldCheck, ChevronRight, Laptop, Package, Check, X, Loader2,
-  Filter, Search, ArrowLeft, Shuffle, Database, Lock, Zap, Layers, Command
+  Filter, Search, ArrowLeft, Shuffle, Database, Lock, Zap, Layers, Command, CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from '@/components/UserMenu';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import confetti from 'canvas-confetti';
 
 // --- TYPES ---
 interface RawUnit {
@@ -44,11 +45,16 @@ interface RawUnit {
 const DeviceLanding = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isVendor, setIsVendor] = useState(false);
   
   // --- CONFIGURATOR STATE ---
   const [showConfig, setShowConfig] = useState(false);
   const [loadingInventory, setLoadingInventory] = useState(false);
+  
+  // --- SUCCESS STATE ---
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
   
   // Data
   const [allUnits, setAllUnits] = useState<RawUnit[]>([]);
@@ -72,6 +78,30 @@ const DeviceLanding = () => {
         .then(({ data }) => { if (data?.is_vendor) setIsVendor(true); });
     }
   }, [user]);
+
+  // Handle Stripe Return
+  useEffect(() => {
+      const successParam = searchParams.get('order_success');
+      const sessionId = searchParams.get('session_id');
+      
+      if (successParam) {
+          setShowSuccessDialog(true);
+          // On utilise l'ID de session Stripe comme référence de commande (tronqué)
+          setOrderId(sessionId ? `SIV-${sessionId.slice(-8).toUpperCase()}` : `SIV-${Date.now().toString().slice(-6)}`);
+          
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+
+          // Clean URL
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('order_success');
+          newParams.delete('session_id');
+          setSearchParams(newParams);
+      }
+  }, [searchParams]);
 
   // --- ALGORITHMES & LOGIQUE ---
 
@@ -598,6 +628,32 @@ const DeviceLanding = () => {
                     </Button>
                 </DialogFooter>
             )}
+        </DialogContent>
+      </Dialog>
+
+      {/* SUCCESS DIALOG */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="sm:max-w-md text-center bg-white text-black">
+            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle2 className="h-10 w-10 text-green-600" />
+            </div>
+            <DialogHeader>
+                <DialogTitle className="text-2xl font-bold text-center">Commande Confirmée</DialogTitle>
+                <DialogDescription className="text-center text-lg">
+                    Merci pour votre confiance.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-3">
+                <p className="text-gray-600">Votre abonnement est actif. L'ordinateur sera expédié sous 48h.</p>
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 font-mono text-sm">
+                    Commande #{orderId}
+                </div>
+            </div>
+            <DialogFooter className="sm:justify-center">
+                <Button onClick={() => setShowSuccessDialog(false)} className="w-full bg-black hover:bg-gray-900 text-white">
+                    Fermer
+                </Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

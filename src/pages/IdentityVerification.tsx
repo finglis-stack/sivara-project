@@ -16,11 +16,11 @@ const IdentityVerification = () => {
   const [backImage, setBackImage] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
   const [riskData, setRiskData] = useState<any>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const unitId = searchParams.get('unit_id');
-  const returnTo = searchParams.get('returnTo');
 
   // Initialisation de la caméra
   const startCamera = async () => {
@@ -59,7 +59,7 @@ const IdentityVerification = () => {
         context.drawImage(videoRef.current, 0, 0);
         const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8);
         
-        // Simuler un effet de scan
+        // Simuler un effet de scan visuel
         setScanProgress(0);
         const interval = setInterval(() => {
             setScanProgress(prev => {
@@ -89,14 +89,13 @@ const IdentityVerification = () => {
         const fp = await FingerprintJS.load();
         const result = await fp.get();
         
-        // Extraction simple de base64 (supprime le prefix data:image...)
         const cleanFront = front.split(',')[1];
         const cleanBack = back.split(',')[1];
 
         // 2. Get User Profile for name comparison
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', user?.id).single();
 
-        // 3. Call Edge Function (The Brain)
+        // 3. Call Edge Function (The Brain - Gemini Risk Engine)
         const { data, error } = await supabase.functions.invoke('verify-identity', {
             body: {
                 frontImage: cleanFront,
@@ -104,13 +103,11 @@ const IdentityVerification = () => {
                 fingerprint: {
                     visitorId: result.visitorId,
                     os: (result.components as any).os?.value || (result.components as any).platform?.value,
-                    // Note: FingerprintJS gratuit ne donne pas GPU direct, on simule pour l'exemple
                     gpu: 'NVIDIA GeForce RTX 3060 (Simulated)', 
                     memory: 16
                 },
                 userId: user?.id,
                 userProfile: profile,
-                // Simulation des 4 derniers chiffres (normalement viendrait du contexte de paiement précédent)
                 cardBin: '4567' 
             }
         });
@@ -132,16 +129,43 @@ const IdentityVerification = () => {
     }
   };
 
-  const startPaymentHandoff = () => {
+  const startPaymentHandoff = async () => {
       setStep('payment_redirect');
+      setIsRedirecting(true);
       
-      // Simulation du délai Stripe (2s) puis retour
-      setTimeout(() => {
-          // Génération d'un numéro de commande "SIV-..."
-          const orderId = `SIV-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random()*1000)}`;
-          const successUrl = `/?app=device&order_success=${orderId}`;
-          window.location.href = successUrl;
-      }, 2500);
+      try {
+          // Appel réel à Stripe API pour créer la session
+          // On génère une URL de succès qui reviendra sur device.sivara.ca avec un ID de commande
+          
+          // Note: On utilise window.location.origin pour supporter localhost ou prod dynamiquement
+          const origin = window.location.origin;
+          
+          // L'ID de commande final sera le session_id de Stripe pour la traçabilité
+          const successUrl = `${origin}/?app=device&order_success=true`;
+          const cancelUrl = `${origin}/?app=device&error=payment_cancelled`;
+
+          const { data, error } = await supabase.functions.invoke('stripe-api', {
+              body: {
+                  action: 'create_device_checkout',
+                  unitId: unitId,
+                  successUrl: successUrl,
+                  cancelUrl: cancelUrl
+              }
+          });
+
+          if (error) throw error;
+          if (data?.url) {
+              window.location.href = data.url; // Redirection Stripe réelle
+          } else {
+              throw new Error("Pas d'URL de paiement reçue");
+          }
+
+      } catch (e: any) {
+          console.error("Erreur Checkout:", e);
+          showError("Impossible d'initialiser le paiement sécurisé.");
+          setStep('success'); // Revenir à l'écran précédent
+          setIsRedirecting(false);
+      }
   };
 
   return (
@@ -257,8 +281,8 @@ const IdentityVerification = () => {
                         <div className="flex justify-between"><span>LOCATION:</span> <span>SECURE ZONE</span></div>
                     </div>
 
-                    <Button onClick={startPaymentHandoff} className="w-full bg-green-600 hover:bg-green-700 h-12 font-bold rounded-lg text-white">
-                        Procéder au paiement (Stripe)
+                    <Button onClick={startPaymentHandoff} disabled={isRedirecting} className="w-full bg-green-600 hover:bg-green-700 h-12 font-bold rounded-lg text-white">
+                        {isRedirecting ? <><Loader2 className="animate-spin mr-2" /> Initialisation Stripe...</> : "Procéder au paiement (Stripe)"}
                     </Button>
                 </Card>
             )}
