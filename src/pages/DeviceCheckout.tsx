@@ -213,14 +213,13 @@ const DeviceCheckout = () => {
   const handleSubmit = async () => {
       setIsProcessing(true);
       
-      // Ici on marquerait l'unité comme "réservée"
+      // Au lieu de valider la commande, on redirige vers le processus d'identité (Hardcore)
+      // On passe l'ID de l'unité pour pouvoir revenir ici (ou sur stripe) plus tard
       if (unit) {
-          await supabase.from('device_units').update({ status: 'reserved' }).eq('id', unit.id);
+          // On redirige vers id.sivara.ca (via le routeur App.tsx)
+          // Note: Dans un environnement réel, on stockerait l'état du panier dans le localStorage ou Supabase avant
+          navigate(`/?app=id&unit_id=${unit.id}`);
       }
-
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      showSuccess("Abonnement activé. Appareil réservé.");
-      setIsProcessing(false);
   };
 
   if (loadingUnit) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="h-8 w-8 animate-spin text-gray-300" /></div>;
@@ -370,7 +369,7 @@ const DeviceCheckout = () => {
                                         className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${deliveryOption === 'express' ? 'border-blue-600 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'}`}
                                     >
                                         <div className="flex items-center gap-4">
-                                            <RadioGroupItem value="express" id="express" className="border-blue-600 text-blue-600" />
+                                            <RadioGroupItem value={express} id="express" className="border-blue-600 text-blue-600" />
                                             <div>
                                                 <div className="font-bold text-gray-900 flex items-center gap-2">
                                                     <Zap className="h-4 w-4 text-orange-500 fill-current" />
@@ -410,9 +409,9 @@ const DeviceCheckout = () => {
                 <div className="bg-gray-50 rounded-lg p-4 text-xs text-gray-500 mb-6 leading-relaxed flex gap-3">
                     <ShieldCheck className="h-5 w-5 text-gray-400 shrink-0" />
                     <p>
-                        En confirmant, vous acceptez les conditions de l'abonnement "Device-as-a-Service". 
-                        Vous pouvez retourner l'appareil à tout moment après 12 mois sans frais, ou le conserver en continuant l'abonnement. 
-                        Ceci n'est pas un crédit.
+                        En continuant, vous serez redirigé vers <strong>Sivara ID Secure</strong> pour vérifier votre identité.
+                        Ceci est une étape obligatoire pour la location de matériel.
+                        Une fois validé, vous pourrez procéder au paiement du premier mois.
                     </p>
                 </div>
 
@@ -422,12 +421,11 @@ const DeviceCheckout = () => {
                     disabled={!address || !firstName || !lastName || !email || isProcessing}
                     onClick={handleSubmit}
                 >
-                    {isProcessing ? <Loader2 className="animate-spin mr-2" /> : "Activer mon abonnement"} 
-                    {!isProcessing && ` • ${totals.upfront.toFixed(2)} $`}
+                    {isProcessing ? <Loader2 className="animate-spin mr-2" /> : "Vérifier mon identité & Payer"} 
                 </Button>
                 
                 <div className="text-center mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
-                    <CheckCircle2 className="h-3 w-3" /> Paiement sécurisé SSL 256-bit
+                    <CheckCircle2 className="h-3 w-3" /> Vérification biométrique instantanée
                 </div>
             </div>
 

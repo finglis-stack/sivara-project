@@ -33,6 +33,7 @@ import ResetPassword from "./pages/ResetPassword";
 import DeviceLanding from "./pages/DeviceLanding";
 import DeviceAdmin from "./pages/DeviceAdmin";
 import DeviceCheckout from "./pages/DeviceCheckout";
+import IdentityVerification from "./pages/IdentityVerification";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,7 @@ const AppRoutes = () => {
       if (appParam === 'help') return 'help';
       if (appParam === 'device') return 'device';
       if (appParam === 'device-admin') return 'device-admin';
+      if (appParam === 'id') return 'id';
       return 'mobile-launcher';
     }
 
@@ -66,6 +68,7 @@ const AppRoutes = () => {
       if (appParam === 'device') return 'device';
       if (appParam === 'device-admin') return 'device-admin';
       if (appParam === 'mobile') return 'mobile-launcher';
+      if (appParam === 'id') return 'id';
       return 'dev-portal';
     }
 
@@ -75,6 +78,7 @@ const AppRoutes = () => {
     if (hostname.startsWith('mail.')) return 'mail';
     if (hostname.startsWith('help.')) return 'help';
     if (hostname.startsWith('device.')) return 'device';
+    if (hostname.startsWith('id.')) return 'id';
     return 'www';
   }, [searchParams, hostname]);
 
@@ -133,11 +137,20 @@ const AppRoutes = () => {
         </>
       )}
       
-      {/* --- APPLICATION: DEVICE ADMIN (Direct Access via ?app=device-admin) --- */}
+      {/* --- APPLICATION: DEVICE ADMIN (Direct Access) --- */}
       {currentApp === 'device-admin' && (
          <Route path="*" element={
             <ProtectedRoute>
                 <DeviceAdmin />
+            </ProtectedRoute>
+         } />
+      )}
+
+      {/* --- APPLICATION: ID SECURE (Identity Verification) --- */}
+      {currentApp === 'id' && (
+         <Route path="*" element={
+            <ProtectedRoute>
+                <IdentityVerification />
             </ProtectedRoute>
          } />
       )}
