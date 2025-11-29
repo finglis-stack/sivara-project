@@ -81,33 +81,51 @@ const IdentityVerification = () => {
     }
   };
 
+  const getRealFingerprint = async () => {
+    // Récupération VisitorID
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+
+    // Récupération GPU réel via WebGL
+    let gpuRenderer = "Unknown GPU";
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+            // @ts-ignore
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                // @ts-ignore
+                gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+            }
+        }
+    } catch(e) { console.warn("WebGL blocked", e); }
+
+    return {
+        visitorId: result.visitorId,
+        os: navigator.userAgent, // Plus précis que components.os
+        gpu: gpuRenderer,
+        // @ts-ignore
+        memory: navigator.deviceMemory || "Unknown"
+    };
+  };
+
   const processVerification = async (front: string, back: string) => {
     setStep('processing');
     
     try {
-        // 1. Get Fingerprint
-        const fp = await FingerprintJS.load();
-        const result = await fp.get();
-        
+        const fingerprint = await getRealFingerprint();
         const cleanFront = front.split(',')[1];
         const cleanBack = back.split(',')[1];
 
-        // 2. Get User Profile for name comparison
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user?.id).single();
-
-        // 3. Call Edge Function (The Brain - Gemini Risk Engine)
+        // Appel Edge Function : On n'envoie PAS le profil utilisateur, le serveur ira le chercher lui-même
+        // pour garantir l'intégrité des données.
         const { data, error } = await supabase.functions.invoke('verify-identity', {
             body: {
                 frontImage: cleanFront,
                 backImage: cleanBack,
-                fingerprint: {
-                    visitorId: result.visitorId,
-                    os: (result.components as any).os?.value || (result.components as any).platform?.value,
-                    gpu: 'NVIDIA GeForce RTX 3060 (Simulated)', 
-                    memory: 16
-                },
+                fingerprint: fingerprint,
                 userId: user?.id,
-                userProfile: profile,
                 cardBin: '4567' 
             }
         });
