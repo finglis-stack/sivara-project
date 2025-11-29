@@ -41,8 +41,8 @@ const deg2rad = (deg: number) => {
   return deg * (Math.PI / 180);
 };
 
-// Chargeur de script Google Maps
-const loadGoogleMapsScript = (callback: () => void) => {
+// Chargeur de script Google Maps DYNAMIQUE
+const loadGoogleMapsScript = (apiKey: string, callback: () => void) => {
   const existingScript = document.getElementById('googleMapsScript');
   if (existingScript) {
     callback();
@@ -50,7 +50,6 @@ const loadGoogleMapsScript = (callback: () => void) => {
   }
   const script = document.createElement('script');
   script.id = 'googleMapsScript';
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''; 
   script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
   script.async = true;
   script.defer = true;
@@ -97,19 +96,35 @@ const DeviceCheckout = () => {
     }
   }, [user]);
 
-  // 2. Chargement Google Maps
+  // 2. Chargement Sécurisé Google Maps via Edge Function
   useEffect(() => {
-    loadGoogleMapsScript(() => {
-      setIsScriptLoaded(true);
-    });
+    const initMaps = async () => {
+        try {
+            // Récupération de la clé depuis le serveur sécurisé
+            const { data, error } = await supabase.functions.invoke('get-maps-key');
+            
+            if (error || !data?.key) {
+                console.warn("Impossible de charger la carte : clé API manquante");
+                return;
+            }
+
+            loadGoogleMapsScript(data.key, () => {
+                setIsScriptLoaded(true);
+            });
+        } catch (e) {
+            console.error("Erreur init maps", e);
+        }
+    };
+    
+    initMaps();
   }, []);
 
   // 3. Configuration Autocomplete
   useEffect(() => {
-    if (isScriptLoaded && autoCompleteRef.current) {
+    if (isScriptLoaded && autoCompleteRef.current && window.google) {
       const autocomplete = new window.google.maps.places.Autocomplete(autoCompleteRef.current, {
         types: ['address'],
-        componentRestrictions: { country: 'ca' }, // Restreindre au Canada pour l'instant
+        componentRestrictions: { country: 'ca' }, // Restreindre au Canada
         fields: ['address_components', 'geometry', 'formatted_address']
       });
 
