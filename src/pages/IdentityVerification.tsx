@@ -5,13 +5,13 @@ import { Card } from '@/components/ui/card';
 import { showSuccess, showError } from '@/utils/toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, ShieldCheck, Camera, CheckCircle2, AlertTriangle, ScanLine, Fingerprint, Lock } from 'lucide-react';
+import { Loader2, ShieldCheck, Camera, CheckCircle2, AlertTriangle, ScanLine, Fingerprint, Lock, CreditCard } from 'lucide-react';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 
 const IdentityVerification = () => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState<'intro' | 'scan_front' | 'scan_back' | 'processing' | 'success' | 'rejected'>('intro');
+  const [step, setStep] = useState<'intro' | 'scan_front' | 'scan_back' | 'processing' | 'success' | 'payment_redirect' | 'rejected'>('intro');
   const [frontImage, setFrontImage] = useState<string | null>(null);
   const [backImage, setBackImage] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
@@ -103,7 +103,7 @@ const IdentityVerification = () => {
                 backImage: cleanBack,
                 fingerprint: {
                     visitorId: result.visitorId,
-                    os: result.components.os?.value,
+                    os: (result.components as any).os?.value || (result.components as any).platform?.value,
                     // Note: FingerprintJS gratuit ne donne pas GPU direct, on simule pour l'exemple
                     gpu: 'NVIDIA GeForce RTX 3060 (Simulated)', 
                     memory: 16
@@ -132,14 +132,16 @@ const IdentityVerification = () => {
     }
   };
 
-  const handleFinalRedirect = () => {
-      // Génération d'un numéro de commande "SIV-..."
-      const orderId = `SIV-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random()*1000)}`;
+  const startPaymentHandoff = () => {
+      setStep('payment_redirect');
       
-      // Simulation Stripe (Normalement on irait sur Stripe ici)
-      // On redirige vers device avec le success
-      const successUrl = `/?app=device&order_success=${orderId}`;
-      window.location.href = successUrl;
+      // Simulation du délai Stripe (2s) puis retour
+      setTimeout(() => {
+          // Génération d'un numéro de commande "SIV-..."
+          const orderId = `SIV-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random()*1000)}`;
+          const successUrl = `/?app=device&order_success=${orderId}`;
+          window.location.href = successUrl;
+      }, 2500);
   };
 
   return (
@@ -255,10 +257,20 @@ const IdentityVerification = () => {
                         <div className="flex justify-between"><span>LOCATION:</span> <span>SECURE ZONE</span></div>
                     </div>
 
-                    <Button onClick={handleFinalRedirect} className="w-full bg-green-600 hover:bg-green-700 h-12 font-bold rounded-lg text-white">
+                    <Button onClick={startPaymentHandoff} className="w-full bg-green-600 hover:bg-green-700 h-12 font-bold rounded-lg text-white">
                         Procéder au paiement (Stripe)
                     </Button>
                 </Card>
+            )}
+
+            {step === 'payment_redirect' && (
+                <div className="text-center space-y-6 animate-in fade-in duration-300">
+                    <div className="w-20 h-20 bg-white text-black rounded-full flex items-center justify-center mx-auto animate-bounce">
+                        <CreditCard className="h-8 w-8" />
+                    </div>
+                    <h2 className="text-xl font-bold">Connexion à Stripe...</h2>
+                    <p className="text-gray-500 text-sm">Veuillez ne pas fermer cette fenêtre.</p>
+                </div>
             )}
 
             {step === 'rejected' && (

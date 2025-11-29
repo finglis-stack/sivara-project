@@ -369,7 +369,7 @@ const DeviceCheckout = () => {
                                         className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${deliveryOption === 'express' ? 'border-blue-600 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'}`}
                                     >
                                         <div className="flex items-center gap-4">
-                                            <RadioGroupItem value={express} id="express" className="border-blue-600 text-blue-600" />
+                                            <RadioGroupItem value="express" id="express" className="border-blue-600 text-blue-600" />
                                             <div>
                                                 <div className="font-bold text-gray-900 flex items-center gap-2">
                                                     <Zap className="h-4 w-4 text-orange-500 fill-current" />
