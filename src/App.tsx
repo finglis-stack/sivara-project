@@ -32,6 +32,7 @@ import HelpArticle from "./pages/HelpArticle";
 import ResetPassword from "./pages/ResetPassword";
 import DeviceLanding from "./pages/DeviceLanding";
 import DeviceAdmin from "./pages/DeviceAdmin";
+import DeviceCheckout from "./pages/DeviceCheckout";
 
 const queryClient = new QueryClient();
 
@@ -122,6 +123,7 @@ const AppRoutes = () => {
       {currentApp === 'device' && (
         <>
             <Route path="/" element={<DeviceLanding />} />
+            <Route path="/checkout" element={<DeviceCheckout />} />
             <Route path="/admin" element={
                 <ProtectedRoute>
                     <DeviceAdmin />

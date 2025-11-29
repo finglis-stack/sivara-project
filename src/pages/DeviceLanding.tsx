@@ -36,11 +36,8 @@ const DeviceLanding = () => {
   };
 
   const handleBuy = () => {
-      if (user) {
-          navigate('/checkout?product=sivara_book');
-      } else {
-          navigateToAuth('/login');
-      }
+      // Nouvelle direction : Page Checkout Device spécifique
+      navigate('/checkout');
   };
 
   return (
