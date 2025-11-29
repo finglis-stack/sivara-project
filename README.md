@@ -67,6 +67,16 @@ Une plateforme de support hybride combinant base de connaissances publique et sy
     *   **Outbound Transactionnel :** Les réponses des agents sont envoyées via une infrastructure SMTP réputée, avec injection de modèles HTML responsifs et signatures dynamiques.
 *   **Interface Agent Temps Réel :** Dashboard administrateur permettant la gestion des tickets, la rédaction de réponses et le suivi des métriques clients, le tout synchronisé via WebSockets.
 
+### 7. Infrastructure Matérielle (DaaS) - `device.sivara.ca`
+Un service de "Device-as-a-Service" permettant la location d'ordinateurs optimisés pour la confidentialité.
+
+*   **Gestion d'Inventaire "Smart Diversity" :**
+    *   Algorithme de sélection stochastique (`Fisher-Yates Shuffle`) côté client pour présenter une variété de configurations (RAM/Stockage) disponibles en temps réel, évitant l'effet "First-Come, First-Served" sur les meilleurs modèles.
+*   **Logistique Géospatiale (Google Maps Platform) :**
+    *   Calcul dynamique des frais de livraison et des délais (Standard vs Express) basé sur la distance géodésique entre l'entrepôt (Montréal) et l'adresse client via l'API Google Places/Geometry.
+*   **Intégration Hardware/Software :**
+    *   Les appareils sont livrés avec **Zorin OS** pré-configuré, garantissant une stack 100% open-source et sans télémétrie dès le premier démarrage.
+
 ---
 
 ## 🔬 Deep Dive : Architecture Moteur "Sivara Titanium"
