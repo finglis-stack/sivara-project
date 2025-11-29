@@ -8,9 +8,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { showSuccess, showError } from '@/utils/toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
-  ArrowLeft, MapPin, Truck, Zap, AlertCircle, RefreshCw, ShieldCheck, HelpCircle, Loader2, CheckCircle2 
+  ArrowLeft, MapPin, Truck, Zap, AlertCircle, RefreshCw, ShieldCheck, HelpCircle, Loader2, CheckCircle2, Lock 
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 // Types
 declare global {
@@ -67,6 +68,70 @@ const loadGoogleMapsScript = (apiKey: string, callback: () => void) => {
   script.defer = true;
   script.onload = () => callback();
   document.head.appendChild(script);
+};
+
+// --- COMPOSANT FORMULAIRE INTERNE ---
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+const STRIPE_PUBLISHABLE_KEY = 'pk_test_51SWTTe2UEuKhlvPiZK33IJhJSYPTaYPfkQX9KcBUt39uD4w0vEf8z5iTYufLx01PfJyNvgN4Pa20iGXskGEzPl7x00danXtwmY';
+const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
+
+const PaymentForm = ({ clientSecret, orderId, onSuccess }: { clientSecret: string, orderId: string, onSuccess: () => void }) => {
+    const stripe = useStripe();
+    const elements = useElements();
+    const [message, setMessage] = useState<string | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!stripe || !elements) return;
+
+        setIsProcessing(true);
+
+        const { error } = await stripe.confirmPayment({
+            elements,
+            redirect: 'if_required', 
+        });
+
+        if (error) {
+            setMessage(error.message || "Erreur de paiement");
+            setIsProcessing(false);
+        } else {
+            onSuccess();
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-500">
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-sm mb-4">
+                <div className="flex justify-between mb-2">
+                    <span className="text-gray-500">Commande</span>
+                    <span className="font-mono font-bold">#{orderId.slice(-8).toUpperCase()}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="text-gray-900 font-medium">Abonnement Device</span>
+                    <Badge variant="outline" className="bg-white text-gray-600 border-gray-300">Mensuel</Badge>
+                </div>
+            </div>
+
+            <PaymentElement />
+            
+            {message && <div className="text-red-600 text-sm bg-red-50 p-3 rounded">{message}</div>}
+            
+            <Button 
+                type="submit" 
+                disabled={!stripe || isProcessing} 
+                className="w-full bg-black hover:bg-gray-900 text-white h-12 rounded-lg font-bold shadow-lg"
+            >
+                {isProcessing ? <Loader2 className="animate-spin" /> : "Payer et activer l'abonnement"}
+            </Button>
+            
+            <div className="flex justify-center items-center gap-2 text-xs text-gray-400 mt-4">
+                <Lock className="h-3 w-3" /> Transaction sécurisée
+            </div>
+        </form>
+    );
 };
 
 const DeviceCheckout = () => {
@@ -181,7 +246,6 @@ const DeviceCheckout = () => {
   const calculateTotals = () => {
       if (!unit) return { total: 0, tax: 0, upfront: 0, monthly: 0, shipping: 0 };
 
-      // Prix REEL de l'unité
       const basePrice = unit.unit_price;
       const shippingPrice = deliveryOption === 'express' ? 36.00 : 0;
       
@@ -214,22 +278,17 @@ const DeviceCheckout = () => {
       if (!unit) return;
       setIsProcessing(true);
       
-      // LOGIQUE REDIRECTION "HARDCORE"
       const hostname = window.location.hostname;
       const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
       
-      // On construit l'URL de destination pour id.sivara.ca
       let targetUrl = '';
       
       if (isLocal) {
-          // En local, on reste sur le même port mais on change le paramètre app
           targetUrl = `${window.location.origin}/?app=id&unit_id=${unit.id}`;
       } else {
-          // En production, on change carrément de sous-domaine
           targetUrl = `https://id.sivara.ca/?unit_id=${unit.id}`;
       }
 
-      // Redirection native du navigateur (bypass React Router pour changer de domaine si nécessaire)
       window.location.href = targetUrl;
   };
 
@@ -253,7 +312,7 @@ const DeviceCheckout = () => {
                 <h1 className="text-3xl lg:text-4xl font-light text-gray-900 leading-tight mb-2">
                     {unit?.product.name}
                 </h1>
-                <p className="text-gray-500 font-light">Location longue durée (16 mois) • Renouvelable</p>
+                <p className="text-gray-500 font-light">Location avec option d'achat • Résiliable</p>
             </div>
 
             <div className="space-y-6 mb-10">
@@ -288,8 +347,8 @@ const DeviceCheckout = () => {
          <div className="bg-blue-50/50 rounded-2xl p-6 border border-blue-100">
             <div className="flex justify-between items-end mb-2">
                <div>
-                   <p className="text-sm font-bold text-blue-900">Frais d'activation & Dépôt</p>
-                   <p className="text-xs text-blue-600/80">Payable aujourd'hui</p>
+                   <p className="text-sm font-bold text-blue-900">Paiement initial</p>
+                   <p className="text-xs text-blue-600/80">Activation & Premier versement</p>
                </div>
                <span className="text-3xl font-thin tracking-tighter text-blue-900">
                    {totals.upfront.toFixed(2)} $
@@ -301,7 +360,7 @@ const DeviceCheckout = () => {
             <div className="flex justify-between items-center">
                <div className="flex items-center gap-2">
                    <RefreshCw className="h-4 w-4 text-blue-600" />
-                   <span className="text-sm font-medium text-blue-900">Abonnement</span>
+                   <span className="text-sm font-medium text-blue-900">Mensualité</span>
                </div>
                <span className="text-lg font-bold text-blue-900">{totals.monthly.toFixed(2)} $/mois</span>
             </div>
@@ -432,7 +491,7 @@ const DeviceCheckout = () => {
                     disabled={!address || !firstName || !lastName || !email || isProcessing}
                     onClick={handleSubmit}
                 >
-                    {isProcessing ? <Loader2 className="animate-spin mr-2" /> : "Vérifier mon identité & Payer"} 
+                    {isProcessing ? <Loader2 className="animate-spin mr-2" /> : "Vérifier mon identité & Activer"} 
                 </Button>
                 
                 <div className="text-center mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">

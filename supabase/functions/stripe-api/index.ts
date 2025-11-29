@@ -128,7 +128,7 @@ serve(async (req) => {
 
       // 4. Création du PRODUIT Stripe (Necessaire pour subscription.create)
       const stripeProduct = await stripe.products.create({
-        name: `Financement - ${productName}`,
+        name: `Abonnement - ${productName}`,
         description: `S/N: ${unit.serial_number} - ${unit.specific_specs?.ram_size}GB/${unit.specific_specs?.storage}GB`,
         metadata: {
             unit_id: unitId,
@@ -141,7 +141,7 @@ serve(async (req) => {
         customer: customerId,
         amount: Math.round(upfront * 100),
         currency: 'cad',
-        description: `Dépôt initial (20%) & Activation - ${productName} (S/N: ${unit.serial_number})`,
+        description: `Frais d'activation & Mise en service - ${productName} (S/N: ${unit.serial_number})`,
       });
 
       // 6. Création de l'abonnement
