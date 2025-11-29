@@ -11,10 +11,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { showSuccess, showError } from '@/utils/toast';
 import { 
   Package, Plus, Search, Barcode, Laptop, ArrowLeft, 
-  Trash2, Edit2, CheckCircle2, AlertCircle, Box, DollarSign, Upload, Globe, Shield, Loader2
+  Trash2, Edit2, CheckCircle2, AlertCircle, Box, DollarSign, Upload, Globe, Shield, Loader2,
+  Cpu, Wifi, Bluetooth, Fingerprint, Monitor
 } from 'lucide-react';
 
 interface Product {
@@ -34,6 +36,17 @@ interface Unit {
   serial_number: string;
   status: 'available' | 'sold' | 'reserved' | 'maintenance';
   condition: 'new' | 'refurbished';
+  unit_price: number;
+  specific_specs: {
+    ram_size: string;
+    ram_speed: string;
+    features: {
+        touch: boolean;
+        wifi: boolean;
+        bluetooth: boolean;
+        fingerprint: boolean;
+    }
+  };
 }
 
 const DeviceAdmin = () => {
@@ -62,7 +75,16 @@ const DeviceAdmin = () => {
       availability: 'Global', 
       warranty_type: 'standard' 
   });
-  const [unitForm, setUnitForm] = useState<Partial<Unit>>({ serial_number: '', status: 'available', condition: 'new' });
+
+  const defaultFeatures = { touch: false, wifi: true, bluetooth: true, fingerprint: true };
+  const [unitForm, setUnitForm] = useState({ 
+      status: 'available', 
+      condition: 'new',
+      unit_price: 0,
+      ram_size: '16',
+      ram_speed: '5200',
+      features: defaultFeatures
+  });
 
   // 1. Check Vendor Role
   useEffect(() => {
@@ -132,17 +154,13 @@ const DeviceAdmin = () => {
         const payload = {
             ...prodForm,
             vendor_id: user?.id,
-            // Mock specs for now, could be expanded later
-            specs: { cpu: "Ryzen 7", ram: "32GB" } 
+            specs: { cpu: "Ryzen 7", type: "Laptop" } 
         };
 
-        if (selectedProduct && showProductDialog) {
-             // Edit logic here if needed (not requested but structure ready)
-        } else {
-            const { error } = await supabase.from('device_products').insert(payload);
-            if (error) throw error;
-            showSuccess("Produit créé");
-        }
+        const { error } = await supabase.from('device_products').insert(payload);
+        if (error) throw error;
+        
+        showSuccess("Produit créé");
         setShowProductDialog(false);
         setProdForm({ name: '', description: '', base_price: 0, image_url: '', availability: 'Global', warranty_type: 'standard' });
         fetchProducts();
@@ -158,18 +176,52 @@ const DeviceAdmin = () => {
       fetchProducts();
   };
 
-  // 4. Unit Actions
+  // 4. Unit Actions & Helpers
+  const generateSerialNumber = () => {
+      // Format: SIV-{YEAR}-{RANDOM 6 CHARS}
+      const year = new Date().getFullYear().toString().slice(-2);
+      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+      return `SIV-${year}-${random}`;
+  };
+
+  const handleOpenUnitDialog = () => {
+      // Reset form and set default price from product base price
+      setUnitForm({
+          status: 'available',
+          condition: 'new',
+          unit_price: selectedProduct?.base_price || 0,
+          ram_size: '16',
+          ram_speed: '5200',
+          features: defaultFeatures
+      });
+      setShowUnitDialog(true);
+  };
+
   const handleSaveUnit = async () => {
       try {
-          if (!selectedProduct || !unitForm.serial_number) return;
+          if (!selectedProduct) return;
+          
+          const generatedSN = generateSerialNumber();
+          
+          const specificSpecs = {
+              ram_size: unitForm.ram_size,
+              ram_speed: unitForm.ram_speed,
+              features: unitForm.features
+          };
+
           const { error } = await supabase.from('device_units').insert({
-              ...unitForm,
-              product_id: selectedProduct.id
+              product_id: selectedProduct.id,
+              serial_number: generatedSN,
+              status: unitForm.status,
+              condition: unitForm.condition,
+              unit_price: unitForm.unit_price,
+              specific_specs: specificSpecs
           });
+
           if (error) throw error;
-          showSuccess("Unité ajoutée au stock");
+          
+          showSuccess(`Unité ${generatedSN} ajoutée`);
           setShowUnitDialog(false);
-          setUnitForm({ serial_number: '', status: 'available', condition: 'new' });
           fetchUnits(selectedProduct.id);
       } catch (e: any) {
           showError(e.message || "Erreur lors de l'ajout");
@@ -180,6 +232,16 @@ const DeviceAdmin = () => {
       await supabase.from('device_units').delete().eq('id', id);
       if (selectedProduct) fetchUnits(selectedProduct.id);
   };
+
+  // Calculs financiers pour l'affichage
+  const calculateFinancials = (price: number) => {
+      const upfront = price * 0.20;
+      const remainder = price * 0.80;
+      const monthly = remainder / 16;
+      return { upfront, monthly };
+  };
+
+  const financials = calculateFinancials(unitForm.unit_price || 0);
 
   if (!isVendor) return null;
 
@@ -279,27 +341,41 @@ const DeviceAdmin = () => {
                                 <Button variant="outline" size="sm" onClick={() => handleDeleteProduct(selectedProduct.id)} className="text-red-600 hover:bg-red-50 border-red-200">
                                     <Trash2 className="h-4 w-4 mr-2" /> Supprimer Produit
                                 </Button>
-                                <Button onClick={() => setShowUnitDialog(true)} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                                <Button onClick={handleOpenUnitDialog} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
                                     <Plus className="h-4 w-4 mr-2" /> Ajouter Unité
                                 </Button>
                             </div>
                         </div>
 
                         <Card className="flex-1 flex flex-col overflow-hidden border-gray-200 shadow-sm">
-                            <div className="grid grid-cols-5 gap-4 p-4 border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                <div className="col-span-2">Numéro de Série</div>
+                            <div className="grid grid-cols-6 gap-4 p-4 border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <div className="col-span-2">Info Unité</div>
+                                <div>Specs</div>
+                                <div>Prix</div>
                                 <div>État</div>
-                                <div>Condition</div>
                                 <div className="text-right">Action</div>
                             </div>
                             <ScrollArea className="flex-1">
                                 <div className="divide-y divide-gray-100">
                                     {units.map(unit => (
-                                        <div key={unit.id} className="grid grid-cols-5 gap-4 p-4 items-center text-sm hover:bg-gray-50 transition-colors group">
-                                            <div className="col-span-2 font-mono text-gray-900 flex items-center gap-2">
-                                                <Barcode className="h-4 w-4 text-gray-400" />
-                                                {unit.serial_number}
+                                        <div key={unit.id} className="grid grid-cols-6 gap-4 p-4 items-center text-sm hover:bg-gray-50 transition-colors group">
+                                            <div className="col-span-2">
+                                                <div className="font-mono text-gray-900 flex items-center gap-2 font-medium">
+                                                    <Barcode className="h-4 w-4 text-gray-400" />
+                                                    {unit.serial_number}
+                                                </div>
+                                                <div className="text-xs text-gray-500 capitalize">{unit.condition === 'new' ? 'Neuf' : 'Reconditionné'}</div>
                                             </div>
+                                            
+                                            <div className="text-xs text-gray-600">
+                                                {unit.specific_specs?.ram_size}GB {unit.specific_specs?.ram_speed}MHz
+                                                {unit.specific_specs?.features?.touch && <span className="ml-1 text-blue-600 font-bold">Touch</span>}
+                                            </div>
+
+                                            <div className="font-medium">
+                                                ${unit.unit_price || selectedProduct.base_price}
+                                            </div>
+
                                             <div>
                                                 <Badge variant="outline" className={`
                                                     ${unit.status === 'available' ? 'bg-green-50 text-green-700 border-green-200' : ''}
@@ -309,9 +385,7 @@ const DeviceAdmin = () => {
                                                     {unit.status}
                                                 </Badge>
                                             </div>
-                                            <div>
-                                                <span className="text-gray-600 capitalize">{unit.condition}</span>
-                                            </div>
+                                            
                                             <div className="text-right opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDeleteUnit(unit.id)}>
                                                     <Trash2 className="h-4 w-4" />
@@ -347,48 +421,19 @@ const DeviceAdmin = () => {
                     <div className="space-y-4">
                         <div className="space-y-2"><Label>Nom du modèle</Label><Input value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} placeholder="ex: Sivara Book Pro" /></div>
                         <div className="space-y-2"><Label>Description courte</Label><Textarea value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} placeholder="Caractéristiques principales..." /></div>
-                        <div className="space-y-2"><Label>Prix de base ($)</Label><Input type="number" value={prodForm.base_price} onChange={e => setProdForm({...prodForm, base_price: parseFloat(e.target.value)})} /></div>
+                        <div className="space-y-2"><Label>Prix de base conseillé ($)</Label><Input type="number" value={prodForm.base_price} onChange={e => setProdForm({...prodForm, base_price: parseFloat(e.target.value)})} /></div>
                     </div>
                     
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <Label>Image du produit</Label>
-                            <div 
-                                className="border-2 border-dashed border-gray-200 rounded-lg h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors"
-                                onClick={() => fileInputRef.current?.click()}
-                            >
-                                {prodForm.image_url ? (
-                                    <img src={prodForm.image_url} className="h-full w-full object-cover rounded-lg" />
-                                ) : (
-                                    <>
-                                        {isUploading ? <Loader2 className="h-6 w-6 animate-spin text-gray-400" /> : <Upload className="h-6 w-6 text-gray-400" />}
-                                        <span className="text-xs text-gray-500 mt-2">Cliquez pour uploader</span>
-                                    </>
-                                )}
+                            <div className="border-2 border-dashed border-gray-200 rounded-lg h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => fileInputRef.current?.click()}>
+                                {prodForm.image_url ? <img src={prodForm.image_url} className="h-full w-full object-cover rounded-lg" /> : <><Upload className="h-6 w-6 text-gray-400" /><span className="text-xs text-gray-500 mt-2">Cliquez pour uploader</span></>}
                             </div>
                             <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
                         </div>
-
-                        <div className="space-y-2">
-                            <Label>Disponibilité (Pays)</Label>
-                            <Input value={prodForm.availability} onChange={e => setProdForm({...prodForm, availability: e.target.value})} placeholder="ex: Canada, France, US" />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Type de Garantie</Label>
-                            <Select value={prodForm.warranty_type} onValueChange={(v) => setProdForm({...prodForm, warranty_type: v})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="standard">Standard (2 ans)</SelectItem>
-                                    <SelectItem value="extended">Étendue (SLA 24h + Pièces + Main d'œuvre)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p className="text-[10px] text-gray-500 leading-tight">
-                                {prodForm.warranty_type === 'extended' 
-                                    ? "Inclut: Intervention sur site, remplacement express, support prioritaire." 
-                                    : "Garantie légale standard contre les défauts de fabrication."}
-                            </p>
-                        </div>
+                        <div className="space-y-2"><Label>Disponibilité (Pays)</Label><Input value={prodForm.availability} onChange={e => setProdForm({...prodForm, availability: e.target.value})} placeholder="ex: Canada, France, US" /></div>
+                        <div className="space-y-2"><Label>Type de Garantie</Label><Select value={prodForm.warranty_type} onValueChange={(v) => setProdForm({...prodForm, warranty_type: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="standard">Standard (2 ans)</SelectItem><SelectItem value="extended">Étendue (SLA 24h)</SelectItem></SelectContent></Select></div>
                     </div>
                 </div>
                 <DialogFooter><Button onClick={handleSaveProduct}>Créer la fiche</Button></DialogFooter>
@@ -397,35 +442,122 @@ const DeviceAdmin = () => {
 
         {/* Dialog Création Unité */}
         <Dialog open={showUnitDialog} onOpenChange={setShowUnitDialog}>
-            <DialogContent>
-                <DialogHeader><DialogTitle>Ajouter une Unité</DialogTitle><DialogDescription>Ajout physique au stock pour {selectedProduct?.name}</DialogDescription></DialogHeader>
-                <div className="space-y-4 py-2">
-                    <div className="space-y-2"><Label>Numéro de Série (S/N)</Label><Input value={unitForm.serial_number} onChange={e => setUnitForm({...unitForm, serial_number: e.target.value})} placeholder="SIV-XXXX-YYYY" /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>État</Label>
-                            <Select value={unitForm.status} onValueChange={(v: any) => setUnitForm({...unitForm, status: v})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="available">Disponible</SelectItem>
-                                    <SelectItem value="reserved">Réservé</SelectItem>
-                                    <SelectItem value="maintenance">Maintenance</SelectItem>
-                                </SelectContent>
-                            </Select>
+            <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle>Ajouter une Unité</DialogTitle>
+                    <DialogDescription>Configuration spécifique de l'ordinateur.</DialogDescription>
+                </DialogHeader>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
+                    <div className="space-y-6">
+                        <div className="space-y-4">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Spécifications Mémoire</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Quantité RAM</Label>
+                                    <Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="16">16 GB</SelectItem>
+                                            <SelectItem value="32">32 GB</SelectItem>
+                                            <SelectItem value="64">64 GB</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Vitesse RAM</Label>
+                                    <Select value={unitForm.ram_speed} onValueChange={(v) => setUnitForm({...unitForm, ram_speed: v})}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="4800">4800 MHz</SelectItem>
+                                            <SelectItem value="5200">5200 MHz</SelectItem>
+                                            <SelectItem value="6000">6000 MHz</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
                         </div>
+
+                        <div className="space-y-4">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Fonctionnalités</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                    <Label htmlFor="touch" className="flex items-center gap-2 cursor-pointer"><Monitor className="h-4 w-4" /> Tactile</Label>
+                                    <Switch id="touch" checked={unitForm.features.touch} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, touch: c}})} />
+                                </div>
+                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                    <Label htmlFor="fp" className="flex items-center gap-2 cursor-pointer"><Fingerprint className="h-4 w-4" /> Fingerprint</Label>
+                                    <Switch id="fp" checked={unitForm.features.fingerprint} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, fingerprint: c}})} />
+                                </div>
+                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                    <Label htmlFor="wifi" className="flex items-center gap-2 cursor-pointer"><Wifi className="h-4 w-4" /> Wifi 6E</Label>
+                                    <Switch id="wifi" checked={unitForm.features.wifi} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, wifi: c}})} />
+                                </div>
+                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                    <Label htmlFor="bt" className="flex items-center gap-2 cursor-pointer"><Bluetooth className="h-4 w-4" /> Bluetooth 5.3</Label>
+                                    <Switch id="bt" checked={unitForm.features.bluetooth} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, bluetooth: c}})} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div className="space-y-4">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Offre Commerciale</h3>
+                            
+                            <div className="space-y-2">
+                                <Label className="text-base">Prix de vente total ($)</Label>
+                                <Input 
+                                    type="number" 
+                                    value={unitForm.unit_price} 
+                                    onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} 
+                                    className="text-lg font-bold"
+                                />
+                            </div>
+
+                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                                <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Plan de paiement (Calculé)</h4>
+                                
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-600">Apport initial (20%)</span>
+                                    <span className="font-bold text-gray-900">${financials.upfront.toFixed(2)}</span>
+                                </div>
+                                <div className="h-px bg-blue-200/50 w-full"></div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-600">Reste à financer</span>
+                                    <span className="font-medium text-gray-700">${(unitForm.unit_price - financials.upfront).toFixed(2)}</span>
+                                </div>
+                                <div className="bg-white p-3 rounded-lg border border-blue-100 flex justify-between items-center shadow-sm">
+                                    <span className="text-sm font-bold text-blue-700">Abonnement (16 mois)</span>
+                                    <span className="text-lg font-bold text-blue-700">${financials.monthly.toFixed(2)}/mois</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="space-y-2">
-                            <Label>Condition</Label>
-                            <Select value={unitForm.condition} onValueChange={(v: any) => setUnitForm({...unitForm, condition: v})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="new">Neuf</SelectItem>
-                                    <SelectItem value="refurbished">Reconditionné</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Label>État & Condition</Label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Select value={unitForm.condition} onValueChange={(v: any) => setUnitForm({...unitForm, condition: v})}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="new">Neuf</SelectItem><SelectItem value="refurbished">Reconditionné</SelectItem></SelectContent>
+                                </Select>
+                                <Select value={unitForm.status} onValueChange={(v: any) => setUnitForm({...unitForm, status: v})}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="available">Disponible</SelectItem>
+                                        <SelectItem value="reserved">Réservé</SelectItem>
+                                        <SelectItem value="maintenance">Maintenance</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <DialogFooter><Button onClick={handleSaveUnit}>Ajouter au stock</Button></DialogFooter>
+
+                <DialogFooter className="sm:justify-between items-center">
+                    <p className="text-xs text-gray-400 italic">S/N généré automatiquement à la validation.</p>
+                    <Button onClick={handleSaveUnit} className="bg-black hover:bg-gray-800 text-white">Ajouter au stock</Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     </div>
