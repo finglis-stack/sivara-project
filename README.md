@@ -77,6 +77,19 @@ Un service de "Device-as-a-Service" permettant la location d'ordinateurs optimis
 *   **Intégration Hardware/Software :**
     *   Les appareils sont livrés avec **Zorin OS** pré-configuré, garantissant une stack 100% open-source et sans télémétrie dès le premier démarrage.
 
+### 8. Protocole de Vérification Biométrique (KYC) - `id.sivara.ca`
+Une forteresse de validation d'identité "Zero-Trust" requise pour l'accès aux infrastructures critiques (Device Rental) et la lutte contre la fraude.
+
+*   **Analyse Documentaire Cognitive (Gemini 1.5 Pro) :**
+    *   Pipeline d'ingestion visuelle traitant les pièces d'identité (Recto/Verso) en temps réel.
+    *   Extraction OCR structurée et analyse forensique par IA pour la détection de falsifications, dates d'expiration, cohérence visuelle et tentatives de spoofing photo.
+*   **Empreinte Numérique Avancée (Device Fingerprinting) :**
+    *   Analyse profonde de la configuration matérielle via `FingerprintJS` couplée à une inspection des contextes de rendu WebGL.
+    *   **Anti-Virtualisation :** Détection automatique des environnements émulés ou virtualisés (VMware, VirtualBox, Simulateurs headless) souvent utilisés pour l'automatisation frauduleuse.
+*   **Moteur de Décision Heuristique :**
+    *   **Comparaison Identitaire Stricte :** Algorithme de normalisation (NFD/Unicode) comparant les données extraites de la pièce d'identité avec le profil sécurisé en base de données. Tolérance zéro sur les discordances d'identité.
+    *   **Risk Scoring Dynamique :** Agrégation des signaux (âge, validité document, cohérence IP/Device) pour générer un score de risque bloquant instantanément les transactions suspectes avant l'accès aux passerelles de paiement.
+
 ---
 
 ## 🔬 Deep Dive : Architecture Moteur "Sivara Titanium"
