@@ -88,7 +88,16 @@ const IdentityVerification = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Robust unitId retrieval
   const unitId = searchParams.get('unit_id');
+
+  // Verify Unit ID on load
+  useEffect(() => {
+      if (!unitId) {
+          console.error("Unit ID missing in URL");
+      }
+  }, [unitId]);
 
   // ... (Code Caméra inchangé) ...
   const startCamera = async () => {
@@ -169,10 +178,18 @@ const IdentityVerification = () => {
     } catch (e: any) { showError(e.message); setStep('intro'); }
   };
 
-  // --- TRANSITION VERS PAIEMENT ---
+  // --- TRANSITION VERS PAIEMENT (FIXED) ---
   const initializePayment = async () => {
-      setStep('payment'); // On affiche le loader/formulaire
+      if (!unitId) {
+          showError("Erreur: ID de l'appareil manquant. Veuillez recommencer.");
+          return;
+      }
+
+      setStep('payment'); // On affiche le loader
+      
       try {
+          console.log("Initializing payment for unit:", unitId);
+          
           const { data, error } = await supabase.functions.invoke('stripe-api', {
               body: {
                   action: 'create_device_checkout',
@@ -180,16 +197,25 @@ const IdentityVerification = () => {
               }
           });
 
-          if (error) throw error;
+          if (error) {
+              console.error("Function error:", error);
+              throw new Error(error.message || "Erreur serveur de paiement");
+          }
+
+          if (data?.error) {
+              throw new Error(data.error);
+          }
+
           if (data?.clientSecret) {
               setClientSecret(data.clientSecret);
               setSubscriptionId(data.subscriptionId);
           } else {
-              throw new Error("Erreur init paiement");
+              throw new Error("Réponse de paiement invalide (Pas de secret)");
           }
-      } catch (e) {
-          console.error(e);
-          showError("Erreur d'initialisation du paiement");
+      } catch (e: any) {
+          console.error("Payment Init Error:", e);
+          showError(e.message || "Impossible d'initialiser le paiement.");
+          setStep('success'); // REVIENT A L'ETAPE PRECEDENTE POUR NE PAS BLOQUER
       }
   };
 
@@ -256,7 +282,7 @@ const IdentityVerification = () => {
 
             {/* --- ETAPE PAIEMENT INTEGRÉE --- */}
             {step === 'payment' && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
                     <div className="text-center mb-6">
                         <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600"><CreditCard className="h-6 w-6" /></div>
                         <h2 className="text-xl font-bold text-gray-900">Finaliser la commande</h2>
