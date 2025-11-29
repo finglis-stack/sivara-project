@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { 
   ArrowRight, Cpu, Wifi, Fingerprint, HardDrive, 
-  Monitor, Battery, Layers, ShieldCheck, ChevronRight, Laptop, Package, Check, X
+  Monitor, Battery, Layers, ShieldCheck, ChevronRight, Laptop, Package, Check, X, Loader2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from '@/components/UserMenu';
@@ -19,6 +19,16 @@ import {
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+interface ConfigOption {
+  unit_id: string;
+  ram: string;
+  storage: string;
+  price: number;
+  condition: string;
+  serial: string;
+}
 
 const DeviceLanding = () => {
   const { user } = useAuth();
@@ -27,19 +37,9 @@ const DeviceLanding = () => {
   
   // Configurator State
   const [showConfig, setShowConfig] = useState(false);
-  const [config, setConfig] = useState({
-    ram: '32',
-    storage: '512',
-    color: 'space_grey'
-  });
-
-  // Base logic for dynamic pricing simulation (Client side for demo)
-  const calculateMonthly = () => {
-    let base = 137.45; // Base price for 32/512
-    if (config.ram === '64') base += 25;
-    if (config.storage === '1024') base += 15;
-    return base.toFixed(2);
-  };
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [availableConfigs, setAvailableConfigs] = useState<ConfigOption[]>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -62,18 +62,64 @@ const DeviceLanding = () => {
     }
   };
 
+  const fetchInventory = async () => {
+      setLoadingInventory(true);
+      // On récupère les unités disponibles avec leur prix réel et specs
+      const { data, error } = await supabase
+        .from('device_units')
+        .select(`
+            id, 
+            unit_price, 
+            condition, 
+            serial_number,
+            specific_specs,
+            product_id
+        `)
+        .eq('status', 'available');
+
+      if (data) {
+          // On mappe les données brutes
+          const options: ConfigOption[] = data.map((unit: any) => ({
+              unit_id: unit.id,
+              ram: unit.specific_specs?.ram_size || 'N/A',
+              storage: unit.specific_specs?.storage || 'N/A',
+              price: unit.unit_price,
+              condition: unit.condition,
+              serial: unit.serial_number
+          }));
+          
+          // On trie par prix
+          options.sort((a, b) => a.price - b.price);
+          setAvailableConfigs(options);
+          
+          if (options.length > 0) {
+              setSelectedUnitId(options[0].unit_id);
+          }
+      }
+      setLoadingInventory(false);
+  };
+
   const handleConfigure = () => {
       setShowConfig(true);
+      fetchInventory();
   };
 
   const handleProceedToCheckout = () => {
-      // Pass configuration via URL parameters
-      const params = new URLSearchParams({
-          ram: config.ram,
-          storage: config.storage,
-          color: config.color
-      });
-      navigate(`/checkout?${params.toString()}`);
+      if (!selectedUnitId) return;
+      // On passe l'ID précis de l'unité choisie
+      navigate(`/checkout?unit_id=${selectedUnitId}`);
+  };
+
+  // Calcul du prix mensuel pour l'affichage (basé sur le vrai prix de l'unité sélectionnée)
+  const getSelectedUnitMonthlyPrice = () => {
+      const unit = availableConfigs.find(u => u.unit_id === selectedUnitId);
+      if (!unit) return "0.00";
+      
+      const taxes = unit.price * 0.14975;
+      const total = unit.price + taxes;
+      const upfront = total * 0.20;
+      const remainder = total - upfront;
+      return (remainder / 16).toFixed(2);
   };
 
   return (
@@ -157,7 +203,7 @@ const DeviceLanding = () => {
                             onClick={handleConfigure}
                             className="h-14 px-10 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold shadow-[0_0_40px_rgba(255,255,255,0.1)]"
                         >
-                            Configurer le vôtre
+                            Choisir mon modèle
                             <ArrowRight className="ml-2 h-5 w-5" />
                         </Button>
                         <Button 
@@ -325,71 +371,73 @@ const DeviceLanding = () => {
         </div>
       </div>
 
-      {/* CONFIGURATOR DIALOG */}
+      {/* CONFIGURATOR DIALOG AVEC VRAI STOCK */}
       <Dialog open={showConfig} onOpenChange={setShowConfig}>
         <DialogContent className="max-w-2xl">
             <DialogHeader>
-                <DialogTitle className="text-2xl font-bold">Configurez votre Sivara Book</DialogTitle>
-                <DialogDescription>Choisissez la puissance adaptée à vos besoins.</DialogDescription>
+                <DialogTitle className="text-2xl font-bold">Modèles disponibles</DialogTitle>
+                <DialogDescription>Sélectionnez une unité actuellement en stock dans notre inventaire.</DialogDescription>
             </DialogHeader>
             
-            <div className="grid gap-6 py-6">
-                
-                {/* RAM Selector */}
-                <div className="space-y-3">
-                    <Label className="text-base font-semibold">Mémoire Unifiée (RAM)</Label>
-                    <RadioGroup value={config.ram} onValueChange={(v) => setConfig({...config, ram: v})} className="grid grid-cols-2 gap-4">
-                        <Label htmlFor="ram-32" className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all ${config.ram === '32' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="font-bold text-lg">32 Go</span>
-                                {config.ram === '32' && <Check className="h-4 w-4" />}
-                            </div>
-                            <p className="text-xs text-gray-500">Idéal pour le développement et la bureautique avancée.</p>
-                            <RadioGroupItem value="32" id="ram-32" className="sr-only" />
-                        </Label>
-                        <Label htmlFor="ram-64" className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all ${config.ram === '64' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="font-bold text-lg">64 Go</span>
-                                {config.ram === '64' && <Check className="h-4 w-4" />}
-                            </div>
-                            <p className="text-xs text-gray-500">Pour la virtualisation lourde et la création 3D.</p>
-                            <Badge variant="secondary" className="mt-2 text-[10px]">+ 25 $/mois</Badge>
-                            <RadioGroupItem value="64" id="ram-64" className="sr-only" />
-                        </Label>
-                    </RadioGroup>
-                </div>
-
-                {/* Storage Selector */}
-                <div className="space-y-3">
-                    <Label className="text-base font-semibold">Stockage SSD NVMe</Label>
-                    <RadioGroup value={config.storage} onValueChange={(v) => setConfig({...config, storage: v})} className="grid grid-cols-2 gap-4">
-                        <Label htmlFor="ssd-512" className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all ${config.storage === '512' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="font-bold text-lg">512 Go</span>
-                                {config.storage === '512' && <Check className="h-4 w-4" />}
-                            </div>
-                            <RadioGroupItem value="512" id="ssd-512" className="sr-only" />
-                        </Label>
-                        <Label htmlFor="ssd-1024" className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all ${config.storage === '1024' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="font-bold text-lg">1 To</span>
-                                {config.storage === '1024' && <Check className="h-4 w-4" />}
-                            </div>
-                            <Badge variant="secondary" className="mt-2 text-[10px]">+ 15 $/mois</Badge>
-                            <RadioGroupItem value="1024" id="ssd-1024" className="sr-only" />
-                        </Label>
-                    </RadioGroup>
-                </div>
-
+            <div className="py-4">
+                {loadingInventory ? (
+                    <div className="flex flex-col items-center justify-center h-48 gap-4">
+                        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                        <p className="text-sm text-gray-500">Vérification des stocks...</p>
+                    </div>
+                ) : availableConfigs.length > 0 ? (
+                    <ScrollArea className="h-[300px] pr-4">
+                        <RadioGroup value={selectedUnitId || ''} onValueChange={setSelectedUnitId} className="gap-3">
+                            {availableConfigs.map((unit) => (
+                                <Label 
+                                    key={unit.unit_id}
+                                    htmlFor={unit.unit_id} 
+                                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedUnitId === unit.unit_id ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200 hover:border-gray-300'}`}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <RadioGroupItem value={unit.unit_id} id={unit.unit_id} className="sr-only" />
+                                        <div>
+                                            <div className="font-bold text-lg text-gray-900 flex items-center gap-2">
+                                                {unit.ram}GB RAM • {unit.storage}GB SSD
+                                                {unit.condition === 'new' ? (
+                                                    <Badge className="bg-blue-600 hover:bg-blue-600 text-[10px]">Neuf</Badge>
+                                                ) : (
+                                                    <Badge variant="secondary" className="text-[10px]">Reconditionné</Badge>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-1 font-mono">S/N: {unit.serial}</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-sm font-medium text-gray-500 line-through">${unit.price}</div>
+                                        <div className="font-bold text-black text-lg">Dispo</div>
+                                    </div>
+                                </Label>
+                            ))}
+                        </RadioGroup>
+                    </ScrollArea>
+                ) : (
+                    <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        <Package className="h-10 w-10 mx-auto text-gray-300 mb-2" />
+                        <p className="text-gray-500 font-medium">Rupture de stock temporaire</p>
+                        <p className="text-xs text-gray-400">Revenez plus tard pour de nouveaux arrivages.</p>
+                    </div>
+                )}
             </div>
 
             <DialogFooter className="flex-col sm:flex-row gap-4 items-center border-t pt-6">
                 <div className="flex flex-col items-center sm:items-start w-full">
                     <span className="text-sm text-gray-500">Votre abonnement</span>
-                    <span className="text-3xl font-bold text-gray-900">{calculateMonthly()} $<span className="text-base font-medium text-gray-500">/mois</span></span>
+                    <span className="text-3xl font-bold text-gray-900">
+                        {getSelectedUnitMonthlyPrice()} $<span className="text-base font-medium text-gray-500">/mois</span>
+                    </span>
                 </div>
-                <Button onClick={handleProceedToCheckout} className="w-full sm:w-auto h-12 px-8 text-lg rounded-full bg-black hover:bg-gray-800">
-                    S'abonner
+                <Button 
+                    onClick={handleProceedToCheckout} 
+                    disabled={!selectedUnitId}
+                    className="w-full sm:w-auto h-12 px-8 text-lg rounded-full bg-black hover:bg-gray-800"
+                >
+                    Sélectionner
                 </Button>
             </DialogFooter>
         </DialogContent>

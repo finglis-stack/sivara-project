@@ -26,6 +26,15 @@ interface ProductData {
   image_url: string;
 }
 
+interface UnitData {
+    id: string;
+    unit_price: number;
+    serial_number: string;
+    condition: string;
+    specific_specs: any;
+    product: ProductData;
+}
+
 // Constantes
 const MTL_CENTER = { lat: 45.501689, lng: -73.567256 };
 const RADIUS_KM = 35;
@@ -65,13 +74,12 @@ const DeviceCheckout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
-  // Config from URL
-  const selectedRam = searchParams.get('ram') || '32';
-  const selectedStorage = searchParams.get('storage') || '512';
+  // Specific Unit ID from URL
+  const unitId = searchParams.get('unit_id');
   
   // Data State
-  const [product, setProduct] = useState<ProductData | null>(null);
-  const [loadingProduct, setLoadingProduct] = useState(true);
+  const [unit, setUnit] = useState<UnitData | null>(null);
+  const [loadingUnit, setLoadingUnit] = useState(true);
 
   // Form State
   const [firstName, setFirstName] = useState('');
@@ -89,7 +97,7 @@ const DeviceCheckout = () => {
   
   const autoCompleteRef = useRef<HTMLInputElement>(null);
 
-  // 1. Fetch Product & User Data
+  // 1. Fetch Unit & User Data
   useEffect(() => {
     const initData = async () => {
       // User info
@@ -102,26 +110,35 @@ const DeviceCheckout = () => {
         }
       }
 
-      // Product Fetch
+      if (!unitId) {
+          showError("Aucun appareil sélectionné");
+          navigate('/?app=device');
+          return;
+      }
+
+      // Unit Fetch
       try {
         const { data, error } = await supabase
-            .from('device_products')
-            .select('*')
-            .order('base_price', { ascending: false })
-            .limit(1)
+            .from('device_units')
+            .select(`
+                *,
+                product:product_id (*)
+            `)
+            .eq('id', unitId)
             .single();
         
-        if (error) throw error;
-        setProduct(data);
+        if (error || !data) throw new Error("Unité introuvable");
+        setUnit(data as unknown as UnitData);
       } catch (e) {
-        console.error("Erreur produit", e);
-        showError("Impossible de charger le produit");
+        console.error("Erreur unité", e);
+        showError("Impossible de charger l'appareil");
+        navigate('/?app=device');
       } finally {
-        setLoadingProduct(false);
+        setLoadingUnit(false);
       }
     };
     initData();
-  }, [user]);
+  }, [user, unitId]);
 
   // 2. Init Google Maps
   useEffect(() => {
@@ -162,16 +179,13 @@ const DeviceCheckout = () => {
 
   // --- CALCULS FINANCIERS ---
   const calculateTotals = () => {
-      if (!product) return { total: 0, tax: 0, upfront: 0, monthly: 0, shipping: 0 };
+      if (!unit) return { total: 0, tax: 0, upfront: 0, monthly: 0, shipping: 0 };
 
-      // Base Price Modification based on Config
-      let adjustedPrice = product.base_price;
-      if (selectedRam === '64') adjustedPrice += 400; // Value for math only (not shown)
-      if (selectedStorage === '1024') adjustedPrice += 240; // Value for math only (not shown)
-
+      // Prix REEL de l'unité
+      const basePrice = unit.unit_price;
       const shippingPrice = deliveryOption === 'express' ? 36.00 : 0;
       
-      const subTotal = adjustedPrice + shippingPrice;
+      const subTotal = basePrice + shippingPrice;
       const taxes = subTotal * TAX_RATE;
       const grandTotal = subTotal + taxes;
       
@@ -180,8 +194,11 @@ const DeviceCheckout = () => {
       const monthly = remainder / INSTALLMENTS;
 
       return {
+          base: basePrice,
           shipping: shippingPrice,
+          subTotal,
           taxes,
+          grandTotal,
           upfront,
           monthly
       };
@@ -195,17 +212,23 @@ const DeviceCheckout = () => {
 
   const handleSubmit = async () => {
       setIsProcessing(true);
+      
+      // Ici on marquerait l'unité comme "réservée"
+      if (unit) {
+          await supabase.from('device_units').update({ status: 'reserved' }).eq('id', unit.id);
+      }
+
       await new Promise(resolve => setTimeout(resolve, 2000));
-      showSuccess("Abonnement initialisé. Redirection paiement...");
+      showSuccess("Abonnement activé. Appareil réservé.");
       setIsProcessing(false);
   };
 
-  if (loadingProduct) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="h-8 w-8 animate-spin text-gray-300" /></div>;
+  if (loadingUnit) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="h-8 w-8 animate-spin text-gray-300" /></div>;
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white font-sans">
       
-      {/* ----------------- GAUCHE : RÉSUMÉ (Style Sivara Pro) ----------------- */}
+      {/* ----------------- GAUCHE : RÉSUMÉ ----------------- */}
       <div className="lg:w-5/12 bg-gray-50 p-8 lg:p-12 border-r border-gray-200 order-last lg:order-first flex flex-col justify-between h-auto lg:min-h-screen">
          <div>
             <div className="flex items-center gap-3 mb-12 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" onClick={() => navigate('/?app=device')}>
@@ -216,24 +239,24 @@ const DeviceCheckout = () => {
             </div>
 
             <div className="mb-10">
-                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-3">Abonnement Premium</p>
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-3">Votre abonnement</p>
                 <h1 className="text-3xl lg:text-4xl font-light text-gray-900 leading-tight mb-2">
-                    {product?.name || "Sivara Book Pro"}
+                    {unit?.product.name}
                 </h1>
-                <p className="text-gray-500 font-light">Service tout inclus • Renouvelable</p>
+                <p className="text-gray-500 font-light">Location longue durée (16 mois) • Renouvelable</p>
             </div>
 
             <div className="space-y-6 mb-10">
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex gap-4 items-start">
                     <div className="h-20 w-20 bg-gray-50 rounded-lg shrink-0 flex items-center justify-center overflow-hidden">
-                        {product?.image_url && <img src={product.image_url} className="w-full h-full object-contain mix-blend-multiply p-2" />}
+                        {unit?.product.image_url && <img src={unit.product.image_url} className="w-full h-full object-contain mix-blend-multiply p-2" />}
                     </div>
                     <div className="flex-1">
-                        <h4 className="font-semibold text-gray-900 text-sm">Configuration choisie</h4>
+                        <h4 className="font-semibold text-gray-900 text-sm">Modèle spécifique</h4>
                         <ul className="text-xs text-gray-500 mt-1 space-y-1">
-                            <li>• AMD Ryzen™ 7 8845HS</li>
-                            <li>• {selectedRam} Go RAM DDR5</li>
-                            <li>• {selectedStorage} Go SSD NVMe</li>
+                            <li>• {unit?.specific_specs?.ram_size} Go RAM</li>
+                            <li>• {unit?.specific_specs?.storage} Go SSD</li>
+                            <li className="font-mono text-[10px] text-gray-400 pt-1">S/N: {unit?.serial_number}</li>
                         </ul>
                     </div>
                 </div>
@@ -256,7 +279,7 @@ const DeviceCheckout = () => {
             <div className="flex justify-between items-end mb-2">
                <div>
                    <p className="text-sm font-bold text-blue-900">Frais d'activation & Dépôt</p>
-                   <p className="text-xs text-blue-600/80">Total à régler aujourd'hui</p>
+                   <p className="text-xs text-blue-600/80">Payable aujourd'hui</p>
                </div>
                <span className="text-3xl font-thin tracking-tighter text-blue-900">
                    {totals.upfront.toFixed(2)} $
@@ -268,7 +291,7 @@ const DeviceCheckout = () => {
             <div className="flex justify-between items-center">
                <div className="flex items-center gap-2">
                    <RefreshCw className="h-4 w-4 text-blue-600" />
-                   <span className="text-sm font-medium text-blue-900">Votre abonnement</span>
+                   <span className="text-sm font-medium text-blue-900">Abonnement</span>
                </div>
                <span className="text-lg font-bold text-blue-900">{totals.monthly.toFixed(2)} $/mois</span>
             </div>
@@ -282,7 +305,7 @@ const DeviceCheckout = () => {
             <div className="mb-8 bg-black text-white p-4 rounded-xl flex items-center justify-between shadow-lg transform -translate-y-2">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-white/20 rounded-full"><AlertCircle className="h-4 w-4" /></div>
-                    <div className="text-sm font-medium">Connectez-vous pour finaliser votre abonnement</div>
+                    <div className="text-sm font-medium">Connectez-vous pour finaliser votre dossier</div>
                 </div>
                 <Button size="sm" variant="secondary" onClick={handleLoginRedirect} className="text-xs h-8">Connexion</Button>
             </div>
@@ -351,7 +374,7 @@ const DeviceCheckout = () => {
                                             <div>
                                                 <div className="font-bold text-gray-900 flex items-center gap-2">
                                                     <Zap className="h-4 w-4 text-orange-500 fill-current" />
-                                                    Livraison Flash (Ce soir)
+                                                    Livraison Flash (Aujourd'hui)
                                                 </div>
                                                 <div className="text-xs text-gray-500 mt-1">Entre 18h00 et 21h00 ce soir.</div>
                                             </div>
@@ -387,9 +410,9 @@ const DeviceCheckout = () => {
                 <div className="bg-gray-50 rounded-lg p-4 text-xs text-gray-500 mb-6 leading-relaxed flex gap-3">
                     <ShieldCheck className="h-5 w-5 text-gray-400 shrink-0" />
                     <p>
-                        <strong>Engagement de service :</strong> Le matériel reste la propriété de Sivara. 
-                        Vous pouvez changer de modèle ou retourner l'appareil à tout moment après 12 mois. 
-                        Le dépôt de garantie sécurise l'équipement.
+                        En confirmant, vous acceptez les conditions de l'abonnement "Device-as-a-Service". 
+                        Vous pouvez retourner l'appareil à tout moment après 12 mois sans frais, ou le conserver en continuant l'abonnement. 
+                        Ceci n'est pas un crédit.
                     </p>
                 </div>
 
