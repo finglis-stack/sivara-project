@@ -40,6 +40,7 @@ interface Unit {
   specific_specs: {
     ram_size: string;
     ram_speed: string;
+    storage: string;
     features: {
         touch: boolean;
         wifi: boolean;
@@ -78,11 +79,13 @@ const DeviceAdmin = () => {
 
   const defaultFeatures = { touch: false, wifi: true, bluetooth: true, fingerprint: true };
   const [unitForm, setUnitForm] = useState({ 
+      serial_number: '',
       status: 'available', 
       condition: 'new',
       unit_price: 0,
       ram_size: '16',
       ram_speed: '5200',
+      storage: '512',
       features: defaultFeatures
   });
 
@@ -157,10 +160,13 @@ const DeviceAdmin = () => {
             specs: { cpu: "Ryzen 7", type: "Laptop" } 
         };
 
-        const { error } = await supabase.from('device_products').insert(payload);
-        if (error) throw error;
-        
-        showSuccess("Produit créé");
+        if (selectedProduct && showProductDialog) {
+             // Edit logic here if needed
+        } else {
+            const { error } = await supabase.from('device_products').insert(payload);
+            if (error) throw error;
+            showSuccess("Produit créé");
+        }
         setShowProductDialog(false);
         setProdForm({ name: '', description: '', base_price: 0, image_url: '', availability: 'Global', warranty_type: 'standard' });
         fetchProducts();
@@ -187,11 +193,13 @@ const DeviceAdmin = () => {
   const handleOpenUnitDialog = () => {
       // Reset form and set default price from product base price
       setUnitForm({
+          serial_number: '',
           status: 'available',
           condition: 'new',
           unit_price: selectedProduct?.base_price || 0,
           ram_size: '16',
           ram_speed: '5200',
+          storage: '512',
           features: defaultFeatures
       });
       setShowUnitDialog(true);
@@ -206,6 +214,7 @@ const DeviceAdmin = () => {
           const specificSpecs = {
               ram_size: unitForm.ram_size,
               ram_speed: unitForm.ram_speed,
+              storage: unitForm.storage,
               features: unitForm.features
           };
 
@@ -368,8 +377,8 @@ const DeviceAdmin = () => {
                                             </div>
                                             
                                             <div className="text-xs text-gray-600">
-                                                {unit.specific_specs?.ram_size}GB {unit.specific_specs?.ram_speed}MHz
-                                                {unit.specific_specs?.features?.touch && <span className="ml-1 text-blue-600 font-bold">Touch</span>}
+                                                <div className="font-semibold">{unit.specific_specs?.ram_size}GB RAM • {unit.specific_specs?.storage}GB</div>
+                                                <div className="text-gray-400 text-[10px]">SSD NVMe {unit.specific_specs?.ram_speed}MHz</div>
                                             </div>
 
                                             <div className="font-medium">
@@ -421,19 +430,48 @@ const DeviceAdmin = () => {
                     <div className="space-y-4">
                         <div className="space-y-2"><Label>Nom du modèle</Label><Input value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} placeholder="ex: Sivara Book Pro" /></div>
                         <div className="space-y-2"><Label>Description courte</Label><Textarea value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} placeholder="Caractéristiques principales..." /></div>
-                        <div className="space-y-2"><Label>Prix de base conseillé ($)</Label><Input type="number" value={prodForm.base_price} onChange={e => setProdForm({...prodForm, base_price: parseFloat(e.target.value)})} /></div>
+                        <div className="space-y-2"><Label>Prix de base ($)</Label><Input type="number" value={prodForm.base_price} onChange={e => setProdForm({...prodForm, base_price: parseFloat(e.target.value)})} /></div>
                     </div>
                     
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <Label>Image du produit</Label>
-                            <div className="border-2 border-dashed border-gray-200 rounded-lg h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => fileInputRef.current?.click()}>
-                                {prodForm.image_url ? <img src={prodForm.image_url} className="h-full w-full object-cover rounded-lg" /> : <><Upload className="h-6 w-6 text-gray-400" /><span className="text-xs text-gray-500 mt-2">Cliquez pour uploader</span></>}
+                            <div 
+                                className="border-2 border-dashed border-gray-200 rounded-lg h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                {prodForm.image_url ? (
+                                    <img src={prodForm.image_url} className="h-full w-full object-cover rounded-lg" />
+                                ) : (
+                                    <>
+                                        {isUploading ? <Loader2 className="h-6 w-6 animate-spin text-gray-400" /> : <Upload className="h-6 w-6 text-gray-400" />}
+                                        <span className="text-xs text-gray-500 mt-2">Cliquez pour uploader</span>
+                                    </>
+                                )}
                             </div>
                             <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
                         </div>
-                        <div className="space-y-2"><Label>Disponibilité (Pays)</Label><Input value={prodForm.availability} onChange={e => setProdForm({...prodForm, availability: e.target.value})} placeholder="ex: Canada, France, US" /></div>
-                        <div className="space-y-2"><Label>Type de Garantie</Label><Select value={prodForm.warranty_type} onValueChange={(v) => setProdForm({...prodForm, warranty_type: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="standard">Standard (2 ans)</SelectItem><SelectItem value="extended">Étendue (SLA 24h)</SelectItem></SelectContent></Select></div>
+
+                        <div className="space-y-2">
+                            <Label>Disponibilité (Pays)</Label>
+                            <Input value={prodForm.availability} onChange={e => setProdForm({...prodForm, availability: e.target.value})} placeholder="ex: Canada, France, US" />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Type de Garantie</Label>
+                            <Select value={prodForm.warranty_type} onValueChange={(v) => setProdForm({...prodForm, warranty_type: v})}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="standard">Standard (2 ans)</SelectItem>
+                                    <SelectItem value="extended">Étendue (SLA 24h + Pièces + Main d'œuvre)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-gray-500 leading-tight">
+                                {prodForm.warranty_type === 'extended' 
+                                    ? "Inclut: Intervention sur site, remplacement express, support prioritaire." 
+                                    : "Garantie légale standard contre les défauts de fabrication."}
+                            </p>
+                        </div>
                     </div>
                 </div>
                 <DialogFooter><Button onClick={handleSaveProduct}>Créer la fiche</Button></DialogFooter>
@@ -445,115 +483,126 @@ const DeviceAdmin = () => {
             <DialogContent className="max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>Ajouter une Unité</DialogTitle>
-                    <DialogDescription>Configuration spécifique de l'ordinateur.</DialogDescription>
-                </DialogHeader>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
-                    <div className="space-y-6">
-                        <div className="space-y-4">
-                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Spécifications Mémoire</h3>
-                            <div className="grid grid-cols-2 gap-4">
+                    <DialogDescription>Ajout physique au stock pour {selectedProduct?.name}</DialogDescription></DialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="space-y-2"><Label>Numéro de Série (S/N)</Label><Input value={unitForm.serial_number} onChange={e => setUnitForm({...unitForm, serial_number: e.target.value})} placeholder="SIV-XXXX-YYYY" /></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
+                        <div className="space-y-6">
+                            <div className="space-y-4">
+                                <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Spécifications Techniques</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Quantité RAM</Label>
+                                        <Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="16">16 GB</SelectItem>
+                                                <SelectItem value="32">32 GB</SelectItem>
+                                                <SelectItem value="64">64 GB</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Vitesse RAM</Label>
+                                        <Select value={unitForm.ram_speed} onValueChange={(v) => setUnitForm({...unitForm, ram_speed: v})}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="4800">4800 MHz</SelectItem>
+                                                <SelectItem value="5200">5200 MHz</SelectItem>
+                                                <SelectItem value="6000">6000 MHz</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
                                 <div className="space-y-2">
-                                    <Label>Quantité RAM</Label>
-                                    <Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}>
+                                    <Label>Stockage (SSD NVMe)</Label>
+                                    <Select value={unitForm.storage} onValueChange={(v) => setUnitForm({...unitForm, storage: v})}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="16">16 GB</SelectItem>
-                                            <SelectItem value="32">32 GB</SelectItem>
-                                            <SelectItem value="64">64 GB</SelectItem>
+                                            <SelectItem value="256">256 GB</SelectItem>
+                                            <SelectItem value="512">512 GB</SelectItem>
+                                            <SelectItem value="1024">1024 GB (1TB)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Vitesse RAM</Label>
-                                    <Select value={unitForm.ram_speed} onValueChange={(v) => setUnitForm({...unitForm, ram_speed: v})}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="4800">4800 MHz</SelectItem>
-                                            <SelectItem value="5200">5200 MHz</SelectItem>
-                                            <SelectItem value="6000">6000 MHz</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Fonctionnalités</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                        <Label htmlFor="touch" className="flex items-center gap-2 cursor-pointer"><Monitor className="h-4 w-4" /> Tactile</Label>
+                                        <Switch id="touch" checked={unitForm.features.touch} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, touch: c}})} />
+                                    </div>
+                                    <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                        <Label htmlFor="fp" className="flex items-center gap-2 cursor-pointer"><Fingerprint className="h-4 w-4" /> Fingerprint</Label>
+                                        <Switch id="fp" checked={unitForm.features.fingerprint} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, fingerprint: c}})} />
+                                    </div>
+                                    <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                        <Label htmlFor="wifi" className="flex items-center gap-2 cursor-pointer"><Wifi className="h-4 w-4" /> Wifi 6E</Label>
+                                        <Switch id="wifi" checked={unitForm.features.wifi} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, wifi: c}})} />
+                                    </div>
+                                    <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                        <Label htmlFor="bt" className="flex items-center gap-2 cursor-pointer"><Bluetooth className="h-4 w-4" /> Bluetooth 5.3</Label>
+                                        <Switch id="bt" checked={unitForm.features.bluetooth} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, bluetooth: c}})} />
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="space-y-4">
-                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Fonctionnalités</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                    <Label htmlFor="touch" className="flex items-center gap-2 cursor-pointer"><Monitor className="h-4 w-4" /> Tactile</Label>
-                                    <Switch id="touch" checked={unitForm.features.touch} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, touch: c}})} />
-                                </div>
-                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                    <Label htmlFor="fp" className="flex items-center gap-2 cursor-pointer"><Fingerprint className="h-4 w-4" /> Fingerprint</Label>
-                                    <Switch id="fp" checked={unitForm.features.fingerprint} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, fingerprint: c}})} />
-                                </div>
-                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                    <Label htmlFor="wifi" className="flex items-center gap-2 cursor-pointer"><Wifi className="h-4 w-4" /> Wifi 6E</Label>
-                                    <Switch id="wifi" checked={unitForm.features.wifi} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, wifi: c}})} />
-                                </div>
-                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                    <Label htmlFor="bt" className="flex items-center gap-2 cursor-pointer"><Bluetooth className="h-4 w-4" /> Bluetooth 5.3</Label>
-                                    <Switch id="bt" checked={unitForm.features.bluetooth} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, bluetooth: c}})} />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-6">
-                        <div className="space-y-4">
-                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Offre Commerciale</h3>
-                            
-                            <div className="space-y-2">
-                                <Label className="text-base">Prix de vente total ($)</Label>
-                                <Input 
-                                    type="number" 
-                                    value={unitForm.unit_price} 
-                                    onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} 
-                                    className="text-lg font-bold"
-                                />
-                            </div>
-
-                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-                                <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Plan de paiement (Calculé)</h4>
+                        <div className="space-y-6">
+                            <div className="space-y-4">
+                                <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Offre Commerciale</h3>
                                 
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-gray-600">Apport initial (20%)</span>
-                                    <span className="font-bold text-gray-900">${financials.upfront.toFixed(2)}</span>
+                                <div className="space-y-2">
+                                    <Label className="text-base">Prix de vente total ($)</Label>
+                                    <Input 
+                                        type="number" 
+                                        value={unitForm.unit_price} 
+                                        onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} 
+                                        className="text-lg font-bold"
+                                    />
                                 </div>
-                                <div className="h-px bg-blue-200/50 w-full"></div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-gray-600">Reste à financer</span>
-                                    <span className="font-medium text-gray-700">${(unitForm.unit_price - financials.upfront).toFixed(2)}</span>
-                                </div>
-                                <div className="bg-white p-3 rounded-lg border border-blue-100 flex justify-between items-center shadow-sm">
-                                    <span className="text-sm font-bold text-blue-700">Abonnement (16 mois)</span>
-                                    <span className="text-lg font-bold text-blue-700">${financials.monthly.toFixed(2)}/mois</span>
+
+                                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                                    <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Plan de paiement (Calculé)</h4>
+                                    
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-gray-600">Apport initial (20%)</span>
+                                        <span className="font-bold text-gray-900">${financials.upfront.toFixed(2)}</span>
+                                    </div>
+                                    <div className="h-px bg-blue-200/50 w-full"></div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-gray-600">Reste à financer</span>
+                                        <span className="font-medium text-gray-700">${(unitForm.unit_price - financials.upfront).toFixed(2)}</span>
+                                    </div>
+                                    <div className="bg-white p-3 rounded-lg border border-blue-100 flex justify-between items-center shadow-sm">
+                                        <span className="text-sm font-bold text-blue-700">Abonnement (16 mois)</span>
+                                        <span className="text-lg font-bold text-blue-700">${financials.monthly.toFixed(2)}/mois</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="space-y-2">
-                            <Label>État & Condition</Label>
-                            <div className="grid grid-cols-2 gap-4">
-                                <Select value={unitForm.condition} onValueChange={(v: any) => setUnitForm({...unitForm, condition: v})}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent><SelectItem value="new">Neuf</SelectItem><SelectItem value="refurbished">Reconditionné</SelectItem></SelectContent>
-                                </Select>
-                                <Select value={unitForm.status} onValueChange={(v: any) => setUnitForm({...unitForm, status: v})}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="available">Disponible</SelectItem>
-                                        <SelectItem value="reserved">Réservé</SelectItem>
-                                        <SelectItem value="maintenance">Maintenance</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                            <div className="space-y-2">
+                                <Label>État & Condition</Label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Select value={unitForm.condition} onValueChange={(v: any) => setUnitForm({...unitForm, condition: v})}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent><SelectItem value="new">Neuf</SelectItem><SelectItem value="refurbished">Reconditionné</SelectItem></SelectContent>
+                                    </Select>
+                                    <Select value={unitForm.status} onValueChange={(v: any) => setUnitForm({...unitForm, status: v})}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="available">Disponible</SelectItem>
+                                            <SelectItem value="reserved">Réservé</SelectItem>
+                                            <SelectItem value="maintenance">Maintenance</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-
                 <DialogFooter className="sm:justify-between items-center">
                     <p className="text-xs text-gray-400 italic">S/N généré automatiquement à la validation.</p>
                     <Button onClick={handleSaveUnit} className="bg-black hover:bg-gray-800 text-white">Ajouter au stock</Button>
