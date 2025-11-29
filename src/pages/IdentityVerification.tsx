@@ -48,8 +48,8 @@ const PaymentForm = ({ clientSecret, orderId, onSuccess }: { clientSecret: strin
                     <span className="font-mono font-bold">#{orderId.slice(-8).toUpperCase()}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                    <span className="text-gray-900 font-medium">Financement 16 mois</span>
-                    <Badge>0% APR</Badge>
+                    <span className="text-gray-900 font-medium">Abonnement Device</span>
+                    <Badge variant="outline" className="bg-white text-gray-600 border-gray-300">Mensuel</Badge>
                 </div>
             </div>
 
