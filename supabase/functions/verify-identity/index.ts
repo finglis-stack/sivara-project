@@ -15,6 +15,29 @@ const corsHeaders = {
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || '';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
+// Utilitaires de normalisation
+const normalizeString = (str: string) => {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Enlève les accents
+    .replace(/[^a-z0-9]/g, ""); // Garde uniquement alphanumérique
+};
+
+const calculateAge = (dobString: string) => {
+  if (!dobString) return 0;
+  // Format attendu YYYY-MM-DD
+  const birthDate = new Date(dobString);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -37,94 +60,105 @@ serve(async (req) => {
 
     console.log(`[ID-CHECK] Starting verification for User ${userId}`);
 
-    // 1. ANALYSE DOCUMENT (GEMINI 2.5 FLASH - 2025 MODEL)
-    // Utilisation du modèle Flash 2.5 pour une latence minimale et capacités de raisonnement
+    // 1. ANALYSE DOCUMENT (GEMINI 2.5 FLASH)
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
-    // Conversion Base64 -> Parts pour Gemini
     const imageParts = [
       { inlineData: { data: frontImage, mimeType: "image/jpeg" } },
       { inlineData: { data: backImage, mimeType: "image/jpeg" } }
     ];
 
+    // Prompt strict pour extraction de données brutes UNIQUEMENT
     const prompt = `
-      Analyze these ID documents (Front and Back) strictly. Return ONLY a JSON object.
-      1. Extract: firstName, lastName, dateOfBirth (YYYY-MM-DD), address, expiryDate.
-      2. Verify: Does the name match "${userProfile.first_name} ${userProfile.last_name}"? (fuzzy match allowed).
-      3. Security: Check for holograms, font consistency, edge tampering.
-      4. Age: Calculate current age.
-      
-      Format:
+      Analyze these ID documents strictly. Extract raw data.
+      Return ONLY a JSON object with this exact structure:
       {
-        "extracted": { "firstName": "", "lastName": "", "age": 0, "address": "" },
-        "verification": { "nameMatch": boolean, "isExpired": boolean, "isFake": boolean },
-        "confidence": 0-100
+        "firstName": "extracted first name",
+        "lastName": "extracted last name",
+        "dateOfBirth": "YYYY-MM-DD",
+        "address": "full address",
+        "isExpired": boolean,
+        "isFake": boolean,
+        "tamperingDetected": boolean
       }
+      If date is ambiguous, use ISO format YYYY-MM-DD.
     `;
 
     const result = await model.generateContent([prompt, ...imageParts]);
     const response = await result.response;
     const text = response.text();
-    
-    // Nettoyage du JSON (Gemini met parfois des backticks)
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const analysis = JSON.parse(jsonStr);
+    const extraction = JSON.parse(jsonStr);
 
-    console.log("[ID-CHECK] Gemini Analysis:", analysis);
+    console.log("[ID-CHECK] Gemini Extraction:", extraction);
 
-    // 2. ANALYSE DE RISQUE (SCORING)
-    let riskScore = 0; // 0 = Safe, 100 = Fraud
+    // 2. LOGIQUE DE COMPARAISON (Code déterministe)
+    let riskScore = 0;
     let rejectionReason = null;
 
-    // A. Check Identité
-    if (!analysis.verification.nameMatch) { riskScore += 100; rejectionReason = "Nom ne correspond pas au profil"; }
-    if (analysis.verification.isFake) { riskScore += 100; rejectionReason = "Document détecté comme faux"; }
-    if (analysis.extracted.age < 18) { riskScore += 100; rejectionReason = "Utilisateur mineur"; }
+    // A. Comparaison Noms (Normalisée)
+    const dbFirstName = normalizeString(userProfile.first_name);
+    const dbLastName = normalizeString(userProfile.last_name);
+    const idFirstName = normalizeString(extraction.firstName);
+    const idLastName = normalizeString(extraction.lastName);
 
-    // B. Check Device (Fingerprint)
-    // GPU detection simplifiée
+    // On vérifie si le nom extrait CONTIENT le nom DB (pour gérer les seconds prénoms) ou vice versa
+    const isNameMatch = 
+      (idFirstName.includes(dbFirstName) || dbFirstName.includes(idFirstName)) &&
+      (idLastName.includes(dbLastName) || dbLastName.includes(idLastName));
+
+    if (!isNameMatch) {
+      console.log(`[ID-CHECK] Name Mismatch: DB[${dbFirstName} ${dbLastName}] vs ID[${idFirstName} ${idLastName}]`);
+      riskScore += 100;
+      rejectionReason = "Nom ne correspond pas au profil (Vérifiez l'orthographe)";
+    }
+
+    // B. Calcul Âge (Date Système)
+    const age = calculateAge(extraction.dateOfBirth);
+    console.log(`[ID-CHECK] Calculated Age: ${age} (DOB: ${extraction.dateOfBirth})`);
+    
+    if (age < 18) {
+      riskScore += 100;
+      rejectionReason = `Utilisateur mineur (${age} ans)`;
+    }
+
+    // C. Check Validité Document
+    if (extraction.isExpired) { riskScore += 100; rejectionReason = "Document expiré"; }
+    if (extraction.isFake || extraction.tamperingDetected) { riskScore += 100; rejectionReason = "Document suspect ou altéré"; }
+
+    // D. Check Device (Fingerprint)
     const isHighEndDevice = fingerprint.gpu?.toLowerCase().includes('nvidia') || 
                            fingerprint.gpu?.toLowerCase().includes('apple') ||
                            fingerprint.memory >= 8;
     
-    if (!isHighEndDevice) riskScore += 10; // Appareil bas de gamme = risque légèrement accru pour un sub premium
-    if (fingerprint.os === 'Linux' && !fingerprint.mobile) riskScore += 20; // Linux desktop souvent utilisé pour spoofing (sauf devs)
+    if (!isHighEndDevice) riskScore += 10;
+    if (fingerprint.os === 'Linux' && !fingerprint.mobile) riskScore += 20;
     
-    // C. Check Location (Simulation IP via Headers ou Payload)
-    // Simulation : Si l'adresse extraite contient certains mots clés de zones à risque
+    // E. Check Location (Risk Zones Montreal)
     const riskyZones = ['montreal-nord', 'montréal-nord', 'saint-michel']; 
-    const addressLower = analysis.extracted.address.toLowerCase();
+    const addressLower = (extraction.address || "").toLowerCase();
     
     let zoneRisk = 'low';
     if (riskyZones.some(z => addressLower.includes(z))) {
-        riskScore += 45; // Forte augmentation du risque
+        riskScore += 45;
         zoneRisk = 'high';
     }
 
-    // D. Graph de Paiement (BIN check simulé)
-    // 4 derniers chiffres ou BIN
-    if (cardBin) {
-       // Simulation: Prepaid cards often start with certain bins
-       const isPrepaid = ['4567', '5123'].includes(cardBin);
-       if (isPrepaid) {
-           riskScore += 30;
-           console.log("[ID-CHECK] Carte prépayée détectée");
-       }
+    // F. Check Paiement
+    if (cardBin && ['4567', '5123'].includes(cardBin)) {
+        riskScore += 30;
     }
 
-    // 3. DÉCISION FINALE
+    // 3. DÉCISION
     const decision = riskScore >= 50 ? 'REJECT' : 'APPROVE';
     
-    // Estimation Durée Abonnement (LTV Prediction)
-    // Basé sur: Age > 25, HighEnd Device, Low Risk Zone => Long Term
     let estimatedLTV = 'Low';
-    if (riskScore < 20 && analysis.extracted.age > 25 && isHighEndDevice) estimatedLTV = 'High (> 12 mois)';
+    if (riskScore < 20 && age > 25 && isHighEndDevice) estimatedLTV = 'High (> 12 mois)';
     else if (riskScore < 40) estimatedLTV = 'Medium (6-12 mois)';
     else estimatedLTV = 'Churn Risk (< 3 mois)';
 
-    // Log transaction
     await supabase.from('crawl_logs').insert({
-        message: `ID Check User ${userId}: ${decision} (Score: ${riskScore}) - LTV: ${estimatedLTV}`,
+        message: `ID Check User ${userId}: ${decision} (Score: ${riskScore}) - Age: ${age} - LTV: ${estimatedLTV}`,
         step: 'RISK_ENGINE',
         status: decision === 'APPROVE' ? 'success' : 'error'
     });
@@ -133,9 +167,10 @@ serve(async (req) => {
       status: decision,
       riskScore,
       riskLevel: zoneRisk,
-      details: analysis,
       ltvPrediction: estimatedLTV,
-      reason: rejectionReason
+      reason: rejectionReason,
+      // Debug info (optional)
+      debug: { age, nameMatch: isNameMatch }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
