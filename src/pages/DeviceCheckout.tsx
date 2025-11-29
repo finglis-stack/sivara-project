@@ -8,15 +8,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { showSuccess, showError } from '@/utils/toast';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, MapPin, Truck, Zap, CheckCircle2, 
-  Loader2, AlertCircle, RefreshCw, Calendar, ShieldCheck, HelpCircle 
+  ArrowLeft, MapPin, Truck, Zap, AlertCircle, RefreshCw, ShieldCheck, HelpCircle, Loader2, CheckCircle2 
 } from 'lucide-react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Card } from '@/components/ui/card';
 
 // Types
 declare global {
@@ -104,12 +98,12 @@ const DeviceCheckout = () => {
         }
       }
 
-      // Product Fetch (Simule la sélection du dernier modèle phare)
+      // Product Fetch
       try {
         const { data, error } = await supabase
             .from('device_products')
             .select('*')
-            .order('base_price', { ascending: false }) // On prend le plus cher par défaut
+            .order('base_price', { ascending: false })
             .limit(1)
             .single();
         
@@ -169,22 +163,11 @@ const DeviceCheckout = () => {
       const basePrice = product.base_price;
       const shippingPrice = deliveryOption === 'express' ? 36.00 : 0;
       
-      // Sous-total avant taxes
       const subTotal = basePrice + shippingPrice;
-      
-      // Taxes (14.975%)
       const taxes = subTotal * TAX_RATE;
-      
-      // Grand Total TTC
       const grandTotal = subTotal + taxes;
-      
-      // Apport (20% du Grand Total)
       const upfront = grandTotal * UPFRONT_PERCENTAGE;
-      
-      // Reste à payer sur l'abonnement
       const remainder = grandTotal - upfront;
-      
-      // Mensualité
       const monthly = remainder / INSTALLMENTS;
 
       return {
@@ -216,7 +199,7 @@ const DeviceCheckout = () => {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white font-sans">
       
-      {/* ----------------- GAUCHE : RÉSUMÉ (Style Sivara Pro) ----------------- */}
+      {/* ----------------- GAUCHE : RÉSUMÉ ----------------- */}
       <div className="lg:w-5/12 bg-gray-50 p-8 lg:p-12 border-r border-gray-200 order-last lg:order-first flex flex-col justify-between h-auto lg:min-h-screen">
          <div>
             <div className="flex items-center gap-3 mb-12 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" onClick={() => navigate('/?app=device')}>
@@ -251,21 +234,12 @@ const DeviceCheckout = () => {
 
                 <div className="space-y-3">
                     <div className="flex justify-between text-sm text-gray-600">
-                        <span>Prix appareil</span>
-                        <span>{totals.base.toFixed(2)} $</span>
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-600">
                         <span>Livraison {deliveryOption === 'express' ? '(Express)' : '(Standard)'}</span>
                         <span>{totals.shipping > 0 ? `${totals.shipping.toFixed(2)} $` : 'Gratuit'}</span>
                     </div>
                     <div className="flex justify-between text-sm text-gray-600">
-                        <span className="flex items-center gap-1">Taxes (QC 14.975%) <HelpCircle className="h-3 w-3 text-gray-300" /></span>
+                        <span className="flex items-center gap-1">Taxes incluses <HelpCircle className="h-3 w-3 text-gray-300" /></span>
                         <span>{totals.taxes.toFixed(2)} $</span>
-                    </div>
-                    <div className="h-px bg-gray-200 my-2"></div>
-                    <div className="flex justify-between items-center">
-                        <span className="font-bold text-gray-900">Total Global</span>
-                        <span className="font-bold text-gray-900">{totals.grandTotal.toFixed(2)} $</span>
                     </div>
                 </div>
             </div>
@@ -344,7 +318,7 @@ const DeviceCheckout = () => {
                         <MapPin className="absolute left-3 top-3.5 text-gray-400 h-5 w-5" />
                         <Input 
                             ref={autoCompleteRef}
-                            placeholder="Adresse de livraison..." 
+                            placeholder="Commencez à taper votre adresse..." 
                             className="pl-10 h-12 text-base bg-gray-50 border-gray-100 focus:bg-white transition-colors shadow-sm"
                         />
                     </div>
@@ -357,39 +331,49 @@ const DeviceCheckout = () => {
                     )}
 
                     {distance !== null && (
-                        <RadioGroup value={deliveryOption} onValueChange={setDeliveryOption} className="gap-3 pt-2">
-                            {/* Option Grand Montréal */}
-                            {distance <= RADIUS_KM && (
-                                <Label htmlFor="express" className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${deliveryOption === 'express' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <div className="animate-in fade-in slide-in-from-top-4">
+                            <Label className="mb-3 block text-gray-600">Options disponibles pour votre zone</Label>
+                            <RadioGroup value={deliveryOption} onValueChange={setDeliveryOption} className="gap-3">
+                                
+                                {/* Option Grand Montréal */}
+                                {distance <= RADIUS_KM && (
+                                    <Label 
+                                        htmlFor="express" 
+                                        className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${deliveryOption === 'express' ? 'border-blue-600 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'}`}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <RadioGroupItem value="express" id="express" className="border-blue-600 text-blue-600" />
+                                            <div>
+                                                <div className="font-bold text-gray-900 flex items-center gap-2">
+                                                    <Zap className="h-4 w-4 text-orange-500 fill-current" />
+                                                    Livraison Flash (Aujourd'hui)
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1">Entre 18h00 et 21h00 ce soir.</div>
+                                            </div>
+                                        </div>
+                                        <div className="font-bold text-gray-900">$36.00</div>
+                                    </Label>
+                                )}
+
+                                {/* Option Standard */}
+                                <Label 
+                                    htmlFor="standard" 
+                                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${deliveryOption === 'standard' ? 'border-black bg-gray-50' : 'border-gray-100 hover:border-gray-200'}`}
+                                >
                                     <div className="flex items-center gap-4">
-                                        <RadioGroupItem value="express" id="express" className="border-gray-900 text-black" />
+                                        <RadioGroupItem value="standard" id="standard" className="text-black" />
                                         <div>
                                             <div className="font-bold text-gray-900 flex items-center gap-2">
-                                                <Zap className="h-4 w-4 text-amber-500 fill-current" />
-                                                Livraison Flash (Ce soir)
+                                                <Truck className="h-4 w-4 text-gray-600" />
+                                                Postes Canada Express
                                             </div>
-                                            <div className="text-xs text-gray-500 mt-1">Commandez avant 16h. Livré entre 18h-21h.</div>
+                                            <div className="text-xs text-gray-500 mt-1">2 à 3 jours ouvrables. Signature requise.</div>
                                         </div>
                                     </div>
-                                    <div className="font-bold text-gray-900">$36.00</div>
+                                    <div className="font-bold text-green-600 uppercase text-sm">Gratuit</div>
                                 </Label>
-                            )}
-
-                            {/* Option Standard */}
-                            <Label htmlFor="standard" className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${deliveryOption === 'standard' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200 hover:border-gray-300'}`}>
-                                <div className="flex items-center gap-4">
-                                    <RadioGroupItem value="standard" id="standard" className="border-gray-900 text-black" />
-                                    <div>
-                                        <div className="font-bold text-gray-900 flex items-center gap-2">
-                                            <Truck className="h-4 w-4 text-gray-500" />
-                                            Postes Canada Xpresspost
-                                        </div>
-                                        <div className="text-xs text-gray-500 mt-1">2 à 3 jours ouvrables. Signature requise.</div>
-                                    </div>
-                                </div>
-                                <div className="font-bold text-green-600 uppercase text-xs tracking-wider">Gratuit</div>
-                            </Label>
-                        </RadioGroup>
+                            </RadioGroup>
+                        </div>
                     )}
                 </div>
             </section>
@@ -407,12 +391,12 @@ const DeviceCheckout = () => {
 
                 <Button 
                     size="lg" 
-                    className="w-full h-14 text-lg bg-black hover:bg-gray-800 text-white rounded-full shadow-xl transition-all hover:scale-[1.01] font-bold"
+                    className="w-full h-14 text-lg bg-black hover:bg-gray-900 text-white rounded-xl shadow-xl transition-all hover:scale-[1.01]"
                     disabled={!address || !firstName || !lastName || !email || isProcessing}
                     onClick={handleSubmit}
                 >
                     {isProcessing ? <Loader2 className="animate-spin mr-2" /> : "Payer l'apport initial"} 
-                    {!isProcessing && `• ${totals.upfront.toFixed(2)} $`}
+                    {!isProcessing && ` • ${totals.upfront.toFixed(2)} $`}
                 </Button>
                 
                 <div className="text-center mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
