@@ -1,8 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { 
-  ArrowRight, Cpu, Wifi, Fingerprint, HardDrive, 
-  Monitor, Battery, Layers, ShieldCheck, ChevronRight, Laptop, Package, Check, X, Loader2,
-  Filter, Search, ArrowLeft, Shuffle, Database
+  ArrowRight, ShieldCheck, ChevronRight, Laptop, Package, Check, X, Loader2,
+  Filter, Search, ArrowLeft, Shuffle, Database, Lock, Zap, Layers, Command
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from '@/components/UserMenu';
@@ -76,7 +75,6 @@ const DeviceLanding = () => {
 
   // --- ALGORITHMES & LOGIQUE ---
 
-  // Mélange de Fisher-Yates pour la randomisation réelle
   const shuffleArray = (array: any[]) => {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
@@ -107,7 +105,6 @@ const DeviceLanding = () => {
       if (data) {
           setAllUnits(data as any[]);
           
-          // Extraire les produits uniques (Catégories)
           const uniqueProducts = new Map();
           data.forEach((unit: any) => {
               if (unit.product && !uniqueProducts.has(unit.product.id)) {
@@ -116,7 +113,6 @@ const DeviceLanding = () => {
           });
           setProducts(Array.from(uniqueProducts.values()));
 
-          // Si un seul produit, on saute direct à la sélection
           if (uniqueProducts.size === 1) {
               const prodId = Array.from(uniqueProducts.keys())[0];
               setSelectedProductId(prodId);
@@ -126,32 +122,22 @@ const DeviceLanding = () => {
       setLoadingInventory(false);
   };
 
-  // Algorithme de "Smart Diversity" pour les 5 unités
   const getSmartUnits = useMemo(() => {
       if (!selectedProductId) return [];
-      
-      // 1. Filtrer par produit
       const productUnits = allUnits.filter(u => u.product.id === selectedProductId);
-      
-      // 2. Mélanger pour éviter que ce soit toujours les mêmes (si configs identiques)
       const shuffled = shuffleArray(productUnits);
-
-      // 3. Sélectionner pour la diversité (Unique Specs)
       const selected: RawUnit[] = [];
       const seenSpecs = new Set<string>();
 
-      // Passe 1 : Essayer de trouver des configs différentes (RAM/Storage/Condition)
       for (const unit of shuffled) {
           if (selected.length >= 5) break;
           const specKey = `${unit.specific_specs.ram_size}-${unit.specific_specs.storage}-${unit.condition}`;
-          
           if (!seenSpecs.has(specKey)) {
               selected.push(unit);
               seenSpecs.add(specKey);
           }
       }
 
-      // Passe 2 : Si on a moins de 5 unités, on comble avec le reste (même si specs identiques)
       if (selected.length < 5) {
           for (const unit of shuffled) {
               if (selected.length >= 5) break;
@@ -160,11 +146,9 @@ const DeviceLanding = () => {
               }
           }
       }
-
       return selected;
-  }, [allUnits, selectedProductId, showConfig]); // Dépend de showConfig pour re-shuffle à chaque ouverture
+  }, [allUnits, selectedProductId, showConfig]);
 
-  // Filtrage pour la vue "Recherche Avancée"
   const getFilteredUnits = useMemo(() => {
       if (!selectedProductId) return [];
       return allUnits.filter(u => {
@@ -207,19 +191,17 @@ const DeviceLanding = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans selection:bg-blue-900 selection:text-white overflow-x-hidden">
-      {/* ... (Navbar & Hero kept same as before) ... */}
-      <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-white/5 backdrop-blur-md border-b border-white/5 text-white">
+    <div className="min-h-screen bg-black font-sans selection:bg-white selection:text-black overflow-x-hidden text-white">
+      {/* NAVBAR */}
+      <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-black/50 backdrop-blur-md border-b border-white/5">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
-            <div className="h-9 w-9 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/10 shadow-inner">
-              <span className="font-bold text-lg text-white">S</span>
+            <div className="h-9 w-9 bg-white rounded-xl flex items-center justify-center border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+              <span className="font-bold text-lg text-black">S</span>
             </div>
-            <span className="font-medium text-lg tracking-wide drop-shadow-md">Sivara Book</span>
+            <span className="font-medium text-lg tracking-wide">Sivara Book</span>
           </div>
           <div className="flex items-center gap-4 sm:gap-6">
-            <a href="#specs" className="text-sm font-medium text-white/80 hover:text-white transition-colors hidden sm:block shadow-sm">Spécifications</a>
-            
             {isVendor && (
                 <Button 
                     variant="ghost" 
@@ -232,21 +214,19 @@ const DeviceLanding = () => {
             )}
 
             {user ? (
-                <div className="text-white">
-                    <UserMenu />
-                </div>
+                <UserMenu />
             ) : (
                 <div className="flex items-center gap-4">
                     <Button 
                     variant="ghost" 
                     onClick={() => navigateToAuth('/login')}
-                    className="text-white hover:bg-white/20 font-medium"
+                    className="text-white hover:bg-white/10 font-medium"
                     >
                     Connexion
                     </Button>
                     <Button 
                     onClick={() => navigateToAuth('/onboarding')}
-                    className="bg-white text-black hover:bg-gray-100 rounded-full px-6 border-2 border-transparent hover:border-white/50 transition-all"
+                    className="bg-white text-black hover:bg-gray-200 rounded-full px-6 transition-all font-bold"
                     >
                     Précommander
                     </Button>
@@ -256,7 +236,16 @@ const DeviceLanding = () => {
         </div>
       </nav>
 
-      <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-[#080808]">
+      {/* HERO SECTION */}
+      <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
+        
+        {/* COURBES ANIMÉES (BACKGROUND) */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute top-[40%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] border-t-[2px] border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.3)] animate-wave-undulate opacity-80"></div>
+            <div className="absolute top-[42%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] border-t-[1px] border-cyan-400/30 blur-[2px] animate-wave-undulate-slow opacity-60"></div>
+            <div className="absolute top-[38%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] bg-gradient-to-b from-blue-900/10 to-transparent blur-3xl animate-wave-undulate opacity-30"></div>
+        </div>
+
         <div className="container mx-auto px-6 relative z-10 py-12">
             <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-20">
                 <div className="flex-1 text-center lg:text-left space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000 relative">
@@ -265,35 +254,29 @@ const DeviceLanding = () => {
                         Design Industriel
                     </div>
                     
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.1] drop-shadow-2xl">
+                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.1] drop-shadow-2xl">
                         Sivara Book. <br/>
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-100 to-gray-500">L'Art de la Puissance.</span>
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-500">L'Art de la Puissance.</span>
                     </h1>
                     
-                    <p className="text-xl text-white/70 font-light max-w-2xl mx-auto lg:mx-0 leading-relaxed drop-shadow-md">
-                        Ryzen 7 AI. Écran tactile 2.5K. Zorin OS. <br/>
+                    <p className="text-xl text-gray-400 font-light max-w-2xl mx-auto lg:mx-0 leading-relaxed">
+                        Conçu pour ceux qui refusent les compromis. <br/>
                         Disponible en abonnement tout inclus.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-4">
                         <Button 
                             onClick={handleOpenConfig}
-                            className="h-14 px-10 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold shadow-[0_0_40px_rgba(255,255,255,0.1)]"
+                            className="h-16 px-12 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold shadow-[0_0_40px_rgba(255,255,255,0.2)]"
                         >
                             Choisir mon modèle
                             <ArrowRight className="ml-2 h-5 w-5" />
-                        </Button>
-                        <Button 
-                            variant="outline"
-                            className="h-14 px-10 text-white border-white/20 bg-transparent hover:bg-white/5 text-lg rounded-full backdrop-blur-sm"
-                            onClick={() => document.getElementById('specs')?.scrollIntoView({ behavior: 'smooth' })}
-                        >
-                            Détails
                         </Button>
                     </div>
                 </div>
 
                 <div className="flex-1 relative w-full max-w-lg lg:max-w-xl animate-in fade-in slide-in-from-right-8 duration-1000 delay-200">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[100%] bg-gradient-to-tr from-blue-500/10 to-purple-500/5 blur-[90px] rounded-full pointer-events-none"></div>
                     <img 
                         src="/sivara-book.png" 
                         alt="Sivara Book" 
@@ -304,16 +287,134 @@ const DeviceLanding = () => {
         </div>
       </div>
 
-      {/* --- SPECS & OS Sections omitted for brevity (same as previous) --- */}
-      <div id="specs" className="py-24 bg-white relative z-20">
-         <div className="container mx-auto px-6">
-             {/* ... Specs Content ... */}
+      {/* ZORIN OS SECTION (DYNAMIQUE & STYLÉ) */}
+      <section className="py-32 bg-[#050505] relative overflow-hidden">
+         {/* Background Glows */}
+         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+             <div className="absolute top-1/4 right-0 w-[800px] h-[800px] bg-[#0cc0df]/10 rounded-full blur-[120px]"></div>
+             <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-[#1e3b5a]/20 rounded-full blur-[100px]"></div>
          </div>
+
+         <div className="container mx-auto px-6 relative z-10">
+             
+             <div className="text-center max-w-4xl mx-auto mb-24">
+                 <div className="inline-block mb-6">
+                    <span className="text-[#0cc0df] font-bold tracking-widest uppercase text-sm border border-[#0cc0df]/30 px-4 py-2 rounded-full bg-[#0cc0df]/5">Système d'Exploitation</span>
+                 </div>
+                 <h2 className="text-5xl md:text-7xl font-bold text-white mb-8 leading-tight">
+                    Libérez votre ordinateur.<br/>
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0cc0df] to-white">Propulsé par Zorin OS.</span>
+                 </h2>
+                 <p className="text-xl text-gray-400 leading-relaxed font-light">
+                    Une alternative puissante, respectueuse de la vie privée et conçue pour la vitesse. 
+                    Fini les mises à jour forcées, la télémétrie et les lenteurs inexpliquées.
+                 </p>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                 
+                 {/* Card 1 : Privacy */}
+                 <div className="group relative bg-white/5 border border-white/10 rounded-[2rem] p-10 overflow-hidden hover:bg-white/10 transition-all duration-500">
+                     <div className="absolute top-0 right-0 p-8 opacity-20 group-hover:opacity-40 transition-opacity duration-500">
+                         <Lock size={120} />
+                     </div>
+                     <div className="relative z-10 h-full flex flex-col justify-end min-h-[300px]">
+                         <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+                             <ShieldCheck className="text-white w-7 h-7" />
+                         </div>
+                         <h3 className="text-3xl font-bold mb-3">Privé par défaut.</h3>
+                         <p className="text-gray-400 leading-relaxed">
+                             Sivara et Zorin OS ne collectent pas vos données personnelles. Pas de publicité ciblée, pas de mouchards. C'est votre machine.
+                         </p>
+                     </div>
+                 </div>
+
+                 {/* Card 2 : Speed */}
+                 <div className="group relative bg-white/5 border border-white/10 rounded-[2rem] p-10 overflow-hidden hover:bg-white/10 transition-all duration-500 md:col-span-2">
+                     <div className="absolute inset-0 bg-gradient-to-r from-blue-900/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                     <div className="relative z-10 flex flex-col md:flex-row items-end md:items-center justify-between h-full gap-8">
+                         <div className="max-w-md">
+                             <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+                                 <Zap className="text-white w-7 h-7" />
+                             </div>
+                             <h3 className="text-3xl font-bold mb-3">Vitesse pure.</h3>
+                             <p className="text-gray-400 leading-relaxed text-lg">
+                                 Oubliez les lenteurs. Zorin OS est optimisé pour exploiter chaque transistor du processeur. 
+                                 Vos applications se lancent instantanément, votre batterie dure plus longtemps.
+                             </p>
+                         </div>
+                         <div className="flex-1 w-full bg-black/50 rounded-xl border border-white/10 p-6 backdrop-blur-md">
+                             <div className="space-y-4">
+                                 <div className="flex justify-between items-center text-sm">
+                                     <span className="text-gray-400">Boot Time</span>
+                                     <span className="text-[#0cc0df] font-mono">0.8s</span>
+                                 </div>
+                                 <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                                     <div className="h-full w-[95%] bg-[#0cc0df] shadow-[0_0_10px_#0cc0df]"></div>
+                                 </div>
+                                 <div className="flex justify-between items-center text-sm">
+                                     <span className="text-gray-400">App Launch</span>
+                                     <span className="text-green-400 font-mono">Instant</span>
+                                 </div>
+                                 <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                                     <div className="h-full w-[98%] bg-green-400 shadow-[0_0_10px_#4ade80]"></div>
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+
+                 {/* Card 3 : Compatibility */}
+                 <div className="group relative bg-white/5 border border-white/10 rounded-[2rem] p-10 overflow-hidden hover:bg-white/10 transition-all duration-500 md:col-span-2">
+                     <div className="relative z-10 flex flex-col h-full justify-center">
+                         <div className="flex items-center gap-4 mb-6">
+                             <div className="w-14 h-14 bg-gradient-to-br from-purple-400 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+                                 <Layers className="text-white w-7 h-7" />
+                             </div>
+                             <h3 className="text-3xl font-bold">Compatible avec votre vie.</h3>
+                         </div>
+                         <p className="text-gray-400 leading-relaxed text-lg max-w-2xl">
+                             Installez vos applications Windows préférées, utilisez la suite Adobe via le Cloud, ou découvrez des milliers d'alternatives Open Source gratuites. 
+                             Compatible avec Steam, Discord, Spotify et plus encore.
+                         </p>
+                     </div>
+                 </div>
+
+                 {/* Card 4 : UI */}
+                 <div className="group relative bg-gradient-to-b from-[#0cc0df]/20 to-[#050505] border border-white/10 rounded-[2rem] p-10 overflow-hidden hover:border-[#0cc0df]/50 transition-all duration-500">
+                     <div className="relative z-10 h-full flex flex-col justify-end min-h-[300px]">
+                         <div className="w-14 h-14 bg-white text-black rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+                             <Command className="w-7 h-7" />
+                         </div>
+                         <h3 className="text-3xl font-bold mb-3">Élégance.</h3>
+                         <p className="text-gray-400 leading-relaxed">
+                             Une interface familière qui s'adapte à vous. Passez d'un look Windows à macOS en un clic. 
+                             C'est beau, c'est simple, c'est vous.
+                         </p>
+                     </div>
+                 </div>
+
+             </div>
+         </div>
+      </section>
+
+      {/* Footer */}
+      <div className="py-24 bg-black border-t border-white/10 text-center">
+        <div className="container mx-auto px-6">
+            <h2 className="text-4xl md:text-6xl font-bold mb-8 text-white">Le futur est ouvert.</h2>
+            <Button 
+                onClick={handleOpenConfig}
+                className="h-16 px-12 bg-white text-black hover:bg-gray-200 text-lg rounded-full shadow-[0_0_50px_rgba(255,255,255,0.3)] transition-all hover:scale-105 font-bold"
+            >
+                Configurer mon Sivara Book
+            </Button>
+            <p className="mt-8 text-sm text-gray-500">Expédition sous 48h au Canada. Garantie 2 ans incluse.</p>
+        </div>
       </div>
 
-      {/* --- MODAL CONFIGURATEUR INTELLIGENT --- */}
+      {/* CONFIGURATOR DIALOG (LOGIQUE PRÉSERVÉE) */}
       <Dialog open={showConfig} onOpenChange={setShowConfig}>
-        <DialogContent className="max-w-3xl min-h-[500px] flex flex-col">
+        <DialogContent className="max-w-3xl min-h-[500px] flex flex-col bg-white text-black">
             <DialogHeader className="border-b pb-4">
                 <div className="flex items-center gap-2">
                     {step !== 'category' && products.length > 1 && (
@@ -388,7 +489,6 @@ const DeviceLanding = () => {
                                                         </div>
                                                         <div className="flex items-center gap-3 text-xs text-gray-500">
                                                             <span className="font-mono">S/N: {unit.serial_number}</span>
-                                                            {/* Prix total caché/supprimé comme demandé */}
                                                         </div>
                                                     </div>
                                                 </div>
