@@ -65,11 +65,12 @@ serve(async (req) => {
     }
 
     // --- ETAPE CRUCIALE: RECUPERATION DU VRAI PROFIL DB ---
+    // Correction: On ne demande QUE les colonnes qui existent dans public.profiles
     const { data: realProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name, email')
+        .select('first_name, last_name') // Suppression de 'email' qui causait l'erreur 42703
         .eq('id', userId)
-        .maybeSingle(); // maybeSingle évite l'erreur JSON object requested... si null
+        .maybeSingle();
 
     if (profileError) {
         console.error("[ID-CHECK] DB Error fetching profile:", profileError);
