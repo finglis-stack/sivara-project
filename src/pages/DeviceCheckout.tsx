@@ -211,15 +211,26 @@ const DeviceCheckout = () => {
   };
 
   const handleSubmit = async () => {
+      if (!unit) return;
       setIsProcessing(true);
       
-      // Au lieu de valider la commande, on redirige vers le processus d'identité (Hardcore)
-      // On passe l'ID de l'unité pour pouvoir revenir ici (ou sur stripe) plus tard
-      if (unit) {
-          // On redirige vers id.sivara.ca (via le routeur App.tsx)
-          // Note: Dans un environnement réel, on stockerait l'état du panier dans le localStorage ou Supabase avant
-          navigate(`/?app=id&unit_id=${unit.id}`);
+      // LOGIQUE REDIRECTION "HARDCORE"
+      const hostname = window.location.hostname;
+      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+      
+      // On construit l'URL de destination pour id.sivara.ca
+      let targetUrl = '';
+      
+      if (isLocal) {
+          // En local, on reste sur le même port mais on change le paramètre app
+          targetUrl = `${window.location.origin}/?app=id&unit_id=${unit.id}`;
+      } else {
+          // En production, on change carrément de sous-domaine
+          targetUrl = `https://id.sivara.ca/?unit_id=${unit.id}`;
       }
+
+      // Redirection native du navigateur (bypass React Router pour changer de domaine si nécessaire)
+      window.location.href = targetUrl;
   };
 
   if (loadingUnit) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="h-8 w-8 animate-spin text-gray-300" /></div>;

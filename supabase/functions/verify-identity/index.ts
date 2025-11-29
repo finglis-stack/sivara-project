@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 // @ts-ignore: Deno types
-import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.1.3'
+import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.13.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,6 +38,8 @@ serve(async (req) => {
     console.log(`[ID-CHECK] Starting verification for User ${userId}`);
 
     // 1. ANALYSE DOCUMENT (GEMINI VISION)
+    // Utilisation de gemini-1.5-flash qui est le standard rapide actuel (ou gemini-2.0-flash-exp si dispo)
+    // On reste sur 1.5-flash pour la stabilité prod
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     // Conversion Base64 -> Parts pour Gemini
