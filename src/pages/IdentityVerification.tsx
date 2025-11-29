@@ -70,7 +70,7 @@ const IdentityVerification = () => {
                         setStep('scan_back');
                     } else {
                         setBackImage(dataUrl);
-                        processVerification(frontImage!, dataUrl); // Lancer la verif
+                        processVerification(frontImage!, dataUrl); 
                     }
                     return 100;
                 }
@@ -103,7 +103,7 @@ const IdentityVerification = () => {
 
     return {
         visitorId: result.visitorId,
-        os: navigator.userAgent, // Plus précis que components.os
+        os: navigator.platform + " " + navigator.userAgent, 
         gpu: gpuRenderer,
         // @ts-ignore
         memory: navigator.deviceMemory || "Unknown"
@@ -113,24 +113,36 @@ const IdentityVerification = () => {
   const processVerification = async (front: string, back: string) => {
     setStep('processing');
     
+    if (!user?.id) {
+        showError("Session utilisateur invalide. Veuillez vous reconnecter.");
+        setStep('intro');
+        return;
+    }
+
     try {
+        // 1. Get Hardware Fingerprint
         const fingerprint = await getRealFingerprint();
+        
         const cleanFront = front.split(',')[1];
         const cleanBack = back.split(',')[1];
 
-        // Appel Edge Function : On n'envoie PAS le profil utilisateur, le serveur ira le chercher lui-même
-        // pour garantir l'intégrité des données.
+        console.log("Sending verification for:", user.id, "Hardware:", fingerprint);
+
+        // 2. Call Edge Function 
         const { data, error } = await supabase.functions.invoke('verify-identity', {
             body: {
                 frontImage: cleanFront,
                 backImage: cleanBack,
-                fingerprint: fingerprint,
-                userId: user?.id,
+                fingerprint: fingerprint, // Envoi des vraies données
+                userId: user.id,
                 cardBin: '4567' 
             }
         });
 
-        if (error) throw error;
+        if (error) {
+            console.error("Edge function error:", error);
+            throw new Error(error.message || "Erreur de communication serveur");
+        }
 
         setRiskData(data);
 
@@ -141,9 +153,9 @@ const IdentityVerification = () => {
         }
 
     } catch (e: any) {
-        console.error(e);
-        showError("Erreur lors de l'analyse sécurisée.");
-        setStep('intro'); // Retry
+        console.error("Verification failed:", e);
+        showError(`Erreur: ${e.message}`);
+        setStep('intro');
     }
   };
 
@@ -183,7 +195,6 @@ const IdentityVerification = () => {
   return (
     <div className="min-h-screen bg-white text-gray-900 font-sans flex flex-col items-center justify-center p-4">
         
-        {/* LOGO BAR SIMPLE */}
         <div className="absolute top-0 left-0 w-full p-6 flex justify-center items-center z-50">
             <span className="font-bold tracking-widest text-sm text-gray-900">SIVARA ID</span>
         </div>
@@ -210,7 +221,6 @@ const IdentityVerification = () => {
                     <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
                     <canvas ref={canvasRef} className="hidden" />
                     
-                    {/* OVERLAY */}
                     <div className="absolute inset-0 flex flex-col justify-between p-6 z-10">
                         <div className="text-center bg-white/90 backdrop-blur-md py-2 px-4 rounded-full border border-gray-200 mx-auto shadow-sm">
                             <span className="text-sm font-medium text-gray-900">
@@ -219,7 +229,6 @@ const IdentityVerification = () => {
                         </div>
                         
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[85%] h-[60%] border-2 border-white/80 rounded-xl">
-                            {/* Coins blancs simples */}
                             <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white rounded-tl-lg"></div>
                             <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white rounded-tr-lg"></div>
                             <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white rounded-bl-lg"></div>
@@ -236,7 +245,6 @@ const IdentityVerification = () => {
                         </div>
                     </div>
 
-                    {/* LOADING BAR */}
                     {scanProgress > 0 && (
                         <div className="absolute bottom-0 left-0 h-1.5 bg-black transition-all duration-75 ease-out" style={{ width: `${scanProgress}%` }}></div>
                     )}

@@ -49,29 +49,39 @@ serve(async (req) => {
   const startTime = new Date().toISOString();
 
   try {
+    const body = await req.json();
     const { 
       frontImage, 
       backImage, 
       fingerprint, 
       userId, 
       cardBin 
-    } = await req.json();
+    } = body;
 
-    console.log(`[ID-CHECK] Starting verification for User ID: ${userId}`);
+    console.log(`[ID-CHECK] Request received for User ID: "${userId}" (Type: ${typeof userId})`);
+
+    if (!userId) {
+        throw new Error("UserID is missing from request body");
+    }
 
     // --- ETAPE CRUCIALE: RECUPERATION DU VRAI PROFIL DB ---
-    // On ne fait PAS confiance au client.
     const { data: realProfile, error: profileError } = await supabase
         .from('profiles')
         .select('first_name, last_name, email')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // maybeSingle évite l'erreur JSON object requested... si null
 
-    if (profileError || !realProfile) {
-        throw new Error("Impossible de trouver le profil utilisateur dans la base de données.");
+    if (profileError) {
+        console.error("[ID-CHECK] DB Error fetching profile:", profileError);
+        throw new Error(`Erreur base de données: ${profileError.message}`);
     }
 
-    console.log(`[ID-CHECK] Real DB Profile Loaded: ${realProfile.first_name} ${realProfile.last_name}`);
+    if (!realProfile) {
+        console.error(`[ID-CHECK] No profile found for ID: ${userId}`);
+        throw new Error(`Impossible de trouver le profil utilisateur pour l'ID ${userId}`);
+    }
+
+    console.log(`[ID-CHECK] Profile Loaded: ${realProfile.first_name} ${realProfile.last_name}`);
 
     // LOG DEBUT
     const { data: logEntry } = await supabase
@@ -148,11 +158,11 @@ serve(async (req) => {
     if (extraction.isExpired) { riskScore += 100; rejectionReason = "Document expiré"; }
     
     // C. Device Check
-    // On s'attend à ce que le fingerprint contienne maintenant les vraies infos
-    console.log("[ID-CHECK] Fingerprint:", fingerprint);
+    console.log("[ID-CHECK] Fingerprint Analysis:", fingerprint);
     
-    const isLinux = fingerprint.os?.toLowerCase().includes('linux');
-    const isSimulated = fingerprint.gpu?.toLowerCase().includes('simulated') || fingerprint.gpu?.toLowerCase().includes('vmware');
+    // Détection de simulation basique
+    const gpuLower = (fingerprint.gpu || "").toLowerCase();
+    const isSimulated = gpuLower.includes('simulated') || gpuLower.includes('vmware') || gpuLower.includes('software');
     
     if (isSimulated) {
         riskScore += 50; 
@@ -175,7 +185,7 @@ serve(async (req) => {
                     age: age,
                     name_match: isNameMatch,
                     ai_extraction: extraction,
-                    db_profile_snapshot: { first: dbFirstName, last: dbLastName } // Snapshot pour audit
+                    db_profile_snapshot: { first: dbFirstName, last: dbLastName }
                 }
             })
             .eq('id', attemptId);
@@ -185,7 +195,6 @@ serve(async (req) => {
       status: decision,
       riskScore,
       reason: rejectionReason,
-      // Debug info retournée au client (pour le dev uniquement)
       debug: { 
           dbName: `${dbFirstName} ${dbLastName}`,
           idName: `${idFirstName} ${idLastName}`,
@@ -194,7 +203,7 @@ serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error("[ID-CHECK] Error:", error);
+    console.error("[ID-CHECK] Fatal Error:", error);
     if (attemptId) {
         await supabase.from('identity_verifications').update({ status: 'error', rejection_reason: error.message }).eq('id', attemptId);
     }
