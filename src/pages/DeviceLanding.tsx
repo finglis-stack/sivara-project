@@ -1,18 +1,45 @@
 import { Button } from '@/components/ui/button';
 import { 
   ArrowRight, Cpu, Wifi, Fingerprint, HardDrive, 
-  Monitor, Battery, Layers, ShieldCheck, ChevronRight, Laptop, Package
+  Monitor, Battery, Layers, ShieldCheck, ChevronRight, Laptop, Package, Check, X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from '@/components/UserMenu';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Badge } from '@/components/ui/badge';
 
 const DeviceLanding = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isVendor, setIsVendor] = useState(false);
+  
+  // Configurator State
+  const [showConfig, setShowConfig] = useState(false);
+  const [config, setConfig] = useState({
+    ram: '32',
+    storage: '512',
+    color: 'space_grey'
+  });
+
+  // Base logic for dynamic pricing simulation (Client side for demo)
+  const calculateMonthly = () => {
+    let base = 137.45; // Base price for 32/512
+    if (config.ram === '64') base += 25;
+    if (config.storage === '1024') base += 15;
+    return base.toFixed(2);
+  };
 
   useEffect(() => {
     if (user) {
@@ -35,9 +62,18 @@ const DeviceLanding = () => {
     }
   };
 
-  const handleBuy = () => {
-      // Nouvelle direction : Page Checkout Device spécifique
-      navigate('/checkout');
+  const handleConfigure = () => {
+      setShowConfig(true);
+  };
+
+  const handleProceedToCheckout = () => {
+      // Pass configuration via URL parameters
+      const params = new URLSearchParams({
+          ram: config.ram,
+          storage: config.storage,
+          color: config.color
+      });
+      navigate(`/checkout?${params.toString()}`);
   };
 
   return (
@@ -90,25 +126,16 @@ const DeviceLanding = () => {
         </div>
       </nav>
 
-      {/* Hero Section - PS3 Style (Dark Abstract) */}
+      {/* Hero Section */}
       <div className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-[#080808]">
-        
-        {/* Animated Background Waves (PS3 XMB Style - Thin Lines) */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            {/* Ligne Principale (Très fine et nette) */}
             <div className="absolute top-[40%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] border-t-[1px] border-white/40 shadow-[0_0_15px_rgba(255,255,255,0.1)] animate-wave-undulate opacity-70"></div>
-            
-            {/* Écho lumineux (Légèrement décalé) */}
             <div className="absolute top-[42%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] border-t-[1px] border-white/10 blur-[1px] animate-wave-undulate-slow opacity-40"></div>
-            
-            {/* Lueur d'ambiance (Pas de masse, juste une aura) */}
             <div className="absolute top-[38%] -left-[10%] w-[120%] h-[50vh] rounded-[100%] bg-gradient-to-b from-white/5 to-transparent blur-3xl animate-wave-undulate opacity-20"></div>
         </div>
 
         <div className="container mx-auto px-6 relative z-10 py-12">
             <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-20">
-                
-                {/* Gauche : Texte */}
                 <div className="flex-1 text-center lg:text-left space-y-8 animate-in fade-in slide-in-from-left-8 duration-1000 relative">
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-white/90 text-sm font-medium shadow-2xl">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
@@ -122,15 +149,15 @@ const DeviceLanding = () => {
                     
                     <p className="text-xl text-white/70 font-light max-w-2xl mx-auto lg:mx-0 leading-relaxed drop-shadow-md">
                         Ryzen 7 AI. Écran tactile 2.5K. Zorin OS. <br/>
-                        Le tout dans un châssis aluminium ultra-fin.
+                        Disponible en abonnement tout inclus.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-4">
                         <Button 
-                            onClick={handleBuy}
+                            onClick={handleConfigure}
                             className="h-14 px-10 bg-white text-black hover:bg-gray-200 text-lg rounded-full transition-all hover:scale-105 font-bold shadow-[0_0_40px_rgba(255,255,255,0.1)]"
                         >
-                            Commander
+                            Configurer le vôtre
                             <ArrowRight className="ml-2 h-5 w-5" />
                         </Button>
                         <Button 
@@ -143,18 +170,14 @@ const DeviceLanding = () => {
                     </div>
                 </div>
 
-                {/* Droite : Laptop */}
                 <div className="flex-1 relative w-full max-w-lg lg:max-w-xl animate-in fade-in slide-in-from-right-8 duration-1000 delay-200">
-                    {/* Glow Effect propre derrière l'ordi */}
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[100%] bg-gradient-to-tr from-blue-500/10 to-purple-500/5 blur-[90px] rounded-full pointer-events-none"></div>
-                    
                     <img 
                         src="/sivara-book.png" 
                         alt="Sivara Book" 
                         className="relative w-full h-auto object-contain drop-shadow-2xl transform hover:scale-[1.02] transition-transform duration-700"
                     />
                 </div>
-
             </div>
         </div>
       </div>
@@ -170,8 +193,6 @@ const DeviceLanding = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
-                
-                {/* CPU Card */}
                 <div className="col-span-1 lg:col-span-2 bg-gradient-to-br from-gray-50 to-gray-100 p-8 rounded-3xl border border-gray-200 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-center gap-8">
                     <div className="flex-1 space-y-4">
                         <div className="inline-flex p-3 bg-red-100 text-red-600 rounded-2xl"><Cpu className="h-8 w-8" /></div>
@@ -186,7 +207,6 @@ const DeviceLanding = () => {
                     </div>
                 </div>
 
-                {/* RAM/Storage Stack */}
                 <div className="space-y-8">
                     <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm hover:shadow-md transition-all h-full flex flex-col justify-center">
                         <div className="flex items-center gap-4 mb-4">
@@ -207,7 +227,6 @@ const DeviceLanding = () => {
                     </div>
                 </div>
 
-                {/* Display */}
                 <div className="col-span-1 lg:col-span-3 bg-black text-white p-10 rounded-3xl shadow-2xl relative overflow-hidden group">
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-900/30 to-purple-900/30 group-hover:opacity-75 transition-opacity"></div>
                     <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-10">
@@ -236,7 +255,6 @@ const DeviceLanding = () => {
                     </div>
                 </div>
 
-                {/* Features Row */}
                 <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center text-center">
                     <div className="p-3 bg-white rounded-full shadow-sm mb-4 text-green-600"><Wifi className="h-6 w-6" /></div>
                     <h4 className="font-bold text-gray-900 mb-1">WIFI 6 + BT 5.2</h4>
@@ -293,19 +311,89 @@ const DeviceLanding = () => {
          </div>
       </div>
 
-      {/* CTA Footer */}
+      {/* Footer */}
       <div className="py-20 bg-black text-white text-center">
         <div className="container mx-auto px-6">
             <h2 className="text-3xl md:text-5xl font-bold mb-8">Reprenez le contrôle.</h2>
             <Button 
-                onClick={handleBuy}
+                onClick={handleConfigure}
                 className="h-16 px-12 bg-white text-black hover:bg-gray-100 text-lg rounded-full shadow-lg transition-all hover:scale-105 font-bold"
             >
-                Commander le Sivara Book
+                Configurer maintenant
             </Button>
             <p className="mt-6 text-sm text-gray-500">Expédition sous 48h. Garantie 2 ans.</p>
         </div>
       </div>
+
+      {/* CONFIGURATOR DIALOG */}
+      <Dialog open={showConfig} onOpenChange={setShowConfig}>
+        <DialogContent className="max-w-2xl">
+            <DialogHeader>
+                <DialogTitle className="text-2xl font-bold">Configurez votre Sivara Book</DialogTitle>
+                <DialogDescription>Choisissez la puissance adaptée à vos besoins.</DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-6 py-6">
+                
+                {/* RAM Selector */}
+                <div className="space-y-3">
+                    <Label className="text-base font-semibold">Mémoire Unifiée (RAM)</Label>
+                    <RadioGroup value={config.ram} onValueChange={(v) => setConfig({...config, ram: v})} className="grid grid-cols-2 gap-4">
+                        <Label htmlFor="ram-32" className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all ${config.ram === '32' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="font-bold text-lg">32 Go</span>
+                                {config.ram === '32' && <Check className="h-4 w-4" />}
+                            </div>
+                            <p className="text-xs text-gray-500">Idéal pour le développement et la bureautique avancée.</p>
+                            <RadioGroupItem value="32" id="ram-32" className="sr-only" />
+                        </Label>
+                        <Label htmlFor="ram-64" className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all ${config.ram === '64' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="font-bold text-lg">64 Go</span>
+                                {config.ram === '64' && <Check className="h-4 w-4" />}
+                            </div>
+                            <p className="text-xs text-gray-500">Pour la virtualisation lourde et la création 3D.</p>
+                            <Badge variant="secondary" className="mt-2 text-[10px]">+ 25 $/mois</Badge>
+                            <RadioGroupItem value="64" id="ram-64" className="sr-only" />
+                        </Label>
+                    </RadioGroup>
+                </div>
+
+                {/* Storage Selector */}
+                <div className="space-y-3">
+                    <Label className="text-base font-semibold">Stockage SSD NVMe</Label>
+                    <RadioGroup value={config.storage} onValueChange={(v) => setConfig({...config, storage: v})} className="grid grid-cols-2 gap-4">
+                        <Label htmlFor="ssd-512" className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all ${config.storage === '512' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="font-bold text-lg">512 Go</span>
+                                {config.storage === '512' && <Check className="h-4 w-4" />}
+                            </div>
+                            <RadioGroupItem value="512" id="ssd-512" className="sr-only" />
+                        </Label>
+                        <Label htmlFor="ssd-1024" className={`border-2 rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all ${config.storage === '1024' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="font-bold text-lg">1 To</span>
+                                {config.storage === '1024' && <Check className="h-4 w-4" />}
+                            </div>
+                            <Badge variant="secondary" className="mt-2 text-[10px]">+ 15 $/mois</Badge>
+                            <RadioGroupItem value="1024" id="ssd-1024" className="sr-only" />
+                        </Label>
+                    </RadioGroup>
+                </div>
+
+            </div>
+
+            <DialogFooter className="flex-col sm:flex-row gap-4 items-center border-t pt-6">
+                <div className="flex flex-col items-center sm:items-start w-full">
+                    <span className="text-sm text-gray-500">Votre abonnement</span>
+                    <span className="text-3xl font-bold text-gray-900">{calculateMonthly()} $<span className="text-base font-medium text-gray-500">/mois</span></span>
+                </div>
+                <Button onClick={handleProceedToCheckout} className="w-full sm:w-auto h-12 px-8 text-lg rounded-full bg-black hover:bg-gray-800">
+                    S'abonner
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
