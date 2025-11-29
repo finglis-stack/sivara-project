@@ -76,7 +76,9 @@ serve(async (req) => {
 
     // --- DEVICE CHECKOUT (INTEGRATED & 16 MONTHS CAP) ---
     if (action === 'create_device_checkout') {
-      if (!unitId) throw new Error("Unit ID manquant");
+      console.log(`[Stripe API] Creating checkout for Unit ID: ${unitId}`);
+
+      if (!unitId) throw new Error("Unit ID manquant dans la requête");
 
       // 1. Récupérer le prix réel depuis la DB
       const serviceClient = createClient(
@@ -86,13 +88,28 @@ serve(async (req) => {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
 
-      const { data: unit } = await serviceClient
+      // Correction de la requête: utilisation de device_products directement si l'alias échoue
+      // On log aussi l'erreur DB spécifique
+      const { data: unit, error: dbError } = await serviceClient
         .from('device_units')
-        .select('*, product:product_id(name)')
+        .select(`
+            *, 
+            product:device_products (name)
+        `)
         .eq('id', unitId)
         .single();
         
-      if (!unit) throw new Error("Unité introuvable");
+      if (dbError) {
+          console.error("[Stripe API] DB Error fetching unit:", dbError);
+          throw new Error(`Erreur DB: ${dbError.message}`);
+      }
+
+      if (!unit) {
+          console.error(`[Stripe API] Unit not found for ID: ${unitId}`);
+          throw new Error("Unité introuvable dans la base de données");
+      }
+
+      console.log(`[Stripe API] Unit found: ${unit.serial_number}, Price: ${unit.unit_price}`);
 
       // 2. Calculs Financiers (16 Mois, 20% Dépôt)
       const price = unit.unit_price;
@@ -105,33 +122,36 @@ serve(async (req) => {
 
       // 3. Configuration de l'arrêt automatique (16 mois)
       const now = new Date();
-      // On ajoute 16 mois et quelques jours de marge pour être sûr que le dernier cycle passe
       const endDate = new Date(now.setMonth(now.getMonth() + 16));
       const cancelAt = Math.floor(endDate.getTime() / 1000);
 
-      // 4. Création de l'Invoice Item pour le Dépôt (Paiement immédiat unique)
+      // 4. Création de l'Invoice Item pour le Dépôt
+      // Le product.name est accessible via la relation
+      // @ts-ignore
+      const productName = unit.product?.name || 'Sivara Device';
+
       await stripe.invoiceItems.create({
         customer: customerId,
         amount: Math.round(upfront * 100),
         currency: 'cad',
-        description: `Dépôt initial (20%) & Activation - ${unit.product.name} (S/N: ${unit.serial_number})`,
+        description: `Dépôt initial (20%) & Activation - ${productName} (S/N: ${unit.serial_number})`,
       });
 
-      // 5. Création de l'abonnement (Mensualités)
+      // 5. Création de l'abonnement
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{
             price_data: {
                 currency: 'cad',
                 product_data: {
-                    name: `Financement 16 mois - ${unit.product.name}`,
+                    name: `Financement 16 mois - ${productName}`,
                     description: `Mensualité pour S/N: ${unit.serial_number}`,
                 },
                 unit_amount: Math.round(monthly * 100),
                 recurring: { interval: 'month' }
             }
         }],
-        cancel_at: cancelAt, // ARRÊT AUTOMATIQUE DANS 16 MOIS
+        cancel_at: cancelAt,
         payment_behavior: 'default_incomplete',
         payment_settings: { save_default_payment_method: 'on_subscription' },
         expand: ['latest_invoice.payment_intent'],
@@ -146,7 +166,6 @@ serve(async (req) => {
       // On réserve l'unité
       await serviceClient.from('device_units').update({ status: 'reserved' }).eq('id', unitId);
 
-      // On renvoie le clientSecret pour le Frontend (Elements)
       // @ts-ignore
       const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
 
@@ -159,7 +178,7 @@ serve(async (req) => {
       )
     }
 
-    // --- (Reste du code inchangé pour les abonnements SaaS) ---
+    // --- (Reste des actions inchangées) ---
     if (action === 'get_config') {
         // @ts-ignore
         const publishableKey = Deno.env.get('STRIPE_PUBLISHABLE_KEY');
@@ -201,6 +220,7 @@ serve(async (req) => {
     throw new Error(`Action inconnue: ${action}`)
 
   } catch (error: any) {
+    console.error("[Stripe API Error]", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
