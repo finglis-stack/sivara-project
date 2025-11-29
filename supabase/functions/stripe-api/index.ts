@@ -88,8 +88,6 @@ serve(async (req) => {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
 
-      // Correction de la requête: utilisation de device_products directement si l'alias échoue
-      // On log aussi l'erreur DB spécifique
       const { data: unit, error: dbError } = await serviceClient
         .from('device_units')
         .select(`
@@ -125,11 +123,20 @@ serve(async (req) => {
       const endDate = new Date(now.setMonth(now.getMonth() + 16));
       const cancelAt = Math.floor(endDate.getTime() / 1000);
 
-      // 4. Création de l'Invoice Item pour le Dépôt
-      // Le product.name est accessible via la relation
       // @ts-ignore
       const productName = unit.product?.name || 'Sivara Device';
 
+      // 4. Création du PRODUIT Stripe (Necessaire pour subscription.create)
+      const stripeProduct = await stripe.products.create({
+        name: `Financement - ${productName}`,
+        description: `S/N: ${unit.serial_number} - ${unit.specific_specs?.ram_size}GB/${unit.specific_specs?.storage}GB`,
+        metadata: {
+            unit_id: unitId,
+            serial_number: unit.serial_number
+        }
+      });
+
+      // 5. Création de l'Invoice Item pour le Dépôt
       await stripe.invoiceItems.create({
         customer: customerId,
         amount: Math.round(upfront * 100),
@@ -137,16 +144,14 @@ serve(async (req) => {
         description: `Dépôt initial (20%) & Activation - ${productName} (S/N: ${unit.serial_number})`,
       });
 
-      // 5. Création de l'abonnement
+      // 6. Création de l'abonnement
+      // IMPORTANT: On utilise price_data avec le product ID créé ci-dessus
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{
             price_data: {
                 currency: 'cad',
-                product_data: {
-                    name: `Financement 16 mois - ${productName}`,
-                    description: `Mensualité pour S/N: ${unit.serial_number}`,
-                },
+                product: stripeProduct.id,
                 unit_amount: Math.round(monthly * 100),
                 recurring: { interval: 'month' }
             }
@@ -178,7 +183,7 @@ serve(async (req) => {
       )
     }
 
-    // --- (Reste des actions inchangées) ---
+    // ... (Reste des actions inchangées) ...
     if (action === 'get_config') {
         // @ts-ignore
         const publishableKey = Deno.env.get('STRIPE_PUBLISHABLE_KEY');
