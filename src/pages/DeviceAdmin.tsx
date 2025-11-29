@@ -16,7 +16,7 @@ import { showSuccess, showError } from '@/utils/toast';
 import { 
   Package, Plus, Search, Barcode, Laptop, ArrowLeft, 
   Trash2, Edit2, CheckCircle2, AlertCircle, Box, DollarSign, Upload, Globe, Shield, Loader2,
-  Cpu, Wifi, Bluetooth, Fingerprint, Monitor
+  Cpu, Wifi, Bluetooth, Fingerprint, Monitor, RefreshCw
 } from 'lucide-react';
 
 interface Product {
@@ -242,7 +242,7 @@ const DeviceAdmin = () => {
       if (selectedProduct) fetchUnits(selectedProduct.id);
   };
 
-  // Calculs financiers pour l'affichage
+  // Calculs financiers pour l'affichage (Abonnement Device)
   const calculateFinancials = (price: number) => {
       const upfront = price * 0.20;
       const remainder = price * 0.80;
@@ -483,122 +483,124 @@ const DeviceAdmin = () => {
             <DialogContent className="max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>Ajouter une Unité</DialogTitle>
-                    <DialogDescription>Ajout physique au stock pour {selectedProduct?.name}</DialogDescription></DialogHeader>
-                <div className="space-y-4 py-2">
-                    <div className="space-y-2"><Label>Numéro de Série (S/N)</Label><Input value={unitForm.serial_number} onChange={e => setUnitForm({...unitForm, serial_number: e.target.value})} placeholder="SIV-XXXX-YYYY" /></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
-                        <div className="space-y-6">
-                            <div className="space-y-4">
-                                <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Spécifications Techniques</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label>Quantité RAM</Label>
-                                        <Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="16">16 GB</SelectItem>
-                                                <SelectItem value="32">32 GB</SelectItem>
-                                                <SelectItem value="64">64 GB</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Vitesse RAM</Label>
-                                        <Select value={unitForm.ram_speed} onValueChange={(v) => setUnitForm({...unitForm, ram_speed: v})}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="4800">4800 MHz</SelectItem>
-                                                <SelectItem value="5200">5200 MHz</SelectItem>
-                                                <SelectItem value="6000">6000 MHz</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
+                    <DialogDescription>Configuration spécifique de l'ordinateur.</DialogDescription>
+                </DialogHeader>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
+                    <div className="space-y-6">
+                        <div className="space-y-4">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Spécifications Techniques</h3>
+                            <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label>Stockage (SSD NVMe)</Label>
-                                    <Select value={unitForm.storage} onValueChange={(v) => setUnitForm({...unitForm, storage: v})}>
+                                    <Label>Quantité RAM</Label>
+                                    <Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="256">256 GB</SelectItem>
-                                            <SelectItem value="512">512 GB</SelectItem>
-                                            <SelectItem value="1024">1024 GB (1TB)</SelectItem>
+                                            <SelectItem value="16">16 GB</SelectItem>
+                                            <SelectItem value="32">32 GB</SelectItem>
+                                            <SelectItem value="64">64 GB</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Vitesse RAM</Label>
+                                    <Select value={unitForm.ram_speed} onValueChange={(v) => setUnitForm({...unitForm, ram_speed: v})}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="4800">4800 MHz</SelectItem>
+                                            <SelectItem value="5200">5200 MHz</SelectItem>
+                                            <SelectItem value="6000">6000 MHz</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
                             </div>
+                            <div className="space-y-2">
+                                <Label>Stockage (SSD NVMe)</Label>
+                                <Select value={unitForm.storage} onValueChange={(v) => setUnitForm({...unitForm, storage: v})}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="256">256 GB</SelectItem>
+                                        <SelectItem value="512">512 GB</SelectItem>
+                                        <SelectItem value="1024">1024 GB (1TB)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
 
-                            <div className="space-y-4">
-                                <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Fonctionnalités</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                        <Label htmlFor="touch" className="flex items-center gap-2 cursor-pointer"><Monitor className="h-4 w-4" /> Tactile</Label>
-                                        <Switch id="touch" checked={unitForm.features.touch} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, touch: c}})} />
-                                    </div>
-                                    <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                        <Label htmlFor="fp" className="flex items-center gap-2 cursor-pointer"><Fingerprint className="h-4 w-4" /> Fingerprint</Label>
-                                        <Switch id="fp" checked={unitForm.features.fingerprint} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, fingerprint: c}})} />
-                                    </div>
-                                    <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                        <Label htmlFor="wifi" className="flex items-center gap-2 cursor-pointer"><Wifi className="h-4 w-4" /> Wifi 6E</Label>
-                                        <Switch id="wifi" checked={unitForm.features.wifi} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, wifi: c}})} />
-                                    </div>
-                                    <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                        <Label htmlFor="bt" className="flex items-center gap-2 cursor-pointer"><Bluetooth className="h-4 w-4" /> Bluetooth 5.3</Label>
-                                        <Switch id="bt" checked={unitForm.features.bluetooth} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, bluetooth: c}})} />
-                                    </div>
+                        <div className="space-y-4">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Fonctionnalités</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                    <Label htmlFor="touch" className="flex items-center gap-2 cursor-pointer"><Monitor className="h-4 w-4" /> Tactile</Label>
+                                    <Switch id="touch" checked={unitForm.features.touch} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, touch: c}})} />
+                                </div>
+                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                    <Label htmlFor="fp" className="flex items-center gap-2 cursor-pointer"><Fingerprint className="h-4 w-4" /> Fingerprint</Label>
+                                    <Switch id="fp" checked={unitForm.features.fingerprint} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, fingerprint: c}})} />
+                                </div>
+                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                    <Label htmlFor="wifi" className="flex items-center gap-2 cursor-pointer"><Wifi className="h-4 w-4" /> Wifi 6E</Label>
+                                    <Switch id="wifi" checked={unitForm.features.wifi} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, wifi: c}})} />
+                                </div>
+                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
+                                    <Label htmlFor="bt" className="flex items-center gap-2 cursor-pointer"><Bluetooth className="h-4 w-4" /> Bluetooth 5.3</Label>
+                                    <Switch id="bt" checked={unitForm.features.bluetooth} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, bluetooth: c}})} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div className="space-y-4">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Formule d'Abonnement</h3>
+                            
+                            <div className="space-y-2">
+                                <Label className="text-base">Prix de vente total ($)</Label>
+                                <Input 
+                                    type="number" 
+                                    value={unitForm.unit_price} 
+                                    onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} 
+                                    className="text-lg font-bold"
+                                />
+                            </div>
+
+                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                                <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Abonnement Device</h4>
+                                
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-600">Apport initial (20%)</span>
+                                    <span className="font-bold text-gray-900">${financials.upfront.toFixed(2)}</span>
+                                </div>
+                                <div className="h-px bg-blue-200/50 w-full"></div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-600">Valeur lissée</span>
+                                    <span className="font-medium text-gray-700">${(unitForm.unit_price - financials.upfront).toFixed(2)}</span>
+                                </div>
+                                <div className="bg-white p-3 rounded-lg border border-blue-100 flex justify-between items-center shadow-sm">
+                                    <span className="text-sm font-bold text-blue-700">Mensualité (16 mois)</span>
+                                    <span className="text-lg font-bold text-blue-700">${financials.monthly.toFixed(2)}/mois</span>
+                                </div>
+                                <div className="text-[10px] text-blue-600/80 mt-2 text-center">
+                                    * Abonnement renouvelable. Retour matériel possible à tout moment sans frais.
                                 </div>
                             </div>
                         </div>
 
-                        <div className="space-y-6">
-                            <div className="space-y-4">
-                                <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Offre Commerciale</h3>
-                                
-                                <div className="space-y-2">
-                                    <Label className="text-base">Prix de vente total ($)</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={unitForm.unit_price} 
-                                        onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} 
-                                        className="text-lg font-bold"
-                                    />
-                                </div>
-
-                                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-                                    <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Plan de paiement (Calculé)</h4>
-                                    
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-gray-600">Apport initial (20%)</span>
-                                        <span className="font-bold text-gray-900">${financials.upfront.toFixed(2)}</span>
-                                    </div>
-                                    <div className="h-px bg-blue-200/50 w-full"></div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-gray-600">Reste à financer</span>
-                                        <span className="font-medium text-gray-700">${(unitForm.unit_price - financials.upfront).toFixed(2)}</span>
-                                    </div>
-                                    <div className="bg-white p-3 rounded-lg border border-blue-100 flex justify-between items-center shadow-sm">
-                                        <span className="text-sm font-bold text-blue-700">Abonnement (16 mois)</span>
-                                        <span className="text-lg font-bold text-blue-700">${financials.monthly.toFixed(2)}/mois</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>État & Condition</Label>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <Select value={unitForm.condition} onValueChange={(v: any) => setUnitForm({...unitForm, condition: v})}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent><SelectItem value="new">Neuf</SelectItem><SelectItem value="refurbished">Reconditionné</SelectItem></SelectContent>
-                                    </Select>
-                                    <Select value={unitForm.status} onValueChange={(v: any) => setUnitForm({...unitForm, status: v})}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="available">Disponible</SelectItem>
-                                            <SelectItem value="reserved">Réservé</SelectItem>
-                                            <SelectItem value="maintenance">Maintenance</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                        <div className="space-y-2">
+                            <Label>État & Condition</Label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Select value={unitForm.condition} onValueChange={(v: any) => setUnitForm({...unitForm, condition: v})}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="new">Neuf</SelectItem><SelectItem value="refurbished">Reconditionné</SelectItem></SelectContent>
+                                </Select>
+                                <Select value={unitForm.status} onValueChange={(v: any) => setUnitForm({...unitForm, status: v})}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="available">Disponible</SelectItem>
+                                        <SelectItem value="reserved">Réservé</SelectItem>
+                                        <SelectItem value="maintenance">Maintenance</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                     </div>
