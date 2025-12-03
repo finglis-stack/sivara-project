@@ -14,8 +14,7 @@ const corsHeaders = {
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || '';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// --- UTILITAIRES DE CRYPTOGRAPHIE & TEXTE ---
-
+// Nettoyage agressif des strings (vire accents, espaces, tirets)
 const normalizeString = (str: string) => {
   if (!str) return "";
   return str
@@ -25,83 +24,58 @@ const normalizeString = (str: string) => {
     .replace(/[^a-z0-9]/g, ""); 
 };
 
-// Algorithme de distance de Levenshtein pour la comparaison floue des noms
-const levenshteinDistance = (a: string, b: string) => {
-  const matrix = [];
-  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
-        );
+// Comparaison floue (Fuzzy Matching)
+const calculateSimilarity = (s1: string, s2: string) => {
+  const longer = s1.length > s2.length ? s1 : s2;
+  const shorter = s1.length > s2.length ? s2 : s1;
+  if (longer.length === 0) return 1.0;
+  
+  const editDistance = (s1: string, s2: string) => {
+    s1 = s1.toLowerCase(); s2 = s2.toLowerCase();
+    const costs = new Array();
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= s2.length; j++) {
+        if (i == 0) costs[j] = j;
+        else {
+          if (j > 0) {
+            let newValue = costs[j - 1];
+            if (s1.charAt(i - 1) != s2.charAt(j - 1)) newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+            costs[j - 1] = lastValue;
+            lastValue = newValue;
+          }
+        }
       }
+      if (i > 0) costs[s2.length] = lastValue;
     }
+    return costs[s2.length];
   }
-  return matrix[b.length][a.length];
+  
+  return (longer.length - editDistance(longer, shorter)) / longer.length;
 };
 
-// Vérifie si le nom correspond avec une tolérance
-const isNameMatchStrict = (dbName: string, idName: string) => {
-  const normDb = normalizeString(dbName);
-  const normId = normalizeString(idName);
-  
-  // 1. Inclusion directe
-  if (normId.includes(normDb) || normDb.includes(normId)) return true;
-  
-  // 2. Levenshtein (Tolérance de 2 caractères pour les fautes de frappe/OCR)
-  const dist = levenshteinDistance(normDb, normId);
-  if (dist <= 2) return true;
+// Générateur de NAM théorique (Algorithme RAMQ)
+const generateTheoreticalNAM = (first: string, last: string, dob: string, sex: 'M' | 'F' = 'M') => {
+    try {
+        const normLast = normalizeString(last).padEnd(3, 'X').toUpperCase();
+        const normFirst = normalizeString(first).padEnd(1, 'X').toUpperCase();
+        
+        const date = new Date(dob);
+        const year = date.getFullYear().toString().slice(-2);
+        let month = date.getMonth() + 1;
+        const day = date.getDate().toString().padStart(2, '0');
 
-  return false;
-};
-
-// --- LOGIQUE METIER : VALIDATION RAMQ ---
-// Le numéro RAMQ (NAM) est construit : ABCD 1234 5678
-// A B C : 3 premières lettres du nom
-// D : 1ère lettre du prénom
-// 12 : Deux derniers chiffres de l'année de naissance
-// 34 : Mois de naissance (+50 pour les femmes)
-// 56 : Jour de naissance
-const validateRAMQLogic = (nam: string, firstName: string, lastName: string, dob: string) => {
-  const cleanNAM = nam.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  if (cleanNAM.length !== 12) return { valid: false, reason: "Format NAM invalide (longueur)" };
-
-  const normLast = normalizeString(lastName).toUpperCase();
-  const normFirst = normalizeString(firstName).toUpperCase();
-  
-  // Vérification des lettres (Nom/Prénom)
-  // Note: On est souple car l'OCR peut confondre certaines lettres ou le nom peut être composé
-  const namLetters = cleanNAM.substring(0, 4);
-  const expectedLetters = (normLast.substring(0, 3) + normFirst.substring(0, 1)).padEnd(4, 'X');
-  
-  // Vérification de la date dans le NAM
-  const namYear = cleanNAM.substring(4, 6);
-  const namMonth = parseInt(cleanNAM.substring(6, 8));
-  const namDay = cleanNAM.substring(8, 10);
-
-  const dobDate = new Date(dob);
-  const dobYear = dobDate.getFullYear().toString().slice(-2);
-  const dobMonth = dobDate.getMonth() + 1;
-  const dobDay = dobDate.getDate().toString().padStart(2, '0');
-
-  // Check Année & Jour (Strict)
-  if (namYear !== dobYear) return { valid: false, reason: "Année naissance NAM incohérente" };
-  if (namDay !== dobDay) return { valid: false, reason: "Jour naissance NAM incohérent" };
-
-  // Check Mois (Gère le +50 pour les femmes)
-  const isFemale = namMonth > 50;
-  const normalizedMonth = isFemale ? namMonth - 50 : namMonth;
-  
-  if (normalizedMonth !== dobMonth) return { valid: false, reason: "Mois naissance NAM incohérent" };
-
-  return { valid: true, sex: isFemale ? 'F' : 'M' };
+        // Si on ne connait pas le sexe, on génère les deux possibilités (Mois et Mois+50)
+        const codeStart = (normLast.substring(0, 3) + normFirst.substring(0, 1));
+        const codeEnd = day; // La fin complète est inconnue (séquence aléatoire), on check le début
+        
+        return {
+            maleBase: `${codeStart}${year}${month.toString().padStart(2, '0')}${day}`,
+            femaleBase: `${codeStart}${year}${(month + 50).toString().padStart(2, '0')}${day}`
+        };
+    } catch (e) {
+        return null;
+    }
 };
 
 serve(async (req) => {
@@ -117,212 +91,218 @@ serve(async (req) => {
   let attemptId = null;
   const startTime = new Date().toISOString();
   const todayDate = new Date().toISOString().split('T')[0];
+  const detailedLogs: string[] = [];
+
+  const log = (msg: string) => {
+      console.log(msg);
+      detailedLogs.push(`[${new Date().toISOString().split('T')[1].slice(0,8)}] ${msg}`);
+  };
 
   try {
     const body = await req.json();
     const { frontImage, backImage, fingerprint, userId } = body;
 
-    console.log(`[ID-SECURE] Security Check initiated for: "${userId}"`);
+    if (!userId) throw new Error("UserID manquant");
 
-    // 1. Récupération & Snapshot du Profil
-    const { data: realProfile, error: profileError } = await supabase
+    // 1. Check Limite Tentatives (Max 3)
+    const { count } = await supabase
+        .from('identity_verifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('status', 'rejected')
+        .gte('started_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()); // Max 3 par 24h
+
+    if (count && count >= 3) {
+        return new Response(JSON.stringify({ 
+            status: 'REJECT', 
+            reason: "Nombre maximum de tentatives atteint. Veuillez contacter le support.",
+            fatal: true
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 2. Récupération Profil DB
+    const { data: profile } = await supabase
         .from('profiles')
         .select('first_name, last_name')
         .eq('id', userId)
-        .maybeSingle();
+        .single();
 
-    if (profileError || !realProfile) throw new Error("Profile introuvable");
+    if (!profile) throw new Error("Profil introuvable");
 
-    // Init Log
+    // Création entrée DB
     const { data: logEntry } = await supabase
         .from('identity_verifications')
-        .insert({
-            user_id: userId,
-            started_at: startTime,
-            status: 'processing',
-            fingerprint_data: fingerprint,
-            client_ip: req.headers.get('x-forwarded-for') || 'unknown'
-        })
+        .insert({ user_id: userId, started_at: startTime, status: 'processing', fingerprint_data: fingerprint })
         .select('id')
         .single();
     if (logEntry) attemptId = logEntry.id;
 
-    // 2. ANALYSE FORENSIQUE & OCR (IA)
+    log(`Analyse pour: ${profile.first_name} ${profile.last_name}`);
+
+    // 3. IA : ANALYSE VISUELLE POUSSÉE
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const imageParts = [{ inlineData: { data: frontImage, mimeType: "image/jpeg" } }];
     if (backImage) imageParts.push({ inlineData: { data: backImage, mimeType: "image/jpeg" } });
 
-    // PROMPT DE SÉCURITÉ RENFORCÉ
     const prompt = `
-      ACT AS A FORENSIC DOCUMENT EXPERT.
-      Your goal is to detect FRAUD and extract identity data from Canadian/Quebec ID documents (RAMQ, Driver's License, Passport).
-
-      CURRENT DATE: ${todayDate}
-
-      PHASE 1: FORENSIC ANALYSIS (PIXEL LEVEL)
-      - Look for "Screen Moiré" patterns (photos taken of a screen).
-      - Look for mismatched fonts or "floating text" (digital editing).
-      - Check if holograms look flat or printed (photocopy detection).
-      - Check edge artifacts (cut-out images).
-
-      PHASE 2: DATA EXTRACTION (SPECIFIC RULES)
-      - **RAMQ Card (Health Insurance)**:
-        - The "No assurance maladie" is composed of 4 letters then 8 digits. Format: AAAA 0000 0000. It is often located near the middle-right.
-        - NAME: Under "Nom".
-        - FIRST NAME: Under "Prénom". (Ignore "PRÉNOM ET NOM À LA NAISSANCE").
-        - DOB: Look for "NAISSANCE" (Format YYYY MM DD or YY MM DD). 
-        - EXPIRATION: Look for "EXPIRATION" (Format YYYY MM). STRICTLY CHECK if this date is in the past relative to ${todayDate}.
+      You are a forensic document expert specializing in Quebec RAMQ cards, Canadian Driver Licenses, and Passports.
       
-      - **Driver's License (Permis)**:
-        - Class usually "5".
-        - Reference number matches the RAMQ logic (First letter of Last Name + Date logic).
-      
-      - **Passport**:
-        - Read the MRZ (Machine Readable Zone) at the bottom if visible.
-        - Compare MRZ data with visual zone.
+      CRITICAL CONTEXT:
+      - RAMQ cards have **EMBOSSED TEXT** (raised letters). In photos, this creates shadows/highlights. 
+      - "H" often reads as "F", "B" as "E", "8" as "B". BE EXTREMELY SMART ABOUT THIS.
+      - "M" or "F" alone is Sex, not a Name.
+      - Administrative codes (like "INGF...") are NOT names.
+      - Ignore small text. Focus on the big embossed areas.
 
-      OUTPUT FORMAT (JSON ONLY):
+      TASK: Extract data and estimate visual age.
+
+      RETURN JSON ONLY:
       {
-        "docType": "RAMQ" | "DL" | "PASSPORT" | "UNKNOWN",
-        "forensics": {
-           "isScreenPhoto": boolean,
-           "isDigitalEdit": boolean,
-           "isBlackAndWhite": boolean,
-           "overallIntegrityScore": number (0-100, 100 is perfect)
-        },
-        "data": {
-           "firstName": "string",
-           "lastName": "string",
-           "documentNumber": "string (The RAMQ code or DL number)",
-           "dateOfBirth": "YYYY-MM-DD",
-           "expirationDate": "YYYY-MM-DD",
-           "isExpired": boolean
-        }
+        "docType": "RAMQ" | "DL" | "PASSPORT",
+        "firstName": "string (Clean extraction, guess if ambiguous)",
+        "lastName": "string",
+        "documentNumber": "string (The RAMQ NAM or DL Number)",
+        "dateOfBirth": "YYYY-MM-DD (ISO Format)",
+        "expirationDate": "YYYY-MM-DD",
+        "visualAgeEstimation": number (Estimate age of person in photo),
+        "isExpired": boolean (Is expirationDate before ${todayDate}?),
+        "isScreen": boolean (Is this a photo of a screen?),
+        "isDigitalEdit": boolean
       }
     `;
 
     const result = await model.generateContent([prompt, ...imageParts]);
-    const response = await result.response;
-    const jsonStr = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    const analysis = JSON.parse(jsonStr);
-
-    console.log("[ID-SECURE] AI Analysis:", analysis);
-
-    // 3. MOTEUR DE DÉCISION (ZERO-TRUST)
-    let riskScore = 0;
-    const reasons: string[] = [];
-
-    // --- CHECK 1: FORENSICS (Image Quality) ---
-    if (analysis.forensics.isScreenPhoto) {
-        riskScore += 100;
-        reasons.push("Fraude détectée : Photo d'un écran (Moiré)");
-    }
-    if (analysis.forensics.isDigitalEdit) {
-        riskScore += 100;
-        reasons.push("Fraude détectée : Retouche numérique suspectée");
-    }
-    if (analysis.forensics.overallIntegrityScore < 80) {
-        riskScore += 50;
-        reasons.push("Qualité du document insuffisante ou suspecte");
-    }
-
-    // --- CHECK 2: VALIDITÉ DOCUMENT ---
-    if (analysis.data.isExpired) {
-        riskScore += 100;
-        reasons.push(`Document expiré le ${analysis.data.expirationDate}`);
-    } else {
-        // Double check manuel de la date au cas où l'IA hallucine le booléen
-        const expDate = new Date(analysis.data.expirationDate);
-        const now = new Date();
-        // Pour une RAMQ, souvent juste Année/Mois. On met le dernier jour du mois pour être gentil.
-        const effectiveExp = new Date(expDate.getFullYear(), expDate.getMonth() + 1, 0); 
-        if (effectiveExp < now) {
-            riskScore += 100;
-            reasons.push(`Document expiré (Calcul Système: ${effectiveExp.toISOString().split('T')[0]})`);
-        }
-    }
-
-    // --- CHECK 3: IDENTITÉ (Fuzzy Match) ---
-    const firstNameMatch = isNameMatchStrict(realProfile.first_name, analysis.data.firstName);
-    const lastNameMatch = isNameMatchStrict(realProfile.last_name, analysis.data.lastName);
-
-    if (!firstNameMatch || !lastNameMatch) {
-        riskScore += 100;
-        reasons.push(`Identité discordante. ID: "${analysis.data.firstName} ${analysis.data.lastName}" vs Profil: "${realProfile.first_name} ${realProfile.last_name}"`);
-    }
-
-    // --- CHECK 4: COHÉRENCE MATHÉMATIQUE (RAMQ/Permis QC) ---
-    if (analysis.docType === 'RAMQ' || analysis.docType === 'DL') {
-        if (analysis.data.documentNumber) {
-            const validation = validateRAMQLogic(
-                analysis.data.documentNumber, 
-                analysis.data.firstName, 
-                analysis.data.lastName, 
-                analysis.data.dateOfBirth
-            );
-            
-            if (!validation.valid) {
-                riskScore += 75; // Score élevé mais pas 100 car erreur OCR possible sur un chiffre
-                reasons.push(`Incohérence Sécurité RAMQ: ${validation.reason}`);
-            } else {
-                console.log(`[ID-SECURE] RAMQ Algorithm Validated. Sex: ${validation.sex}`);
-            }
-        } else {
-            riskScore += 50;
-            reasons.push("Numéro de document illisible ou manquant");
-        }
-    }
-
-    // --- CHECK 5: FINGERPRINT (Anti-Bot) ---
-    // Les bots et VM utilisent souvent des GPUs génériques
-    const gpuLower = (fingerprint?.gpu || "").toLowerCase();
-    const suspiciousGPU = gpuLower.includes('llvm') || gpuLower.includes('software') || gpuLower.includes('vmware') || gpuLower.includes('swiftshader');
+    const extraction = JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
     
-    if (suspiciousGPU) {
-        riskScore += 100;
-        reasons.push("Environnement virtuel/simulé détecté (Anti-Spoofing)");
+    log(`Extraction IA: ${JSON.stringify(extraction)}`);
+
+    // 4. MOTEUR DE VALIDATION (SCORING)
+    let trustScore = 0; // On veut atteindre 100
+    
+    // --- CHECK A: NAM vs PROFIL (Le plus puissant) ---
+    // On ignore ce que l'IA a lu comme Nom/Prénom si le NAM est valide par rapport à la DB
+    if (extraction.documentNumber) {
+        // Nettoyage NAM IA (supprime espaces)
+        const extractedNAM = normalizeString(extraction.documentNumber).toUpperCase();
+        
+        // On génère ce que le NAM *devrait* être selon la base de données (si on avait la date de naissance)
+        // Comme on a pas la DOB en DB (souvent), on utilise la DOB extraite de la carte pour faire le pont
+        if (extraction.dateOfBirth) {
+            const theory = generateTheoreticalNAM(profile.first_name, profile.last_name, extraction.dateOfBirth);
+            
+            // Check Match (Début du NAM : 3 lettres nom + 1 prénom + Année + Mois + Jour)
+            // On vérifie les 10 premiers caractères qui contiennent l'essentiel
+            if (theory) {
+                const checkLen = 10; 
+                const matchMale = extractedNAM.startsWith(theory.maleBase.substring(0, checkLen));
+                const matchFemale = extractedNAM.startsWith(theory.femaleBase.substring(0, checkLen));
+
+                if (matchMale || matchFemale) {
+                    trustScore += 60; // ENORME BOOST
+                    log("SUCCESS: Le NAM correspond mathématiquement au profil DB (Validation croisée)");
+                } else {
+                    log(`FAIL: NAM Incohérent. Extrait: ${extractedNAM} vs Théorique: ${theory.maleBase.substring(0, 10)}...`);
+                }
+            }
+        }
     }
 
-    // 4. VERDICT FINAL
-    const status = riskScore >= 50 ? 'rejected' : 'approved';
-    const finalReason = reasons.length > 0 ? reasons.join(' | ') : null;
+    // --- CHECK B: NOM (Fuzzy Logic tolérante) ---
+    const nameSim = calculateSimilarity(
+        normalizeString(`${profile.first_name}${profile.last_name}`),
+        normalizeString(`${extraction.firstName}${extraction.lastName}`)
+    );
+    
+    if (nameSim > 0.85) {
+        trustScore += 40;
+        log(`SUCCESS: Nom correspond parfaitement (${(nameSim*100).toFixed(0)}%)`);
+    } else if (nameSim > 0.60) {
+        trustScore += 20; // Tolérance erreurs OCR (Hélix vs Félix)
+        log(`WARNING: Nom correspond partiellement (${(nameSim*100).toFixed(0)}%). Probable erreur OCR relief.`);
+    } else {
+        log(`FAIL: Nom trop différent. DB: ${profile.first_name} ${profile.last_name} vs SCAN: ${extraction.firstName} ${extraction.lastName}`);
+    }
+
+    // --- CHECK C: VISUAL AGE (Anti-Spoofing & Cohérence) ---
+    if (extraction.visualAgeEstimation && extraction.dateOfBirth) {
+        const birthYear = new Date(extraction.dateOfBirth).getFullYear();
+        const currentYear = new Date().getFullYear();
+        const realAge = currentYear - birthYear;
+        const diff = Math.abs(realAge - extraction.visualAgeEstimation);
+
+        if (diff <= 8) { // Tolérance de 8 ans
+            trustScore += 20;
+            log(`SUCCESS: Âge visuel cohérent (Réel: ${realAge}, Est: ${extraction.visualAgeEstimation})`);
+        } else {
+            log(`WARNING: Âge visuel douteux (Réel: ${realAge}, Est: ${extraction.visualAgeEstimation})`);
+        }
+    }
+
+    // --- CHECK D: EXPIRATION (Bloquant mais avec tolérance log) ---
+    if (extraction.isExpired) {
+        // Parfois l'IA se trompe sur "2029" vs "2024" avec le relief
+        // On ne baisse pas le score drastiquement si le reste est béton
+        if (trustScore > 60) {
+            log("INFO: Document marqué expiré par l'IA mais haut score de confiance. On ignore l'expiration (possible erreur OCR date).");
+        } else {
+            trustScore -= 50;
+            log("FAIL: Document expiré et confiance basse.");
+        }
+    }
+
+    // --- CHECK E: SCREEN DETECTION ---
+    if (extraction.isScreen || extraction.isDigitalEdit) {
+        trustScore -= 100; // BLOQUANT
+        log("CRITICAL: Photo d'écran ou montage détecté.");
+    }
+
+    // 5. VERDICT
+    // Seuil à 50 : Si le NAM match (60pts), on passe direct même si le nom est mal lu.
+    // Si le nom match bien (40pts) + age (20pts) = 60pts, on passe.
+    const finalStatus = trustScore >= 50 ? 'approved' : 'rejected';
+    
+    // Déduction de la raison finale depuis les logs
+    const finalReason = finalStatus === 'rejected' 
+        ? detailedLogs.filter(l => l.includes('FAIL') || l.includes('CRITICAL')).join(' | ') || 'Score insuffisant'
+        : null;
+    
+    // MESSAGE UTILISATEUR (Générique)
+    const userMessage = finalStatus === 'approved' 
+        ? null 
+        : `Vérification échouée. Veuillez reprendre une photo claire et sans reflets. (Tentative ${(count || 0) + 1}/3)`;
 
     if (attemptId) {
         await supabase
             .from('identity_verifications')
             .update({
                 completed_at: new Date().toISOString(),
-                status: status,
-                risk_score: riskScore,
-                risk_level: riskScore > 80 ? 'CRITICAL' : riskScore > 40 ? 'HIGH' : 'LOW',
-                rejection_reason: finalReason,
+                status: finalStatus,
+                risk_score: 100 - trustScore, // Inverse du trust
+                rejection_reason: finalReason, // Interne
                 verification_metadata: {
-                    analysis: analysis,
-                    logic_checks: {
-                        name_match: firstNameMatch && lastNameMatch,
-                        doc_logic_valid: riskScore < 50
-                    }
+                    logs: detailedLogs, // On sauvegarde TOUT
+                    ai_raw: extraction,
+                    trust_score: trustScore
                 }
             })
             .eq('id', attemptId);
     }
 
+    // Réponse Client (Censurée)
     return new Response(JSON.stringify({ 
-      status: status === 'approved' ? 'APPROVE' : 'REJECT',
-      riskScore,
-      reason: finalReason,
-      debug: {
-          docType: analysis.docType,
-          extracted: analysis.data,
-          forensics: analysis.forensics
-      }
+      status: finalStatus === 'approved' ? 'APPROVE' : 'REJECT',
+      reason: userMessage // Message générique pour l'UI
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error("[ID-SECURE] CRASH:", error);
+    console.error(error);
     if (attemptId) {
-        await supabase.from('identity_verifications').update({ status: 'error', rejection_reason: `System Error: ${error.message}` }).eq('id', attemptId);
+        await supabase.from('identity_verifications').update({ 
+            status: 'error', 
+            verification_metadata: { logs: [...detailedLogs, `ERROR: ${error.message}`] } 
+        }).eq('id', attemptId);
     }
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Toujours renvoyer une réponse propre
+    return new Response(JSON.stringify({ status: 'REJECT', reason: "Erreur technique. Veuillez réessayer." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })
