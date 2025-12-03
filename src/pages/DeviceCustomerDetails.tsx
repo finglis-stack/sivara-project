@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Loader2, ArrowLeft, Mail, Phone, Laptop, Package, CreditCard, 
   CheckCircle2, AlertCircle, Shield, LayoutDashboard, FileText, 
-  History, Eye, XCircle, Clock, AlertTriangle, Fingerprint, Activity, MapPin
+  History, Eye, XCircle, Clock, AlertTriangle, Fingerprint, Activity, MapPin,
+  TrendingUp, Calendar, Zap, BrainCircuit, RefreshCw, Sparkles
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
 import { Separator } from '@/components/ui/separator';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface Customer {
   id: string;
@@ -33,6 +35,7 @@ interface Unit {
   serial_number: string;
   unit_price: number;
   shipping_address?: any;
+  created_at: string; // Date de début de location
   product: {
     name: string;
     image_url: string;
@@ -105,6 +108,7 @@ const DeviceCustomerDetails = () => {
                 unit_price,
                 shipping_address,
                 updated_at,
+                created_at,
                 product:device_products(name, image_url)
             `)
             .eq('sold_to_user_id', id)
@@ -129,6 +133,96 @@ const DeviceCustomerDetails = () => {
 
     fetchData();
   }, [id]);
+
+  // --- ORACLE ALGORITHM ---
+  const predictionData = useMemo(() => {
+      if (!customer || devices.length === 0) return null;
+
+      // 1. Variables d'entrée
+      const latestVerif = verifications.find(v => v.status === 'approved') || verifications[0];
+      const age = latestVerif?.verification_metadata?.ai_raw?.visualAgeEstimation || 30; // Défaut 30 ans
+      const idType = latestVerif?.verification_metadata?.ai_raw?.docType || 'UNKNOWN';
+      const trustScore = latestVerif?.verification_metadata?.trust_score || 50;
+      
+      // Calcul du MRR total
+      const totalMonthlyRevenue = devices.reduce((acc, unit) => acc + (unit.unit_price * 1.14975 * 0.8 / 16), 0);
+      
+      // 2. Facteurs de risque (Churn Probability)
+      let baseChurnRate = 0.02; // 2% de base
+
+      // Age Factor: Les jeunes (<25) sont plus volatiles, les seniors (>50) plus fidèles
+      if (age < 25) baseChurnRate += 0.03;
+      else if (age > 50) baseChurnRate -= 0.01;
+
+      // ID Factor: Passeport = Voyageur/International (Risque moyen), RAMQ/DL = Local (Stable)
+      if (idType === 'PASSPORT') baseChurnRate += 0.015;
+      
+      // Trust Factor
+      if (trustScore < 70) baseChurnRate += 0.05; // Risque élevé
+      if (trustScore > 90) baseChurnRate -= 0.01; // Très fiable
+
+      // Hardware Value Factor: Plus c'est cher, plus l'engagement est "lourd" (sauf si fraude)
+      const avgDevicePrice = devices.reduce((acc, u) => acc + u.unit_price, 0) / devices.length;
+      if (avgDevicePrice > 2500) baseChurnRate -= 0.005;
+
+      // Cap des limites
+      baseChurnRate = Math.max(0.005, Math.min(0.20, baseChurnRate));
+
+      // 3. Simulation temporelle (24 mois)
+      const projections = [];
+      let retentionProb = 1.0;
+      let cumulativeProfit = 0;
+      const today = new Date();
+      
+      // Date du plus vieux device actif pour caler le cycle
+      const firstDeviceDate = new Date(devices[devices.length - 1].created_at);
+      const monthsSinceStart = (today.getFullYear() - firstDeviceDate.getFullYear()) * 12 + (today.getMonth() - firstDeviceDate.getMonth());
+      const currentCycleMonth = monthsSinceStart % 16;
+      
+      let nextRenewalDate: Date | null = null;
+
+      for (let i = 0; i < 24; i++) {
+          const projectedDate = new Date();
+          projectedDate.setMonth(today.getMonth() + i);
+          
+          const monthInCycle = (currentCycleMonth + i) % 16;
+          const isRenewalMonth = monthInCycle === 15; // 16ème mois (0-indexed -> 15)
+
+          if (isRenewalMonth && !nextRenewalDate) nextRenewalDate = new Date(projectedDate);
+
+          // Risque de churn augmente drastiquement à la fin du cycle (Mois 16)
+          let monthlyChurn = baseChurnRate;
+          if (isRenewalMonth) monthlyChurn += 0.15; // +15% de chance de drop au renouvellement
+
+          retentionProb *= (1 - monthlyChurn);
+          
+          const revenue = totalMonthlyRevenue * retentionProb;
+          // Coûts estimés (Support, Stripe, Cloud, Amortissement) ~30%
+          const costs = revenue * 0.30; 
+          
+          const monthlyProfit = revenue - costs;
+          cumulativeProfit += monthlyProfit;
+
+          projections.push({
+              month: projectedDate.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
+              profit: Math.round(cumulativeProfit),
+              retention: Math.round(retentionProb * 100),
+              isRenewal: isRenewalMonth
+          });
+      }
+
+      return {
+          chartData: projections,
+          churnRisk: (baseChurnRate * 100).toFixed(1),
+          predictedLTV: Math.round(cumulativeProfit),
+          renewalDate: nextRenewalDate,
+          customerPersona: {
+              age,
+              stability: trustScore > 80 ? 'Élevée' : trustScore > 50 ? 'Moyenne' : 'Critique',
+              docType: idType
+          }
+      };
+  }, [customer, devices, verifications]);
 
   const getDuration = (start: string, end: string | null) => {
       if (!end) return 'En cours...';
@@ -377,18 +471,124 @@ const DeviceCustomerDetails = () => {
                 </div>
             )}
 
-            {/* SECTION: BILLING */}
-            {activeSection === 'billing' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            {/* SECTION: BILLING & ORACLE */}
+            {activeSection === 'billing' && predictionData && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Facturation</h1>
-                        <p className="text-gray-500">Estimation des revenus récurrents.</p>
+                        <h1 className="text-2xl font-bold text-gray-900">Facturation & Prévisions</h1>
+                        <p className="text-gray-500">Analyse financière et cycle de vie client.</p>
                     </div>
+                    
                     <Card className="border-gray-200 bg-gray-900 text-white">
                         <CardHeader><CardTitle>Revenu Mensuel (MRR)</CardTitle></CardHeader>
                         <CardContent>
                             <div className="text-4xl font-bold">${devices.reduce((acc, unit) => acc + (unit.unit_price * 1.14975 * 0.8 / 16), 0).toFixed(2)}</div>
                             <p className="text-gray-400 text-xs mt-2">Calculé sur la base des contrats de location actifs.</p>
+                        </CardContent>
+                    </Card>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card className="border-gray-200 shadow-sm bg-gradient-to-br from-indigo-50 to-white overflow-hidden relative">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><BrainCircuit size={100} /></div>
+                            <CardHeader>
+                                <div className="flex items-center gap-2 text-indigo-600 mb-1">
+                                    <Sparkles className="h-4 w-4" />
+                                    <span className="text-xs font-bold uppercase tracking-wider">L'Oracle (IA)</span>
+                                </div>
+                                <CardTitle className="text-lg">Psycho-Analyse Client</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex justify-between items-center border-b border-indigo-100 pb-2">
+                                    <span className="text-sm text-gray-600">Stabilité Financière Est.</span>
+                                    <Badge className={
+                                        predictionData.customerPersona.stability === 'Élevée' ? 'bg-green-600' : 
+                                        predictionData.customerPersona.stability === 'Moyenne' ? 'bg-amber-500' : 'bg-red-600'
+                                    }>{predictionData.customerPersona.stability}</Badge>
+                                </div>
+                                <div className="flex justify-between items-center border-b border-indigo-100 pb-2">
+                                    <span className="text-sm text-gray-600">Type Document</span>
+                                    <span className="font-mono text-xs font-bold">{predictionData.customerPersona.docType}</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-2">
+                                    <span className="text-sm text-gray-600">Âge Visuel IA</span>
+                                    <span className="font-mono text-sm">{predictionData.customerPersona.age} ans</span>
+                                </div>
+                                <div className="pt-2">
+                                    <div className="flex justify-between text-xs mb-1">
+                                        <span className="text-gray-500">Risque de Churn Mensuel</span>
+                                        <span className="font-bold text-gray-900">{predictionData.churnRisk}%</span>
+                                    </div>
+                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div 
+                                            className={`h-full rounded-full ${Number(predictionData.churnRisk) < 3 ? 'bg-green-500' : Number(predictionData.churnRisk) < 7 ? 'bg-amber-500' : 'bg-red-500'}`} 
+                                            style={{ width: `${Number(predictionData.churnRisk) * 5}%` }} 
+                                        />
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-gray-200 shadow-sm bg-gradient-to-br from-emerald-50 to-white">
+                            <CardHeader>
+                                <div className="flex items-center gap-2 text-emerald-600 mb-1">
+                                    <TrendingUp className="h-4 w-4" />
+                                    <span className="text-xs font-bold uppercase tracking-wider">Projection LTV</span>
+                                </div>
+                                <CardTitle className="text-lg">Rentabilité 24 Mois</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-4xl font-bold text-gray-900 mb-1">
+                                    ${predictionData.predictedLTV}
+                                </div>
+                                <p className="text-xs text-gray-500 mb-6">Profit net estimé après coûts et churn.</p>
+                                
+                                {predictionData.renewalDate && (
+                                    <div className="bg-white/60 p-3 rounded-lg border border-emerald-100 flex items-start gap-3">
+                                        <div className="bg-emerald-100 p-2 rounded-full text-emerald-600">
+                                            <RefreshCw className="h-4 w-4" />
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-bold text-emerald-900 uppercase">Prochain Cycle</div>
+                                            <div className="text-sm text-gray-700">Contacter pour upgrade :</div>
+                                            <div className="font-bold text-gray-900">{predictionData.renewalDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>
+                                        </div>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <Card className="border-gray-200 shadow-sm">
+                        <CardHeader>
+                            <CardTitle className="text-sm font-medium text-gray-500">Trajectoire de Rentabilité</CardTitle>
+                        </CardHeader>
+                        <CardContent className="h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={predictionData.chartData}>
+                                    <defs>
+                                        <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                    <XAxis dataKey="month" tick={{fontSize: 10}} tickLine={false} axisLine={false} />
+                                    <YAxis tick={{fontSize: 10}} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                                    <Tooltip 
+                                        contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                        labelStyle={{ color: '#6b7280', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
+                                    />
+                                    <Area 
+                                        type="monotone" 
+                                        dataKey="profit" 
+                                        stroke="#10b981" 
+                                        strokeWidth={2}
+                                        fillOpacity={1} 
+                                        fill="url(#colorProfit)" 
+                                        name="Profit Cumulé"
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
                         </CardContent>
                     </Card>
                 </div>
