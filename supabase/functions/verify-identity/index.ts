@@ -55,7 +55,7 @@ const calculateSimilarity = (s1: string, s2: string) => {
 };
 
 // Générateur de NAM théorique (Algorithme RAMQ)
-const generateTheoreticalNAM = (first: string, last: string, dob: string, sex: 'M' | 'F' = 'M') => {
+const generateTheoreticalNAM = (first: string, last: string, dob: string) => {
     try {
         const normLast = normalizeString(last).padEnd(3, 'X').toUpperCase();
         const normFirst = normalizeString(first).padEnd(1, 'X').toUpperCase();
@@ -65,10 +65,10 @@ const generateTheoreticalNAM = (first: string, last: string, dob: string, sex: '
         let month = date.getMonth() + 1;
         const day = date.getDate().toString().padStart(2, '0');
 
-        // Si on ne connait pas le sexe, on génère les deux possibilités (Mois et Mois+50)
+        // Les 3 premières lettres du nom + 1ère lettre du prénom
         const codeStart = (normLast.substring(0, 3) + normFirst.substring(0, 1));
-        const codeEnd = day; // La fin complète est inconnue (séquence aléatoire), on check le début
         
+        // On retourne les deux possibilités (Homme/Femme)
         return {
             maleBase: `${codeStart}${year}${month.toString().padStart(2, '0')}${day}`,
             femaleBase: `${codeStart}${year}${(month + 50).toString().padStart(2, '0')}${day}`
@@ -179,29 +179,33 @@ serve(async (req) => {
     // 4. MOTEUR DE VALIDATION (SCORING)
     let trustScore = 0; // On veut atteindre 100
     
-    // --- CHECK A: NAM vs PROFIL (Le plus puissant) ---
-    // On ignore ce que l'IA a lu comme Nom/Prénom si le NAM est valide par rapport à la DB
+    // --- CHECK A: NAM vs PROFIL DB (La clé de voûte) ---
+    // C'est ici qu'on fait la comparaison intelligente DB <-> NAM Carte
     if (extraction.documentNumber) {
         // Nettoyage NAM IA (supprime espaces)
         const extractedNAM = normalizeString(extraction.documentNumber).toUpperCase();
         
-        // On génère ce que le NAM *devrait* être selon la base de données (si on avait la date de naissance)
-        // Comme on a pas la DOB en DB (souvent), on utilise la DOB extraite de la carte pour faire le pont
+        // On utilise la DOB extraite de la carte (car on l'a pas en DB) + Noms de la DB
         if (extraction.dateOfBirth) {
-            const theory = generateTheoreticalNAM(profile.first_name, profile.last_name, extraction.dateOfBirth);
+            const theory = generateTheoreticalNAM(
+                profile.first_name,  // DB First Name
+                profile.last_name,   // DB Last Name
+                extraction.dateOfBirth // Card DOB
+            );
             
-            // Check Match (Début du NAM : 3 lettres nom + 1 prénom + Année + Mois + Jour)
-            // On vérifie les 10 premiers caractères qui contiennent l'essentiel
+            // On vérifie les 10 premiers caractères (NomCode + YY MM DD)
+            // Les 2 derniers sont séquentiels/aléatoires, on les ignore pour le match
             if (theory) {
                 const checkLen = 10; 
                 const matchMale = extractedNAM.startsWith(theory.maleBase.substring(0, checkLen));
                 const matchFemale = extractedNAM.startsWith(theory.femaleBase.substring(0, checkLen));
 
                 if (matchMale || matchFemale) {
-                    trustScore += 60; // ENORME BOOST
+                    trustScore += 60; // ENORME BOOST : Le numéro match mathématiquement le profil DB
                     log("SUCCESS: Le NAM correspond mathématiquement au profil DB (Validation croisée)");
                 } else {
-                    log(`FAIL: NAM Incohérent. Extrait: ${extractedNAM} vs Théorique: ${theory.maleBase.substring(0, 10)}...`);
+                    // Log mais pas de pénalité immédiate (peut être une erreur OCR sur un chiffre)
+                    log(`INFO: NAM non-matching. Extrait: ${extractedNAM} vs Théorique: ${theory.maleBase.substring(0, 10)}...`);
                 }
             }
         }
@@ -261,12 +265,12 @@ serve(async (req) => {
     // Si le nom match bien (40pts) + age (20pts) = 60pts, on passe.
     const finalStatus = trustScore >= 50 ? 'approved' : 'rejected';
     
-    // Déduction de la raison finale depuis les logs
+    // Déduction de la raison finale depuis les logs (interne seulement)
     const finalReason = finalStatus === 'rejected' 
         ? detailedLogs.filter(l => l.includes('FAIL') || l.includes('CRITICAL')).join(' | ') || 'Score insuffisant'
         : null;
     
-    // MESSAGE UTILISATEUR (Générique)
+    // MESSAGE UTILISATEUR (Générique pour ne pas aider les fraudeurs)
     const userMessage = finalStatus === 'approved' 
         ? null 
         : `Vérification échouée. Veuillez reprendre une photo claire et sans reflets. (Tentative ${(count || 0) + 1}/3)`;
@@ -277,8 +281,8 @@ serve(async (req) => {
             .update({
                 completed_at: new Date().toISOString(),
                 status: finalStatus,
-                risk_score: 100 - trustScore, // Inverse du trust
-                rejection_reason: finalReason, // Interne
+                risk_score: 100 - trustScore, // Inverse du trust pour le risque
+                rejection_reason: finalReason, // Raison technique interne
                 verification_metadata: {
                     logs: detailedLogs, // On sauvegarde TOUT
                     ai_raw: extraction,
