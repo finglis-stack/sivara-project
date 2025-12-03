@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, ArrowLeft, Mail, Phone, Laptop, Package, CreditCard, CheckCircle2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, Phone, Laptop, Package, CreditCard, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface Customer {
   id: string;
@@ -34,6 +34,7 @@ const DeviceCustomerDetails = () => {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [devices, setDevices] = useState<Unit[]>([]);
+  const [isIdentityVerified, setIsIdentityVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -41,28 +42,45 @@ const DeviceCustomerDetails = () => {
       if (!id) return;
       setIsLoading(true);
       
-      // Fetch Customer Profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      setCustomer(profile);
-
-      // Fetch Customer Devices
-      const { data: units } = await supabase
-        .from('device_units')
-        .select(`
-            id,
-            serial_number,
-            unit_price,
-            product:device_products(name, image_url)
-        `)
-        .eq('sold_to_user_id', id);
+      try {
+        // 1. Fetch Customer Profile
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', id)
+            .single();
         
-      setDevices(units as any || []);
-      setIsLoading(false);
+        setCustomer(profile);
+
+        // 2. Fetch Identity Verification Status
+        // On cherche s'il existe une vérification approuvée pour cet utilisateur
+        const { data: verification } = await supabase
+            .from('identity_verifications')
+            .select('status')
+            .eq('user_id', id)
+            .eq('status', 'approved')
+            .limit(1)
+            .maybeSingle();
+        
+        setIsIdentityVerified(!!verification);
+
+        // 3. Fetch Customer Devices
+        const { data: units } = await supabase
+            .from('device_units')
+            .select(`
+                id,
+                serial_number,
+                unit_price,
+                product:device_products(name, image_url)
+            `)
+            .eq('sold_to_user_id', id);
+            
+        setDevices(units as any || []);
+      } catch (error) {
+        console.error("Erreur chargement client", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     fetchData();
@@ -135,7 +153,7 @@ const DeviceCustomerDetails = () => {
                 </Card>
             </div>
 
-            {/* DROITE : FACTURATION */}
+            {/* DROITE : INFO COMPTE */}
             <div className="space-y-6">
                 <Card className="border-gray-200 shadow-sm bg-gray-900 text-white border-0">
                     <CardHeader>
@@ -161,11 +179,15 @@ const DeviceCustomerDetails = () => {
                         <div className="space-y-4">
                             <div className="flex justify-between items-center text-sm border-b border-gray-50 pb-3">
                                 <span className="text-gray-500">Identité vérifiée</span>
-                                <span className="text-green-600 font-medium">Oui</span>
+                                {isIdentityVerified ? (
+                                    <span className="text-green-600 font-medium flex items-center gap-1"><CheckCircle2 className="h-4 w-4" /> Oui</span>
+                                ) : (
+                                    <span className="text-orange-500 font-medium flex items-center gap-1"><AlertCircle className="h-4 w-4" /> Non</span>
+                                )}
                             </div>
                             <div className="flex justify-between items-center text-sm border-b border-gray-50 pb-3">
                                 <span className="text-gray-500">Contrats signés</span>
-                                <span className="text-green-600 font-medium">{devices.length}/{devices.length}</span>
+                                <span className="text-gray-900 font-medium">{devices.length}/{devices.length}</span>
                             </div>
                             <div className="flex justify-between items-center text-sm">
                                 <span className="text-gray-500">Incidents ouverts</span>
