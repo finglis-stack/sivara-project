@@ -202,10 +202,10 @@ serve(async (req) => {
 
                 if (matchMale || matchFemale) {
                     trustScore += 60; // ENORME BOOST : Le numéro match mathématiquement le profil DB
-                    log("SUCCESS: Le NAM correspond mathématiquement au profil DB (Validation croisée)");
+                    log(`SUCCESS: Validation croisée NAM OK. (Scan: ${extractedNAM.substring(0,10)}... == DB_Theorique: ${theory.maleBase.substring(0,10)}...)`);
                 } else {
                     // Log mais pas de pénalité immédiate (peut être une erreur OCR sur un chiffre)
-                    log(`INFO: NAM non-matching. Extrait: ${extractedNAM} vs Théorique: ${theory.maleBase.substring(0, 10)}...`);
+                    log(`INFO: NAM non-matching. Scan: ${extractedNAM} vs DB_Theorique: ${theory.maleBase.substring(0, 10)}...`);
                 }
             }
         }
