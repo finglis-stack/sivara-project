@@ -68,10 +68,24 @@ serve(async (req) => {
            if (isDeviceRental) {
                // Pour les locations d'appareils, on met à jour le statut de l'unité
                const unitId = subscription.metadata.unit_id;
+               const userId = subscription.metadata.supabase_user_id || profile.id; // Fallback sur le profil trouvé
+
                if (unitId && status === 'active') {
-                   await supabase.from('device_units').update({ status: 'sold' }).eq('id', unitId);
+                   // --- FIX: Attribution de l'ordinateur à l'utilisateur ---
+                   await supabase.from('device_units').update({ 
+                       status: 'sold',
+                       sold_to_user_id: userId, // CRUCIAL: Lie l'ordi au user
+                       reserved_at: null // Nettoyage réservation
+                   }).eq('id', unitId);
+                   
+                   console.log(`[Webhook] Device ${unitId} attribué à ${userId}`);
+
                } else if (unitId && (status === 'canceled' || status === 'unpaid')) {
-                   await supabase.from('device_units').update({ status: 'available' }).eq('id', unitId);
+                   // Libération si paiement échoué ou annulé
+                   await supabase.from('device_units').update({ 
+                       status: 'available',
+                       sold_to_user_id: null
+                   }).eq('id', unitId);
                }
            } else {
                // Abonnement Pro classique
@@ -99,7 +113,10 @@ serve(async (req) => {
         if (subscription.metadata?.type === 'device_rental') {
              const unitId = subscription.metadata.unit_id;
              if (unitId) {
-                 await supabase.from('device_units').update({ status: 'available' }).eq('id', unitId);
+                 await supabase.from('device_units').update({ 
+                     status: 'available',
+                     sold_to_user_id: null 
+                 }).eq('id', unitId);
              }
         } else {
              // Gestion Pro

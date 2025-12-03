@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { showSuccess, showError } from '@/utils/toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Camera, CheckCircle2, AlertTriangle, ScanLine, CreditCard, Lock } from 'lucide-react';
+import { Loader2, Camera, CheckCircle2, AlertTriangle, ScanLine, CreditCard, Lock, Clock } from 'lucide-react';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -29,7 +29,7 @@ const PaymentForm = ({ clientSecret, orderId, onSuccess }: { clientSecret: strin
 
         const { error } = await stripe.confirmPayment({
             elements,
-            redirect: 'if_required', // Important: On gère la redirection nous-mêmes
+            redirect: 'if_required', 
         });
 
         if (error) {
@@ -75,12 +75,14 @@ const PaymentForm = ({ clientSecret, orderId, onSuccess }: { clientSecret: strin
 // --- COMPOSANT PRINCIPAL ---
 const IdentityVerification = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<'intro' | 'scan_front' | 'scan_back' | 'processing' | 'success' | 'payment' | 'finalizing' | 'rejected'>('intro');
   const [frontImage, setFrontImage] = useState<string | null>(null);
   const [backImage, setBackImage] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
   const [riskData, setRiskData] = useState<any>(null);
+  const [timeLeft, setTimeLeft] = useState<number>(300); // 5 minutes
   
   // Payment State
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -89,17 +91,69 @@ const IdentityVerification = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // Robust unitId retrieval
   const unitId = searchParams.get('unit_id');
 
-  // Verify Unit ID on load
+  // TIMER LOGIC
   useEffect(() => {
-      if (!unitId) {
-          console.error("Unit ID missing in URL");
-      }
+      if (!unitId) return;
+
+      const fetchReservationTime = async () => {
+          const { data, error } = await supabase
+            .from('device_units')
+            .select('reserved_at, status')
+            .eq('id', unitId)
+            .single();
+          
+          if (error || !data || data.status !== 'reserved') {
+              // Si pas réservé, on kick
+              handleTimeout();
+              return;
+          }
+
+          const reservedAt = new Date(data.reserved_at).getTime();
+          const now = Date.now();
+          const elapsed = (now - reservedAt) / 1000;
+          const remaining = 300 - elapsed; // 5 mins = 300s
+
+          if (remaining <= 0) {
+              handleTimeout();
+          } else {
+              setTimeLeft(Math.floor(remaining));
+          }
+      };
+
+      fetchReservationTime();
+
+      const timer = setInterval(() => {
+          setTimeLeft(prev => {
+              if (prev <= 1) {
+                  clearInterval(timer);
+                  handleTimeout();
+                  return 0;
+              }
+              return prev - 1;
+          });
+      }, 1000);
+
+      return () => clearInterval(timer);
   }, [unitId]);
 
-  // ... (Code Caméra inchangé) ...
+  const handleTimeout = async () => {
+      if (unitId) {
+          // Libérer l'unité
+          await supabase.rpc('release_device', { unit_uuid: unitId });
+      }
+      showError("Temps écoulé. La réservation a expiré.");
+      window.location.href = 'https://device.sivara.ca';
+  };
+
+  const formatTime = (seconds: number) => {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // ... (Reste du code Caméra inchangé) ...
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -178,18 +232,15 @@ const IdentityVerification = () => {
     } catch (e: any) { showError(e.message); setStep('intro'); }
   };
 
-  // --- TRANSITION VERS PAIEMENT (FIXED) ---
   const initializePayment = async () => {
       if (!unitId) {
-          showError("Erreur: ID de l'appareil manquant. Veuillez recommencer.");
+          showError("Erreur: ID de l'appareil manquant.");
           return;
       }
 
-      setStep('payment'); // On affiche le loader
+      setStep('payment'); 
       
       try {
-          console.log("Initializing payment for unit:", unitId);
-          
           const { data, error } = await supabase.functions.invoke('stripe-api', {
               body: {
                   action: 'create_device_checkout',
@@ -197,53 +248,42 @@ const IdentityVerification = () => {
               }
           });
 
-          if (error) {
-              console.error("Function error:", error);
-              throw new Error(error.message || "Erreur serveur de paiement");
-          }
-
-          if (data?.error) {
-              throw new Error(data.error);
-          }
+          if (error) throw new Error(error.message);
+          if (data?.error) throw new Error(data.error);
 
           if (data?.clientSecret) {
               setClientSecret(data.clientSecret);
               setSubscriptionId(data.subscriptionId);
           } else {
-              throw new Error("Réponse de paiement invalide (Pas de secret)");
+              throw new Error("Réponse de paiement invalide");
           }
       } catch (e: any) {
-          console.error("Payment Init Error:", e);
+          console.error(e);
           showError(e.message || "Impossible d'initialiser le paiement.");
-          setStep('success'); // REVIENT A L'ETAPE PRECEDENTE POUR NE PAS BLOQUER
+          setStep('success'); 
       }
   };
 
-  // --- SUCCÈS PAIEMENT ---
   const handlePaymentSuccess = () => {
       setStep('finalizing');
-      
-      // Construction de l'URL de retour vers Device
-      const hostname = window.location.hostname;
-      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-      
-      let targetUrl = '';
-      if (isLocal) {
-          targetUrl = `http://localhost:8080/?app=device&order_success=true&session_id=${subscriptionId}`;
-      } else {
-          targetUrl = `https://device.sivara.ca/?order_success=true&session_id=${subscriptionId}`;
-      }
-
-      // Petite pause pour UX
-      setTimeout(() => {
-          window.location.href = targetUrl;
-      }, 1500);
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      let targetUrl = isLocal 
+        ? `http://localhost:8080/?app=device&order_success=true&session_id=${subscriptionId}`
+        : `https://device.sivara.ca/?order_success=true&session_id=${subscriptionId}`;
+      setTimeout(() => { window.location.href = targetUrl; }, 1500);
   };
 
   return (
     <div className="min-h-screen bg-white text-gray-900 font-sans flex flex-col items-center justify-center p-4">
-        <div className="absolute top-0 left-0 w-full p-6 flex justify-center items-center z-50">
+        {/* HEADER TIMER */}
+        <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-center z-50">
             <span className="font-bold tracking-widest text-sm text-gray-900">SIVARA ID</span>
+            {step !== 'finalizing' && (
+                <div className={`flex items-center gap-2 font-mono text-sm px-3 py-1 rounded-full ${timeLeft < 60 ? 'bg-red-50 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-600'}`}>
+                    <Clock className="h-4 w-4" />
+                    {formatTime(timeLeft)}
+                </div>
+            )}
         </div>
 
         <div className="w-full max-w-md">
@@ -280,14 +320,12 @@ const IdentityVerification = () => {
                 </div>
             )}
 
-            {/* --- ETAPE PAIEMENT INTEGRÉE --- */}
             {step === 'payment' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
                     <div className="text-center mb-6">
                         <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600"><CreditCard className="h-6 w-6" /></div>
                         <h2 className="text-xl font-bold text-gray-900">Finaliser la commande</h2>
                     </div>
-                    
                     {clientSecret ? (
                         <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
                             <PaymentForm clientSecret={clientSecret} orderId={subscriptionId || ''} onSuccess={handlePaymentSuccess} />
@@ -310,11 +348,6 @@ const IdentityVerification = () => {
             )}
 
             {step === 'rejected' && <div className="text-center animate-in fade-in zoom-in duration-500"><div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-100"><AlertTriangle className="h-8 w-8 text-red-600" /></div><h1 className="text-2xl font-bold mb-2 text-gray-900">Vérification échouée</h1><p className="text-gray-500 text-sm mb-8">{riskData?.reason}</p><Button onClick={() => window.location.href = '/'} variant="outline" className="w-full h-12">Retour à l'accueil</Button></div>}
-        </div>
-        
-        {/* Badge Shadcn pour le style */}
-        <div className="hidden">
-            <Badge>Hidden</Badge>
         </div>
     </div>
   );

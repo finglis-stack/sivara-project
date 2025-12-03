@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { showSuccess, showError } from '@/utils/toast';
 import confetti from 'canvas-confetti';
 
 // --- TYPES ---
@@ -47,6 +48,7 @@ const DeviceLanding = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isVendor, setIsVendor] = useState(false);
+  const [isReserving, setIsReserving] = useState(false);
   
   // --- CONFIGURATOR STATE ---
   const [showConfig, setShowConfig] = useState(false);
@@ -202,9 +204,29 @@ const DeviceLanding = () => {
       setStep('selection');
   };
 
-  const handleProceedToCheckout = () => {
+  const handleProceedToCheckout = async () => {
       if (!selectedUnitId) return;
-      navigate(`/checkout?unit_id=${selectedUnitId}`);
+      setIsReserving(true);
+
+      try {
+          // --- RESERVATION ATOMIQUE ---
+          const { data: success, error } = await supabase.rpc('reserve_device', { unit_uuid: selectedUnitId });
+          
+          if (error) throw error;
+
+          if (success) {
+              showSuccess("Appareil réservé pour 5 minutes");
+              navigate(`/checkout?unit_id=${selectedUnitId}`);
+          } else {
+              showError("Désolé, cet appareil vient d'être pris.");
+              fetchInventory(); // Rafraîchir
+          }
+      } catch (e) {
+          console.error(e);
+          showError("Erreur de réservation");
+      } finally {
+          setIsReserving(false);
+      }
   };
 
   const getMonthlyPrice = (price: number) => {
@@ -621,10 +643,10 @@ const DeviceLanding = () => {
                     </div>
                     <Button 
                         onClick={handleProceedToCheckout} 
-                        disabled={!selectedUnitId}
+                        disabled={!selectedUnitId || isReserving}
                         className="w-full sm:w-auto h-12 px-8 text-lg rounded-full bg-black hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl"
                     >
-                        Continuer
+                        {isReserving ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Réservation...</> : "Continuer"}
                     </Button>
                 </DialogFooter>
             )}
