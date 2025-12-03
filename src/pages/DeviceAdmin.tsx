@@ -12,11 +12,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { showSuccess, showError } from '@/utils/toast';
 import { 
   Package, Plus, Search, Barcode, Laptop, ArrowLeft, 
   Trash2, Edit2, CheckCircle2, AlertCircle, Box, DollarSign, Upload, Globe, Shield, Loader2,
-  Cpu, Wifi, Bluetooth, Fingerprint, Monitor, RefreshCw
+  Cpu, Wifi, Bluetooth, Fingerprint, Monitor, RefreshCw, Users, Mail, Phone, CreditCard, User, ChevronRight
 } from 'lucide-react';
 
 interface Product {
@@ -37,6 +38,7 @@ interface Unit {
   status: 'available' | 'sold' | 'reserved' | 'maintenance';
   condition: 'new' | 'refurbished';
   unit_price: number;
+  sold_to_user_id?: string;
   specific_specs: {
     ram_size: string;
     ram_speed: string;
@@ -48,6 +50,18 @@ interface Unit {
         fingerprint: boolean;
     }
   };
+  product?: Product;
+}
+
+interface Customer {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_number: string;
+  avatar_url: string | null;
+  is_pro: boolean;
+  subscription_status: string;
 }
 
 const DeviceAdmin = () => {
@@ -56,15 +70,24 @@ const DeviceAdmin = () => {
   const [isVendor, setIsVendor] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'inventory' | 'customers'>('inventory');
 
-  // Data State
+  // Inventory Data
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
   
+  // Customer Data
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerResults, setCustomerResults] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerDevices, setCustomerDevices] = useState<Unit[]>([]);
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
+  
   // UI State
   const [showProductDialog, setShowProductDialog] = useState(false);
   const [showUnitDialog, setShowUnitDialog] = useState(false);
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Forms
@@ -106,7 +129,7 @@ const DeviceAdmin = () => {
     checkRole();
   }, [user, navigate]);
 
-  // 2. Fetch Data
+  // 2. Fetch Inventory
   const fetchProducts = async () => {
     const { data } = await supabase.from('device_products').select('*').order('created_at', { ascending: false });
     setProducts(data || []);
@@ -115,6 +138,69 @@ const DeviceAdmin = () => {
   const fetchUnits = async (productId: string) => {
     const { data } = await supabase.from('device_units').select('*').eq('product_id', productId).order('created_at', { ascending: false });
     setUnits(data as any || []);
+  };
+
+  // 3. Customer Logic
+  const handleCustomerSearch = async (query: string) => {
+      setCustomerSearch(query);
+      if (query.length < 2) {
+          setCustomerResults([]);
+          return;
+      }
+
+      setIsSearchingCustomers(true);
+      try {
+          // Recherche Profiles (Nom, Email, Tel)
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('*')
+            .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone_number.ilike.%${query}%`)
+            .limit(5);
+
+          // Recherche par S/N (Device) pour trouver le proprio
+          // Si la query ressemble à un numéro de série
+          let serialMatches: any[] = [];
+          if (query.length > 3) {
+             const { data: units } = await supabase
+                .from('device_units')
+                .select('sold_to_user_id')
+                .ilike('serial_number', `%${query}%`)
+                .not('sold_to_user_id', 'is', null)
+                .limit(5);
+             
+             if (units && units.length > 0) {
+                 const userIds = units.map(u => u.sold_to_user_id);
+                 const { data: owners } = await supabase.from('profiles').select('*').in('id', userIds);
+                 serialMatches = owners || [];
+             }
+          }
+
+          // Merge unique results
+          const combined = [...(profiles || []), ...serialMatches];
+          const unique = Array.from(new Map(combined.map(item => [item.id, item])).values()).slice(0, 5);
+          
+          setCustomerResults(unique as Customer[]);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsSearchingCustomers(false);
+      }
+  };
+
+  const openCustomerDetails = async (customer: Customer) => {
+      setSelectedCustomer(customer);
+      setShowCustomerDialog(true);
+      
+      // Fetch devices
+      const { data: devices } = await supabase
+        .from('device_units')
+        .select(`
+            *,
+            product:device_products(*)
+        `)
+        .eq('sold_to_user_id', customer.id);
+        
+      setCustomerDevices(devices as any || []);
   };
 
   const handleSelectProduct = (product: Product) => {
@@ -149,7 +235,7 @@ const DeviceAdmin = () => {
     }
   };
 
-  // 3. Product Actions
+  // Product Actions
   const handleSaveProduct = async () => {
     try {
         if (!prodForm.name || !prodForm.base_price) return;
@@ -160,13 +246,9 @@ const DeviceAdmin = () => {
             specs: { cpu: "Ryzen 7", type: "Laptop" } 
         };
 
-        if (selectedProduct && showProductDialog) {
-             // Edit logic here if needed
-        } else {
-            const { error } = await supabase.from('device_products').insert(payload);
-            if (error) throw error;
-            showSuccess("Produit créé");
-        }
+        const { error } = await supabase.from('device_products').insert(payload);
+        if (error) throw error;
+        showSuccess("Produit créé");
         setShowProductDialog(false);
         setProdForm({ name: '', description: '', base_price: 0, image_url: '', availability: 'Global', warranty_type: 'standard' });
         fetchProducts();
@@ -182,16 +264,14 @@ const DeviceAdmin = () => {
       fetchProducts();
   };
 
-  // 4. Unit Actions & Helpers
+  // Unit Actions
   const generateSerialNumber = () => {
-      // Format: SIV-{YEAR}-{RANDOM 6 CHARS}
       const year = new Date().getFullYear().toString().slice(-2);
       const random = Math.random().toString(36).substring(2, 8).toUpperCase();
       return `SIV-${year}-${random}`;
   };
 
   const handleOpenUnitDialog = () => {
-      // Reset form and set default price from product base price
       setUnitForm({
           serial_number: '',
           status: 'available',
@@ -208,27 +288,23 @@ const DeviceAdmin = () => {
   const handleSaveUnit = async () => {
       try {
           if (!selectedProduct) return;
-          
           const generatedSN = generateSerialNumber();
           
-          const specificSpecs = {
-              ram_size: unitForm.ram_size,
-              ram_speed: unitForm.ram_speed,
-              storage: unitForm.storage,
-              features: unitForm.features
-          };
-
           const { error } = await supabase.from('device_units').insert({
               product_id: selectedProduct.id,
               serial_number: generatedSN,
               status: unitForm.status,
               condition: unitForm.condition,
               unit_price: unitForm.unit_price,
-              specific_specs: specificSpecs
+              specific_specs: {
+                  ram_size: unitForm.ram_size,
+                  ram_speed: unitForm.ram_speed,
+                  storage: unitForm.storage,
+                  features: unitForm.features
+              }
           });
 
           if (error) throw error;
-          
           showSuccess(`Unité ${generatedSN} ajoutée`);
           setShowUnitDialog(false);
           fetchUnits(selectedProduct.id);
@@ -242,7 +318,6 @@ const DeviceAdmin = () => {
       if (selectedProduct) fetchUnits(selectedProduct.id);
   };
 
-  // Calculs financiers pour l'affichage (Abonnement Device)
   const calculateFinancials = (price: number) => {
       const upfront = price * 0.20;
       const remainder = price * 0.80;
@@ -269,9 +344,15 @@ const DeviceAdmin = () => {
                         <span className="font-bold text-gray-900">Sivara Vendor</span>
                     </div>
                 </div>
+                
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                    <button onClick={() => setActiveTab('inventory')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'inventory' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-900'}`}>Inventaire</button>
+                    <button onClick={() => setActiveTab('customers')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'customers' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-900'}`}>Clients</button>
+                </div>
+
                 <div className="flex items-center gap-3">
                     <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Compte Vérifié
+                        <CheckCircle2 className="h-3 w-3" /> Connecté
                     </Badge>
                 </div>
             </div>
@@ -279,147 +360,174 @@ const DeviceAdmin = () => {
 
         <div className="flex-1 container mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8 overflow-hidden h-[calc(100vh-64px)]">
             
-            {/* Colonne Gauche : Liste Produits */}
-            <div className="w-full lg:w-1/3 flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-gray-900">Catalogue</h2>
-                    <Button onClick={() => setShowProductDialog(true)} size="sm" className="bg-black hover:bg-gray-800 text-white">
-                        <Plus className="h-4 w-4 mr-2" /> Nouveau Produit
-                    </Button>
-                </div>
-
-                <Card className="flex-1 flex flex-col overflow-hidden border-gray-200 shadow-sm">
-                    <div className="p-4 border-b border-gray-100">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input placeholder="Rechercher un modèle..." className="pl-9 bg-gray-50 border-gray-200" />
-                        </div>
-                    </div>
-                    <ScrollArea className="flex-1">
-                        <div className="divide-y divide-gray-100">
-                            {products.map(product => (
-                                <div 
-                                    key={product.id} 
-                                    onClick={() => handleSelectProduct(product)}
-                                    className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors flex items-start gap-4 ${selectedProduct?.id === product.id ? 'bg-blue-50 border-l-4 border-blue-600' : 'border-l-4 border-transparent'}`}
-                                >
-                                    <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden relative">
-                                        {product.image_url ? <img src={product.image_url} className="w-full h-full object-cover" /> : <Laptop className="h-6 w-6 text-gray-400" />}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-                                            <h3 className="font-bold text-gray-900 truncate">{product.name}</h3>
-                                            <span className="text-xs font-mono text-gray-500">${product.base_price}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <Badge variant="outline" className="text-[10px] h-4 px-1">{product.availability}</Badge>
-                                            <Badge variant="secondary" className="text-[10px] h-4 px-1">{product.warranty_type === 'extended' ? 'Garantie Étendue' : 'Standard'}</Badge>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                            {products.length === 0 && (
-                                <div className="p-8 text-center text-gray-400">
-                                    <Package className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                                    <p className="text-sm">Aucun produit en vente</p>
-                                </div>
-                            )}
-                        </div>
-                    </ScrollArea>
-                </Card>
-            </div>
-
-            {/* Colonne Droite : Détails & Unités */}
-            <div className="flex-1 flex flex-col gap-4">
-                {selectedProduct ? (
-                    <>
+            {/* VIEW: INVENTORY */}
+            {activeTab === 'inventory' && (
+                <>
+                    {/* Colonne Gauche : Liste Produits */}
+                    <div className="w-full lg:w-1/3 flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                {selectedProduct.image_url && <img src={selectedProduct.image_url} className="h-12 w-12 rounded-lg object-cover border border-gray-200" />}
-                                <div>
-                                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                                        {selectedProduct.name}
-                                    </h2>
-                                    <p className="text-sm text-gray-500 flex items-center gap-2">
-                                        <Globe className="h-3 w-3" /> {selectedProduct.availability} • 
-                                        <Shield className="h-3 w-3" /> {selectedProduct.warranty_type === 'extended' ? 'Garantie Étendue (SLA 24h)' : 'Garantie 2 ans'}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => handleDeleteProduct(selectedProduct.id)} className="text-red-600 hover:bg-red-50 border-red-200">
-                                    <Trash2 className="h-4 w-4 mr-2" /> Supprimer Produit
-                                </Button>
-                                <Button onClick={handleOpenUnitDialog} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
-                                    <Plus className="h-4 w-4 mr-2" /> Ajouter Unité
-                                </Button>
-                            </div>
+                            <h2 className="text-xl font-bold text-gray-900">Catalogue</h2>
+                            <Button onClick={() => setShowProductDialog(true)} size="sm" className="bg-black hover:bg-gray-800 text-white">
+                                <Plus className="h-4 w-4 mr-2" /> Nouveau
+                            </Button>
                         </div>
 
                         <Card className="flex-1 flex flex-col overflow-hidden border-gray-200 shadow-sm">
-                            <div className="grid grid-cols-6 gap-4 p-4 border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                <div className="col-span-2">Info Unité</div>
-                                <div>Specs</div>
-                                <div>Prix</div>
-                                <div>État</div>
-                                <div className="text-right">Action</div>
+                            <div className="p-4 border-b border-gray-100">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                    <Input placeholder="Rechercher un modèle..." className="pl-9 bg-gray-50 border-gray-200" />
+                                </div>
                             </div>
                             <ScrollArea className="flex-1">
                                 <div className="divide-y divide-gray-100">
-                                    {units.map(unit => (
-                                        <div key={unit.id} className="grid grid-cols-6 gap-4 p-4 items-center text-sm hover:bg-gray-50 transition-colors group">
-                                            <div className="col-span-2">
-                                                <div className="font-mono text-gray-900 flex items-center gap-2 font-medium">
-                                                    <Barcode className="h-4 w-4 text-gray-400" />
-                                                    {unit.serial_number}
+                                    {products.map(product => (
+                                        <div 
+                                            key={product.id} 
+                                            onClick={() => handleSelectProduct(product)}
+                                            className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors flex items-start gap-4 ${selectedProduct?.id === product.id ? 'bg-blue-50 border-l-4 border-blue-600' : 'border-l-4 border-transparent'}`}
+                                        >
+                                            <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden relative">
+                                                {product.image_url ? <img src={product.image_url} className="w-full h-full object-cover" /> : <Laptop className="h-6 w-6 text-gray-400" />}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-start">
+                                                    <h3 className="font-bold text-gray-900 truncate">{product.name}</h3>
+                                                    <span className="text-xs font-mono text-gray-500">${product.base_price}</span>
                                                 </div>
-                                                <div className="text-xs text-gray-500 capitalize">{unit.condition === 'new' ? 'Neuf' : 'Reconditionné'}</div>
-                                            </div>
-                                            
-                                            <div className="text-xs text-gray-600">
-                                                <div className="font-semibold">{unit.specific_specs?.ram_size}GB RAM • {unit.specific_specs?.storage}GB</div>
-                                                <div className="text-gray-400 text-[10px]">SSD NVMe {unit.specific_specs?.ram_speed}MHz</div>
-                                            </div>
-
-                                            <div className="font-medium">
-                                                ${unit.unit_price || selectedProduct.base_price}
-                                            </div>
-
-                                            <div>
-                                                <Badge variant="outline" className={`
-                                                    ${unit.status === 'available' ? 'bg-green-50 text-green-700 border-green-200' : ''}
-                                                    ${unit.status === 'sold' ? 'bg-gray-100 text-gray-600 border-gray-200' : ''}
-                                                    ${unit.status === 'maintenance' ? 'bg-orange-50 text-orange-700 border-orange-200' : ''}
-                                                `}>
-                                                    {unit.status}
-                                                </Badge>
-                                            </div>
-                                            
-                                            <div className="text-right opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDeleteUnit(unit.id)}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <Badge variant="outline" className="text-[10px] h-4 px-1">{product.availability}</Badge>
+                                                    <Badge variant="secondary" className="text-[10px] h-4 px-1">{product.warranty_type === 'extended' ? 'Garantie Étendue' : 'Standard'}</Badge>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
-                                    {units.length === 0 && (
-                                        <div className="p-12 text-center text-gray-400">
-                                            <Barcode className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                                            <p className="font-medium">Stock épuisé ou vide</p>
-                                            <p className="text-xs mt-1">Ajoutez des unités pour commencer la vente</p>
-                                        </div>
-                                    )}
                                 </div>
                             </ScrollArea>
                         </Card>
-                    </>
-                ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-300 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
-                        <Package className="h-16 w-16 mb-4 opacity-20" />
-                        <p className="text-lg font-medium text-gray-400">Sélectionnez un produit pour gérer son stock</p>
                     </div>
-                )}
-            </div>
+
+                    {/* Colonne Droite : Détails & Unités */}
+                    <div className="flex-1 flex flex-col gap-4">
+                        {selectedProduct ? (
+                            <>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        {selectedProduct.image_url && <img src={selectedProduct.image_url} className="h-12 w-12 rounded-lg object-cover border border-gray-200" />}
+                                        <div>
+                                            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">{selectedProduct.name}</h2>
+                                            <p className="text-sm text-gray-500 flex items-center gap-2"><Globe className="h-3 w-3" /> {selectedProduct.availability}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => handleDeleteProduct(selectedProduct.id)} className="text-red-600 hover:bg-red-50 border-red-200"><Trash2 className="h-4 w-4 mr-2" /> Supprimer</Button>
+                                        <Button onClick={handleOpenUnitDialog} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white"><Plus className="h-4 w-4 mr-2" /> Ajouter Unité</Button>
+                                    </div>
+                                </div>
+
+                                <Card className="flex-1 flex flex-col overflow-hidden border-gray-200 shadow-sm">
+                                    <div className="grid grid-cols-6 gap-4 p-4 border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <div className="col-span-2">Info Unité</div>
+                                        <div>Specs</div>
+                                        <div>Prix</div>
+                                        <div>État</div>
+                                        <div className="text-right">Action</div>
+                                    </div>
+                                    <ScrollArea className="flex-1">
+                                        <div className="divide-y divide-gray-100">
+                                            {units.map(unit => (
+                                                <div key={unit.id} className="grid grid-cols-6 gap-4 p-4 items-center text-sm hover:bg-gray-50 transition-colors group">
+                                                    <div className="col-span-2">
+                                                        <div className="font-mono text-gray-900 flex items-center gap-2 font-medium">
+                                                            <Barcode className="h-4 w-4 text-gray-400" />
+                                                            {unit.serial_number}
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 capitalize">{unit.condition === 'new' ? 'Neuf' : 'Reconditionné'}</div>
+                                                    </div>
+                                                    <div className="text-xs text-gray-600">
+                                                        <div className="font-semibold">{unit.specific_specs?.ram_size}GB RAM • {unit.specific_specs?.storage}GB</div>
+                                                    </div>
+                                                    <div className="font-medium">${unit.unit_price}</div>
+                                                    <div>
+                                                        <Badge variant="outline" className={`${unit.status === 'available' ? 'bg-green-50 text-green-700' : unit.status === 'sold' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{unit.status}</Badge>
+                                                    </div>
+                                                    <div className="text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDeleteUnit(unit.id)}><Trash2 className="h-4 w-4" /></Button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </ScrollArea>
+                                </Card>
+                            </>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-gray-300 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                                <Package className="h-16 w-16 mb-4 opacity-20" />
+                                <p className="text-lg font-medium text-gray-400">Sélectionnez un produit</p>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
+
+            {/* VIEW: CUSTOMERS */}
+            {activeTab === 'customers' && (
+                <div className="w-full flex flex-col items-center max-w-4xl mx-auto h-full">
+                    <div className="w-full mb-8">
+                        <h1 className="text-2xl font-bold text-gray-900 mb-2">Recherche Client</h1>
+                        <p className="text-gray-500 text-sm mb-6">Recherchez par nom, email, téléphone ou numéro de série d'appareil.</p>
+                        
+                        <div className="relative group">
+                            <div className="absolute -inset-1 bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                <Input 
+                                    placeholder="Ex: Jean Dupont, 514..., SIV-24-..." 
+                                    className="h-14 pl-12 text-lg bg-white shadow-lg border-gray-100 rounded-xl"
+                                    value={customerSearch}
+                                    onChange={(e) => handleCustomerSearch(e.target.value)}
+                                />
+                                {isSearchingCustomers && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-600 animate-spin" />}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-full grid gap-4">
+                        {customerResults.map(customer => (
+                            <Card 
+                                key={customer.id} 
+                                onClick={() => openCustomerDetails(customer)}
+                                className="cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group overflow-hidden"
+                            >
+                                <div className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <Avatar className="h-12 w-12 border border-gray-100">
+                                            {customer.avatar_url && <AvatarImage src={customer.avatar_url} />}
+                                            <AvatarFallback className="bg-gray-100 text-gray-500 font-bold">{customer.first_name[0]}</AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                                {customer.first_name} {customer.last_name}
+                                            </h3>
+                                            <div className="flex items-center gap-3 text-sm text-gray-500 mt-0.5">
+                                                <span className="flex items-center gap-1"><Mail className="h-3 w-3" /> {customer.email}</span>
+                                                {customer.phone_number && <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {customer.phone_number}</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {customer.is_pro && <Badge className="bg-black text-white">PRO</Badge>}
+                                        <ChevronRight className="text-gray-300 group-hover:text-blue-600" />
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                        {customerResults.length === 0 && customerSearch.length > 1 && !isSearchingCustomers && (
+                            <div className="text-center py-12 text-gray-400">Aucun client trouvé.</div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
 
         {/* Dialog Création Produit */}
@@ -436,42 +544,12 @@ const DeviceAdmin = () => {
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <Label>Image du produit</Label>
-                            <div 
-                                className="border-2 border-dashed border-gray-200 rounded-lg h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors"
-                                onClick={() => fileInputRef.current?.click()}
-                            >
-                                {prodForm.image_url ? (
-                                    <img src={prodForm.image_url} className="h-full w-full object-cover rounded-lg" />
-                                ) : (
-                                    <>
-                                        {isUploading ? <Loader2 className="h-6 w-6 animate-spin text-gray-400" /> : <Upload className="h-6 w-6 text-gray-400" />}
-                                        <span className="text-xs text-gray-500 mt-2">Cliquez pour uploader</span>
-                                    </>
-                                )}
+                            <div className="border-2 border-dashed border-gray-200 rounded-lg h-32 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => fileInputRef.current?.click()}>
+                                {prodForm.image_url ? <img src={prodForm.image_url} className="h-full w-full object-cover rounded-lg" /> : <>{isUploading ? <Loader2 className="h-6 w-6 animate-spin text-gray-400" /> : <Upload className="h-6 w-6 text-gray-400" />}<span className="text-xs text-gray-500 mt-2">Cliquez pour uploader</span></>}
                             </div>
                             <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
                         </div>
-
-                        <div className="space-y-2">
-                            <Label>Disponibilité (Pays)</Label>
-                            <Input value={prodForm.availability} onChange={e => setProdForm({...prodForm, availability: e.target.value})} placeholder="ex: Canada, France, US" />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Type de Garantie</Label>
-                            <Select value={prodForm.warranty_type} onValueChange={(v) => setProdForm({...prodForm, warranty_type: v})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="standard">Standard (2 ans)</SelectItem>
-                                    <SelectItem value="extended">Étendue (SLA 24h + Pièces + Main d'œuvre)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p className="text-[10px] text-gray-500 leading-tight">
-                                {prodForm.warranty_type === 'extended' 
-                                    ? "Inclut: Intervention sur site, remplacement express, support prioritaire." 
-                                    : "Garantie légale standard contre les défauts de fabrication."}
-                            </p>
-                        </div>
+                        <div className="space-y-2"><Label>Disponibilité</Label><Input value={prodForm.availability} onChange={e => setProdForm({...prodForm, availability: e.target.value})} placeholder="ex: Global" /></div>
                     </div>
                 </div>
                 <DialogFooter><Button onClick={handleSaveProduct}>Créer la fiche</Button></DialogFooter>
@@ -481,134 +559,109 @@ const DeviceAdmin = () => {
         {/* Dialog Création Unité */}
         <Dialog open={showUnitDialog} onOpenChange={setShowUnitDialog}>
             <DialogContent className="max-w-3xl">
-                <DialogHeader>
-                    <DialogTitle>Ajouter une Unité</DialogTitle>
-                    <DialogDescription>Configuration spécifique de l'ordinateur.</DialogDescription>
-                </DialogHeader>
-                
+                <DialogHeader><DialogTitle>Ajouter une Unité</DialogTitle></DialogHeader>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
                     <div className="space-y-6">
                         <div className="space-y-4">
-                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Spécifications Techniques</h3>
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Spécifications</h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Quantité RAM</Label>
-                                    <Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="16">16 GB</SelectItem>
-                                            <SelectItem value="32">32 GB</SelectItem>
-                                            <SelectItem value="64">64 GB</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Vitesse RAM</Label>
-                                    <Select value={unitForm.ram_speed} onValueChange={(v) => setUnitForm({...unitForm, ram_speed: v})}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="4800">4800 MHz</SelectItem>
-                                            <SelectItem value="5200">5200 MHz</SelectItem>
-                                            <SelectItem value="6000">6000 MHz</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Stockage (SSD NVMe)</Label>
-                                <Select value={unitForm.storage} onValueChange={(v) => setUnitForm({...unitForm, storage: v})}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="256">256 GB</SelectItem>
-                                        <SelectItem value="512">512 GB</SelectItem>
-                                        <SelectItem value="1024">1024 GB (1TB)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Fonctionnalités</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                    <Label htmlFor="touch" className="flex items-center gap-2 cursor-pointer"><Monitor className="h-4 w-4" /> Tactile</Label>
-                                    <Switch id="touch" checked={unitForm.features.touch} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, touch: c}})} />
-                                </div>
-                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                    <Label htmlFor="fp" className="flex items-center gap-2 cursor-pointer"><Fingerprint className="h-4 w-4" /> Fingerprint</Label>
-                                    <Switch id="fp" checked={unitForm.features.fingerprint} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, fingerprint: c}})} />
-                                </div>
-                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                    <Label htmlFor="wifi" className="flex items-center gap-2 cursor-pointer"><Wifi className="h-4 w-4" /> Wifi 6E</Label>
-                                    <Switch id="wifi" checked={unitForm.features.wifi} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, wifi: c}})} />
-                                </div>
-                                <div className="flex items-center justify-between space-x-2 bg-gray-50 p-3 rounded-lg">
-                                    <Label htmlFor="bt" className="flex items-center gap-2 cursor-pointer"><Bluetooth className="h-4 w-4" /> Bluetooth 5.3</Label>
-                                    <Switch id="bt" checked={unitForm.features.bluetooth} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, bluetooth: c}})} />
-                                </div>
+                                <div className="space-y-2"><Label>Quantité RAM</Label><Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="16">16 GB</SelectItem><SelectItem value="32">32 GB</SelectItem><SelectItem value="64">64 GB</SelectItem></SelectContent></Select></div>
+                                <div className="space-y-2"><Label>Stockage</Label><Select value={unitForm.storage} onValueChange={(v) => setUnitForm({...unitForm, storage: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="256">256 GB</SelectItem><SelectItem value="512">512 GB</SelectItem><SelectItem value="1024">1 TB</SelectItem></SelectContent></Select></div>
                             </div>
                         </div>
                     </div>
-
                     <div className="space-y-6">
-                        <div className="space-y-4">
-                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Formule d'Abonnement</h3>
-                            
-                            <div className="space-y-2">
-                                <Label className="text-base">Prix de vente total ($)</Label>
-                                <Input 
-                                    type="number" 
-                                    value={unitForm.unit_price} 
-                                    onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} 
-                                    className="text-lg font-bold"
-                                />
-                            </div>
-
-                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-                                <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Abonnement Device</h4>
-                                
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-gray-600">Apport initial (20%)</span>
-                                    <span className="font-bold text-gray-900">${financials.upfront.toFixed(2)}</span>
-                                </div>
-                                <div className="h-px bg-blue-200/50 w-full"></div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-gray-600">Valeur lissée</span>
-                                    <span className="font-medium text-gray-700">${(unitForm.unit_price - financials.upfront).toFixed(2)}</span>
-                                </div>
-                                <div className="bg-white p-3 rounded-lg border border-blue-100 flex justify-between items-center shadow-sm">
-                                    <span className="text-sm font-bold text-blue-700">Mensualité (16 mois)</span>
-                                    <span className="text-lg font-bold text-blue-700">${financials.monthly.toFixed(2)}/mois</span>
-                                </div>
-                                <div className="text-[10px] text-blue-600/80 mt-2 text-center">
-                                    * Abonnement renouvelable. Retour matériel possible à tout moment sans frais.
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>État & Condition</Label>
-                            <div className="grid grid-cols-2 gap-4">
-                                <Select value={unitForm.condition} onValueChange={(v: any) => setUnitForm({...unitForm, condition: v})}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent><SelectItem value="new">Neuf</SelectItem><SelectItem value="refurbished">Reconditionné</SelectItem></SelectContent>
-                                </Select>
-                                <Select value={unitForm.status} onValueChange={(v: any) => setUnitForm({...unitForm, status: v})}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="available">Disponible</SelectItem>
-                                        <SelectItem value="reserved">Réservé</SelectItem>
-                                        <SelectItem value="maintenance">Maintenance</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
+                        <div className="space-y-4"><h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Prix & Statut</h3><div className="space-y-2"><Label>Prix ($)</Label><Input type="number" value={unitForm.unit_price} onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} /></div></div>
                     </div>
                 </div>
-                <DialogFooter className="sm:justify-between items-center">
-                    <p className="text-xs text-gray-400 italic">S/N généré automatiquement à la validation.</p>
-                    <Button onClick={handleSaveUnit} className="bg-black hover:bg-gray-800 text-white">Ajouter au stock</Button>
-                </DialogFooter>
+                <DialogFooter><Button onClick={handleSaveUnit}>Ajouter au stock</Button></DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        {/* CUSTOMER DETAIL DIALOG */}
+        <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
+            <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col bg-[#F8F9FA] p-0 gap-0 overflow-hidden">
+                {selectedCustomer && (
+                    <>
+                        <div className="bg-white p-6 border-b border-gray-200">
+                            <div className="flex items-center gap-6">
+                                <Avatar className="h-20 w-20 border-2 border-white shadow-md">
+                                    {selectedCustomer.avatar_url && <AvatarImage src={selectedCustomer.avatar_url} />}
+                                    <AvatarFallback className="bg-gray-900 text-white text-xl">{selectedCustomer.first_name[0]}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                    <h2 className="text-2xl font-bold text-gray-900">{selectedCustomer.first_name} {selectedCustomer.last_name}</h2>
+                                    <div className="flex flex-col gap-1 mt-1 text-sm text-gray-500">
+                                        <span className="flex items-center gap-2"><Mail className="h-3 w-3" /> {selectedCustomer.email}</span>
+                                        {selectedCustomer.phone_number && <span className="flex items-center gap-2"><Phone className="h-3 w-3" /> {selectedCustomer.phone_number}</span>}
+                                    </div>
+                                    <div className="mt-3 flex gap-2">
+                                        {selectedCustomer.is_pro ? <Badge className="bg-green-600 text-white border-0">Abonné Pro</Badge> : <Badge variant="outline">Gratuit</Badge>}
+                                        <Badge variant="secondary" className="uppercase text-[10px]">{selectedCustomer.subscription_status}</Badge>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <ScrollArea className="flex-1 p-6">
+                            <div className="space-y-6">
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Laptop className="h-4 w-4" /> Ordinateurs Actifs</h3>
+                                    {customerDevices.length > 0 ? (
+                                        <div className="grid gap-3">
+                                            {customerDevices.map(unit => (
+                                                <div key={unit.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex justify-between items-center">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="h-12 w-12 bg-gray-50 rounded-lg flex items-center justify-center">
+                                                            {unit.product?.image_url ? <img src={unit.product.image_url} className="w-full h-full object-contain" /> : <Laptop className="h-6 w-6 text-gray-300" />}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-gray-900">{unit.product?.name}</div>
+                                                            <div className="text-xs text-gray-500 font-mono">S/N: {unit.serial_number}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="font-medium text-sm">${unit.unit_price}</div>
+                                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100">Location</Badge>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white p-8 rounded-xl border border-dashed border-gray-200 text-center text-gray-400">
+                                            <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                            <p className="text-sm">Aucun appareil associé</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2"><CreditCard className="h-4 w-4" /> Facturation</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Card className="bg-white border-gray-200 shadow-sm">
+                                            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Total Mensuel</CardTitle></CardHeader>
+                                            <CardContent>
+                                                <div className="text-2xl font-bold text-gray-900">
+                                                    ${customerDevices.reduce((acc, unit) => acc + (unit.unit_price * 1.14975 * 0.8 / 16), 0).toFixed(2)}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="bg-white border-gray-200 shadow-sm">
+                                            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Statut Compte</CardTitle></CardHeader>
+                                            <CardContent>
+                                                <div className="text-lg font-medium text-green-600 flex items-center gap-2"><CheckCircle2 className="h-5 w-5" /> En règle</div>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                </div>
+                            </div>
+                        </ScrollArea>
+                        
+                        <div className="p-4 bg-white border-t border-gray-200 flex justify-end">
+                            <Button onClick={() => setShowCustomerDialog(false)} variant="outline">Fermer</Button>
+                        </div>
+                    </>
+                )}
             </DialogContent>
         </Dialog>
     </div>
