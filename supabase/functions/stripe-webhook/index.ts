@@ -26,7 +26,6 @@ serve(async (req) => {
     let event;
 
     try {
-        // IMPORTANT: Utilisation de la version Async pour Deno/Edge Runtime
         event = await stripe.webhooks.constructEventAsync(body, signature, endpointSecret)
     } catch (err: any) {
         console.error(`[Webhook] Erreur de signature: ${err.message}`)
@@ -44,12 +43,43 @@ serve(async (req) => {
 
     // Gestion des événements
     switch (event.type) {
-      // Abonnement créé ou mis à jour (Essai, Renouvellement, Annulation programmée)
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const subscription = event.data.object
+        const status = subscription.status // active, trialing, canceled, past_due
         
-        // Trouver l'utilisateur via stripe_customer_id
+        // --- 1. GESTION DES APPAREILS (DEVICE RENTAL) ---
+        // Prioritaire et indépendant du mapping profil/stripe_id
+        if (subscription.metadata?.type === 'device_rental') {
+            const unitId = subscription.metadata.unit_id;
+            const userId = subscription.metadata.supabase_user_id;
+
+            console.log(`[Webhook] Traitement Device Rental. Unit: ${unitId}, User: ${userId}, Status: ${status}`);
+
+            if (unitId && userId && status === 'active') {
+                // Attribution définitive
+                const { error: deviceError } = await supabase.from('device_units').update({ 
+                    status: 'sold',
+                    sold_to_user_id: userId,
+                    reserved_at: null 
+                }).eq('id', unitId);
+
+                if (deviceError) console.error("[Webhook] Erreur update device:", deviceError);
+                else console.log(`[Webhook] SUCCÈS: Device ${unitId} attribué à ${userId}`);
+
+            } else if (unitId && (status === 'canceled' || status === 'unpaid' || status === 'past_due')) {
+                // Libération si échec paiement
+                await supabase.from('device_units').update({ 
+                    status: 'available',
+                    sold_to_user_id: null,
+                    reserved_at: null
+                }).eq('id', unitId);
+                console.log(`[Webhook] Device ${unitId} libéré (Paiement échoué/Annulé)`);
+            }
+        }
+
+        // --- 2. GESTION DU STATUT PRO ---
+        // Nécessite de trouver le profil via stripe_customer_id
         const { data: profile } = await supabase
           .from('profiles')
           .select('id')
@@ -57,77 +87,53 @@ serve(async (req) => {
           .single()
 
         if (profile) {
-           const status = subscription.status // active, trialing, canceled, past_due
            const isPro = status === 'active' || status === 'trialing'
            const endDate = new Date(subscription.current_period_end * 1000).toISOString()
            const hasUsedTrial = subscription.status === 'trialing' || subscription.status === 'active'
 
-           // Vérifier si c'est un Device Rental (métadonnées)
-           const isDeviceRental = subscription.metadata?.type === 'device_rental';
-
-           if (isDeviceRental) {
-               // Pour les locations d'appareils, on met à jour le statut de l'unité
-               const unitId = subscription.metadata.unit_id;
-               const userId = subscription.metadata.supabase_user_id || profile.id; // Fallback sur le profil trouvé
-
-               if (unitId && status === 'active') {
-                   // --- FIX: Attribution de l'ordinateur à l'utilisateur ---
-                   await supabase.from('device_units').update({ 
-                       status: 'sold',
-                       sold_to_user_id: userId, // CRUCIAL: Lie l'ordi au user
-                       reserved_at: null // Nettoyage réservation
-                   }).eq('id', unitId);
-                   
-                   console.log(`[Webhook] Device ${unitId} attribué à ${userId}`);
-
-               } else if (unitId && (status === 'canceled' || status === 'unpaid')) {
-                   // Libération si paiement échoué ou annulé
-                   await supabase.from('device_units').update({ 
-                       status: 'available',
-                       sold_to_user_id: null
-                   }).eq('id', unitId);
-               }
-           } else {
-               // Abonnement Pro classique
-               await supabase.from('profiles').update({
-                 is_pro: isPro,
-                 subscription_status: status,
-                 subscription_end_date: endDate,
-                 stripe_subscription_id: subscription.id,
-                 ...(hasUsedTrial ? { has_used_trial: true } : {})
-               }).eq('id', profile.id)
-           }
+           // On ne met à jour le statut PRO que si ce n'est PAS une location d'appareil seule
+           // (Sauf si l'abonnement device inclut le statut Pro, ce qui est généralement le cas)
+           // Ici on assume que tout abonnement actif donne le statut pro/client actif
+           
+           await supabase.from('profiles').update({
+             is_pro: isPro,
+             subscription_status: status,
+             subscription_end_date: endDate,
+             stripe_subscription_id: subscription.id,
+             ...(hasUsedTrial ? { has_used_trial: true } : {})
+           }).eq('id', profile.id)
            
            console.log(`[Webhook] Profil ${profile.id} mis à jour: ${status}`)
         } else {
-           console.warn(`[Webhook] Aucun profil trouvé pour le client Stripe: ${subscription.customer}`)
+           console.warn(`[Webhook] Aucun profil trouvé pour le client Stripe: ${subscription.customer} (Normal pour Device Rental si premier achat)`)
         }
         break
       }
 
-      // Abonnement supprimé immédiatement
       case 'customer.subscription.deleted': {
         const subscription = event.data.object
         
-        // Gestion Device
         if (subscription.metadata?.type === 'device_rental') {
              const unitId = subscription.metadata.unit_id;
              if (unitId) {
                  await supabase.from('device_units').update({ 
                      status: 'available',
-                     sold_to_user_id: null 
+                     sold_to_user_id: null,
+                     reserved_at: null
                  }).eq('id', unitId);
+                 console.log(`[Webhook] Device ${unitId} libéré (Subscription deleted)`);
              }
-        } else {
-             // Gestion Pro
+        }
+        
+        // Mise à jour profil si trouvé
+        const { data: profile } = await supabase.from('profiles').select('id').eq('stripe_customer_id', subscription.customer).single();
+        if (profile) {
              await supabase.from('profiles').update({
                   is_pro: false,
                   subscription_status: 'canceled',
                   subscription_end_date: null,
-             }).eq('stripe_customer_id', subscription.customer)
+             }).eq('id', profile.id)
         }
-        
-        console.log(`[Webhook] Abonnement supprimé pour le client: ${subscription.customer}`)
         break
       }
     }
