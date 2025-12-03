@@ -278,18 +278,43 @@ const DeviceCheckout = () => {
       if (!unit) return;
       setIsProcessing(true);
       
-      const hostname = window.location.hostname;
-      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-      
-      let targetUrl = '';
-      
-      if (isLocal) {
-          targetUrl = `${window.location.origin}/?app=id&unit_id=${unit.id}`;
-      } else {
-          targetUrl = `https://id.sivara.ca/?unit_id=${unit.id}`;
-      }
+      try {
+          // Sauvegarde de l'adresse dans l'unité avant redirection
+          const shippingData = {
+              line1: address,
+              city: city,
+              postal_code: postalCode,
+              country: 'CA',
+              first_name: firstName,
+              last_name: lastName,
+              delivery_method: deliveryOption
+          };
+          
+          await supabase
+            .from('device_units')
+            .update({ shipping_address: shippingData })
+            .eq('id', unit.id);
 
-      window.location.href = targetUrl;
+          const hostname = window.location.hostname;
+          const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+          
+          let targetUrl = '';
+          
+          if (isLocal) {
+              targetUrl = `${window.location.origin}/?app=id&unit_id=${unit.id}`;
+          } else {
+              targetUrl = `https://id.sivara.ca/?unit_id=${unit.id}`;
+          }
+
+          window.location.href = targetUrl;
+      } catch (e) {
+          console.error("Erreur sauvegarde adresse", e);
+          // On continue même si l'update échoue pour ne pas bloquer le flow
+          const hostname = window.location.hostname;
+          const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+          let targetUrl = isLocal ? `${window.location.origin}/?app=id&unit_id=${unit.id}` : `https://id.sivara.ca/?unit_id=${unit.id}`;
+          window.location.href = targetUrl;
+      }
   };
 
   if (loadingUnit) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="h-8 w-8 animate-spin text-gray-300" /></div>;
@@ -371,12 +396,8 @@ const DeviceCheckout = () => {
       <div className="lg:w-7/12 p-8 lg:p-20 flex flex-col">
          
          {!user && (
-            <div className="mb-8 bg-black text-white p-4 rounded-xl flex items-center justify-between shadow-lg transform -translate-y-2">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/20 rounded-full"><AlertCircle className="h-4 w-4" /></div>
-                    <div className="text-sm font-medium">Connectez-vous pour finaliser votre dossier</div>
-                </div>
-                <Button size="sm" variant="secondary" onClick={handleLoginRedirect} className="text-xs h-8">Connexion</Button>
+            <div className="mb-8 bg-black text-white p-4 rounded-xl flex items-center justify-center gap-4 shadow-lg transform -translate-y-2">
+                <Button size="sm" variant="secondary" onClick={handleLoginRedirect} className="text-xs h-8">Connexion Requise</Button>
             </div>
          )}
 

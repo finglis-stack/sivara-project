@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Loader2, ArrowLeft, Mail, Phone, Laptop, Package, CreditCard, 
   CheckCircle2, AlertCircle, Shield, LayoutDashboard, FileText, 
-  History, Eye, XCircle, Clock, AlertTriangle, Fingerprint, Activity
+  History, Eye, XCircle, Clock, AlertTriangle, Fingerprint, Activity, MapPin
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
@@ -32,6 +32,7 @@ interface Unit {
   id: string;
   serial_number: string;
   unit_price: number;
+  shipping_address?: any;
   product: {
     name: string;
     image_url: string;
@@ -63,6 +64,7 @@ const DeviceCustomerDetails = () => {
   const [devices, setDevices] = useState<Unit[]>([]);
   const [verifications, setVerifications] = useState<Verification[]>([]);
   const [selectedVerification, setSelectedVerification] = useState<Verification | null>(null);
+  const [lastShippingAddress, setLastShippingAddress] = useState<any>(null);
   
   const [isIdentityVerified, setIsIdentityVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,18 +96,30 @@ const DeviceCustomerDetails = () => {
         const approved = verifs?.find((v: any) => v.status === 'approved');
         setIsIdentityVerified(!!approved);
 
-        // 3. Fetch Customer Devices
+        // 3. Fetch Customer Devices with Shipping Info
         const { data: units } = await supabase
             .from('device_units')
             .select(`
                 id,
                 serial_number,
                 unit_price,
+                shipping_address,
+                updated_at,
                 product:device_products(name, image_url)
             `)
-            .eq('sold_to_user_id', id);
+            .eq('sold_to_user_id', id)
+            .order('updated_at', { ascending: false });
             
         setDevices(units as any || []);
+
+        // 4. Extract Last Shipping Address
+        if (units && units.length > 0) {
+            const lastUnitWithAddress = units.find((u: any) => u.shipping_address);
+            if (lastUnitWithAddress) {
+                setLastShippingAddress(lastUnitWithAddress.shipping_address);
+            }
+        }
+
       } catch (error) {
         console.error("Erreur chargement client", error);
       } finally {
@@ -201,16 +215,7 @@ const DeviceCustomerDetails = () => {
                         <p className="text-gray-500">Synthèse du compte client.</p>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-6">
-                        <Card className="border-gray-100 shadow-sm bg-blue-50/50">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-gray-500">Statut Compte</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold text-blue-700 capitalize">{customer.subscription_status || 'Inactif'}</div>
-                                {customer.is_pro && <Badge className="mt-2 bg-blue-600">Sivara Pro</Badge>}
-                            </CardContent>
-                        </Card>
+                    <div className="grid grid-cols-2 gap-6">
                         <Card className="border-gray-100 shadow-sm">
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-sm font-medium text-gray-500">Risque Identité</CardTitle>
@@ -241,13 +246,32 @@ const DeviceCustomerDetails = () => {
 
                     <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
                         <h3 className="font-bold text-gray-900 mb-4">Informations de contact</h3>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div className="flex items-center gap-2 text-gray-600">
-                                <Mail className="h-4 w-4" /> {customer.email}
+                        <div className="grid grid-cols-2 gap-6 text-sm">
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <Mail className="h-4 w-4" /> {customer.email}
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <Phone className="h-4 w-4" /> {customer.phone_number || 'Non renseigné'}
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2 text-gray-600">
-                                <Phone className="h-4 w-4" /> {customer.phone_number || 'Non renseigné'}
-                            </div>
+                            
+                            {lastShippingAddress ? (
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-gray-900 font-medium mb-1">
+                                        <MapPin className="h-4 w-4 text-blue-600" /> Adresse de livraison (Dernière commande)
+                                    </div>
+                                    <div className="pl-6 text-gray-600 leading-relaxed">
+                                        {lastShippingAddress.line1}<br/>
+                                        {lastShippingAddress.city}, {lastShippingAddress.postal_code}<br/>
+                                        {lastShippingAddress.country}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 text-gray-400 italic">
+                                    <MapPin className="h-4 w-4" /> Aucune adresse enregistrée
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
