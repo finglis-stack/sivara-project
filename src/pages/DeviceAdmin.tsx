@@ -4,20 +4,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { showSuccess, showError } from '@/utils/toast';
 import { 
   Package, Plus, Search, Barcode, Laptop, ArrowLeft, 
-  Trash2, Edit2, CheckCircle2, AlertCircle, Box, DollarSign, Upload, Globe, Shield, Loader2,
-  Cpu, Wifi, Bluetooth, Fingerprint, Monitor, RefreshCw, Users, Mail, Phone, CreditCard, User, ChevronRight
+  Trash2, CheckCircle2, Upload, Globe, Loader2,
+  Mail, Phone, ChevronRight
 } from 'lucide-react';
 
 interface Product {
@@ -70,7 +69,9 @@ const DeviceAdmin = () => {
   const [isVendor, setIsVendor] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'inventory' | 'customers'>('inventory');
+  
+  // CHANGEMENT: Onglet Clients par défaut
+  const [activeTab, setActiveTab] = useState<'inventory' | 'customers'>('customers');
 
   // Inventory Data
   const [products, setProducts] = useState<Product[]>([]);
@@ -80,14 +81,11 @@ const DeviceAdmin = () => {
   // Customer Data
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [customerDevices, setCustomerDevices] = useState<Unit[]>([]);
   const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
   
   // UI State
   const [showProductDialog, setShowProductDialog] = useState(false);
   const [showUnitDialog, setShowUnitDialog] = useState(false);
-  const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Forms
@@ -158,7 +156,6 @@ const DeviceAdmin = () => {
             .limit(5);
 
           // Recherche par S/N (Device) pour trouver le proprio
-          // Si la query ressemble à un numéro de série
           let serialMatches: any[] = [];
           if (query.length > 3) {
              const { data: units } = await supabase
@@ -187,20 +184,9 @@ const DeviceAdmin = () => {
       }
   };
 
-  const openCustomerDetails = async (customer: Customer) => {
-      setSelectedCustomer(customer);
-      setShowCustomerDialog(true);
-      
-      // Fetch devices
-      const { data: devices } = await supabase
-        .from('device_units')
-        .select(`
-            *,
-            product:device_products(*)
-        `)
-        .eq('sold_to_user_id', customer.id);
-        
-      setCustomerDevices(devices as any || []);
+  const openCustomerDetails = (customer: Customer) => {
+      // NAVIGATION VERS LA NOUVELLE PAGE
+      navigate(`/admin/customer/${customer.id}?app=device`);
   };
 
   const handleSelectProduct = (product: Product) => {
@@ -318,15 +304,6 @@ const DeviceAdmin = () => {
       if (selectedProduct) fetchUnits(selectedProduct.id);
   };
 
-  const calculateFinancials = (price: number) => {
-      const upfront = price * 0.20;
-      const remainder = price * 0.80;
-      const monthly = remainder / 16;
-      return { upfront, monthly };
-  };
-
-  const financials = calculateFinancials(unitForm.unit_price || 0);
-
   if (!isVendor) return null;
 
   return (
@@ -346,8 +323,8 @@ const DeviceAdmin = () => {
                 </div>
                 
                 <div className="flex bg-gray-100 p-1 rounded-lg">
-                    <button onClick={() => setActiveTab('inventory')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'inventory' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-900'}`}>Inventaire</button>
                     <button onClick={() => setActiveTab('customers')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'customers' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-900'}`}>Clients</button>
+                    <button onClick={() => setActiveTab('inventory')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'inventory' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-900'}`}>Inventaire</button>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -360,6 +337,65 @@ const DeviceAdmin = () => {
 
         <div className="flex-1 container mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8 overflow-hidden h-[calc(100vh-64px)]">
             
+            {/* VIEW: CUSTOMERS (Maintenant en premier) */}
+            {activeTab === 'customers' && (
+                <div className="w-full flex flex-col items-center max-w-4xl mx-auto h-full">
+                    <div className="w-full mb-8">
+                        <h1 className="text-2xl font-bold text-gray-900 mb-2">Recherche Client</h1>
+                        <p className="text-gray-500 text-sm mb-6">Recherchez par nom, email, téléphone ou numéro de série d'appareil.</p>
+                        
+                        <div className="relative group">
+                            <div className="absolute -inset-1 bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                <Input 
+                                    placeholder="Ex: Jean Dupont, 514..., SIV-24-..." 
+                                    className="h-14 pl-12 text-lg bg-white shadow-lg border-gray-100 rounded-xl"
+                                    value={customerSearch}
+                                    onChange={(e) => handleCustomerSearch(e.target.value)}
+                                />
+                                {isSearchingCustomers && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-600 animate-spin" />}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-full grid gap-4">
+                        {customerResults.map(customer => (
+                            <Card 
+                                key={customer.id} 
+                                onClick={() => openCustomerDetails(customer)}
+                                className="cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group overflow-hidden"
+                            >
+                                <div className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <Avatar className="h-12 w-12 border border-gray-100">
+                                            {customer.avatar_url && <AvatarImage src={customer.avatar_url} />}
+                                            <AvatarFallback className="bg-gray-100 text-gray-500 font-bold">{customer.first_name[0]}</AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                                {customer.first_name} {customer.last_name}
+                                            </h3>
+                                            <div className="flex items-center gap-3 text-sm text-gray-500 mt-0.5">
+                                                <span className="flex items-center gap-1"><Mail className="h-3 w-3" /> {customer.email}</span>
+                                                {customer.phone_number && <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {customer.phone_number}</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {customer.is_pro && <Badge className="bg-black text-white">PRO</Badge>}
+                                        <ChevronRight className="text-gray-300 group-hover:text-blue-600" />
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                        {customerResults.length === 0 && customerSearch.length > 1 && !isSearchingCustomers && (
+                            <div className="text-center py-12 text-gray-400">Aucun client trouvé.</div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* VIEW: INVENTORY */}
             {activeTab === 'inventory' && (
                 <>
@@ -469,65 +505,6 @@ const DeviceAdmin = () => {
                     </div>
                 </>
             )}
-
-            {/* VIEW: CUSTOMERS */}
-            {activeTab === 'customers' && (
-                <div className="w-full flex flex-col items-center max-w-4xl mx-auto h-full">
-                    <div className="w-full mb-8">
-                        <h1 className="text-2xl font-bold text-gray-900 mb-2">Recherche Client</h1>
-                        <p className="text-gray-500 text-sm mb-6">Recherchez par nom, email, téléphone ou numéro de série d'appareil.</p>
-                        
-                        <div className="relative group">
-                            <div className="absolute -inset-1 bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>
-                            <div className="relative">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                                <Input 
-                                    placeholder="Ex: Jean Dupont, 514..., SIV-24-..." 
-                                    className="h-14 pl-12 text-lg bg-white shadow-lg border-gray-100 rounded-xl"
-                                    value={customerSearch}
-                                    onChange={(e) => handleCustomerSearch(e.target.value)}
-                                />
-                                {isSearchingCustomers && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-600 animate-spin" />}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="w-full grid gap-4">
-                        {customerResults.map(customer => (
-                            <Card 
-                                key={customer.id} 
-                                onClick={() => openCustomerDetails(customer)}
-                                className="cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group overflow-hidden"
-                            >
-                                <div className="p-4 flex items-center justify-between">
-                                    <div className="flex items-center gap-4">
-                                        <Avatar className="h-12 w-12 border border-gray-100">
-                                            {customer.avatar_url && <AvatarImage src={customer.avatar_url} />}
-                                            <AvatarFallback className="bg-gray-100 text-gray-500 font-bold">{customer.first_name[0]}</AvatarFallback>
-                                        </Avatar>
-                                        <div>
-                                            <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                                                {customer.first_name} {customer.last_name}
-                                            </h3>
-                                            <div className="flex items-center gap-3 text-sm text-gray-500 mt-0.5">
-                                                <span className="flex items-center gap-1"><Mail className="h-3 w-3" /> {customer.email}</span>
-                                                {customer.phone_number && <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {customer.phone_number}</span>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        {customer.is_pro && <Badge className="bg-black text-white">PRO</Badge>}
-                                        <ChevronRight className="text-gray-300 group-hover:text-blue-600" />
-                                    </div>
-                                </div>
-                            </Card>
-                        ))}
-                        {customerResults.length === 0 && customerSearch.length > 1 && !isSearchingCustomers && (
-                            <div className="text-center py-12 text-gray-400">Aucun client trouvé.</div>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
 
         {/* Dialog Création Produit */}
@@ -575,93 +552,6 @@ const DeviceAdmin = () => {
                     </div>
                 </div>
                 <DialogFooter><Button onClick={handleSaveUnit}>Ajouter au stock</Button></DialogFooter>
-            </DialogContent>
-        </Dialog>
-
-        {/* CUSTOMER DETAIL DIALOG */}
-        <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
-            <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col bg-[#F8F9FA] p-0 gap-0 overflow-hidden">
-                {selectedCustomer && (
-                    <>
-                        <div className="bg-white p-6 border-b border-gray-200">
-                            <div className="flex items-center gap-6">
-                                <Avatar className="h-20 w-20 border-2 border-white shadow-md">
-                                    {selectedCustomer.avatar_url && <AvatarImage src={selectedCustomer.avatar_url} />}
-                                    <AvatarFallback className="bg-gray-900 text-white text-xl">{selectedCustomer.first_name[0]}</AvatarFallback>
-                                </Avatar>
-                                <div>
-                                    <h2 className="text-2xl font-bold text-gray-900">{selectedCustomer.first_name} {selectedCustomer.last_name}</h2>
-                                    <div className="flex flex-col gap-1 mt-1 text-sm text-gray-500">
-                                        <span className="flex items-center gap-2"><Mail className="h-3 w-3" /> {selectedCustomer.email}</span>
-                                        {selectedCustomer.phone_number && <span className="flex items-center gap-2"><Phone className="h-3 w-3" /> {selectedCustomer.phone_number}</span>}
-                                    </div>
-                                    <div className="mt-3 flex gap-2">
-                                        {selectedCustomer.is_pro ? <Badge className="bg-green-600 text-white border-0">Abonné Pro</Badge> : <Badge variant="outline">Gratuit</Badge>}
-                                        <Badge variant="secondary" className="uppercase text-[10px]">{selectedCustomer.subscription_status}</Badge>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <ScrollArea className="flex-1 p-6">
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Laptop className="h-4 w-4" /> Ordinateurs Actifs</h3>
-                                    {customerDevices.length > 0 ? (
-                                        <div className="grid gap-3">
-                                            {customerDevices.map(unit => (
-                                                <div key={unit.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex justify-between items-center">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="h-12 w-12 bg-gray-50 rounded-lg flex items-center justify-center">
-                                                            {unit.product?.image_url ? <img src={unit.product.image_url} className="w-full h-full object-contain" /> : <Laptop className="h-6 w-6 text-gray-300" />}
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-bold text-gray-900">{unit.product?.name}</div>
-                                                            <div className="text-xs text-gray-500 font-mono">S/N: {unit.serial_number}</div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="font-medium text-sm">${unit.unit_price}</div>
-                                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100">Location</Badge>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="bg-white p-8 rounded-xl border border-dashed border-gray-200 text-center text-gray-400">
-                                            <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                            <p className="text-sm">Aucun appareil associé</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2"><CreditCard className="h-4 w-4" /> Facturation</h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <Card className="bg-white border-gray-200 shadow-sm">
-                                            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Total Mensuel</CardTitle></CardHeader>
-                                            <CardContent>
-                                                <div className="text-2xl font-bold text-gray-900">
-                                                    ${customerDevices.reduce((acc, unit) => acc + (unit.unit_price * 1.14975 * 0.8 / 16), 0).toFixed(2)}
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                        <Card className="bg-white border-gray-200 shadow-sm">
-                                            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Statut Compte</CardTitle></CardHeader>
-                                            <CardContent>
-                                                <div className="text-lg font-medium text-green-600 flex items-center gap-2"><CheckCircle2 className="h-5 w-5" /> En règle</div>
-                                            </CardContent>
-                                        </Card>
-                                    </div>
-                                </div>
-                            </div>
-                        </ScrollArea>
-                        
-                        <div className="p-4 bg-white border-t border-gray-200 flex justify-end">
-                            <Button onClick={() => setShowCustomerDialog(false)} variant="outline">Fermer</Button>
-                        </div>
-                    </>
-                )}
             </DialogContent>
         </Dialog>
     </div>

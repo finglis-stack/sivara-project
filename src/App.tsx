@@ -34,6 +34,7 @@ import DeviceLanding from "./pages/DeviceLanding";
 import DeviceAdmin from "./pages/DeviceAdmin";
 import DeviceCheckout from "./pages/DeviceCheckout";
 import IdentityVerification from "./pages/IdentityVerification";
+import DeviceCustomerDetails from "./pages/DeviceCustomerDetails";
 
 const queryClient = new QueryClient();
 
@@ -131,6 +132,11 @@ const AppRoutes = () => {
             <Route path="/admin" element={
                 <ProtectedRoute>
                     <DeviceAdmin />
+                </ProtectedRoute>
+            } />
+            <Route path="/admin/customer/:id" element={
+                <ProtectedRoute>
+                    <DeviceCustomerDetails />
                 </ProtectedRoute>
             } />
             <Route path="*" element={<Navigate to="/" replace />} />
