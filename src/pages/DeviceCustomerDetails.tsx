@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, lazy, Suspense } from 'react';
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -17,8 +17,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
 
-// Lazy Load du composant lourd 3D pour protéger le reste de l'app
-const Oracle3D = lazy(() => import('@/components/Oracle3D'));
+// Changement : Import du panneau 2D robuste
+import OraclePanel from '@/components/OraclePanel';
 
 interface Customer {
   id: string;
@@ -248,7 +248,7 @@ const DeviceCustomerDetails = () => {
             <button onClick={() => setActiveSection('overview')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'overview' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><LayoutDashboard className="h-4 w-4" /> Vue d'ensemble</button>
             <button onClick={() => setActiveSection('identity')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'identity' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><Shield className="h-4 w-4" /> Identité & KYC {isIdentityVerified && <CheckCircle2 className="h-3 w-3 text-green-500 ml-auto" />}</button>
             <button onClick={() => setActiveSection('devices')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'devices' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><Laptop className="h-4 w-4" /> Appareils <Badge variant="secondary" className="ml-auto text-[10px] h-5">{devices.length}</Badge></button>
-            <button onClick={() => setActiveSection('billing')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'billing' ? 'bg-black text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><BrainCircuit className="h-4 w-4" /> L'Oracle 3D</button>
+            <button onClick={() => setActiveSection('billing')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'billing' ? 'bg-black text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><BrainCircuit className="h-4 w-4" /> Oracle Financier</button>
         </nav>
         <div className="p-4 border-t border-gray-200 text-xs text-gray-400">Client depuis le {new Date(customer.created_at).toLocaleDateString()}</div>
       </div>
@@ -256,7 +256,7 @@ const DeviceCustomerDetails = () => {
       <div className="flex-1 overflow-y-auto bg-gray-50 relative">
         <div className={`h-full ${activeSection === 'billing' ? 'p-0 overflow-hidden' : 'p-8 max-w-5xl mx-auto'}`}>
             
-            {/* OVERVIEW SECTION (Standard UI) */}
+            {/* OVERVIEW SECTION */}
             {activeSection === 'overview' && (
                 <div className="space-y-8 animate-in fade-in duration-300">
                     <div><h1 className="text-2xl font-bold text-gray-900">Vue d'ensemble</h1><p className="text-gray-500">Synthèse du compte client.</p></div>
@@ -268,14 +268,14 @@ const DeviceCustomerDetails = () => {
                 </div>
             )}
 
-            {/* DEVICES SECTION (Standard UI) */}
+            {/* DEVICES SECTION */}
             {activeSection === 'devices' && (
                 <div className="space-y-6 p-8 max-w-5xl mx-auto animate-in fade-in slide-in-from-right-4 duration-300">
                     {devices.map(unit => (<div key={unit.id} className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 shadow-sm"><div className="flex items-center gap-4"><div className="h-14 w-14 bg-gray-50 rounded-lg flex items-center justify-center border border-gray-100 p-1">{unit.product?.image_url ? <img src={unit.product.image_url} className="w-full h-full object-contain" /> : <Laptop className="h-6 w-6 text-gray-300" />}</div><div><div className="font-bold text-gray-900">{unit.product?.name}</div><div className="text-xs text-gray-500 font-mono mt-1 flex items-center gap-2"><span className="bg-gray-100 px-1.5 py-0.5 rounded">S/N: {unit.serial_number}</span></div></div></div><div className="text-right"><div className="font-medium text-sm text-gray-500">Coût: ${unit.cost_price}</div><div className="font-bold text-sm">${unit.unit_price}</div><Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 mt-1">Actif</Badge></div></div>))}
                 </div>
             )}
 
-            {/* IDENTITY SECTION (Standard UI) */}
+            {/* IDENTITY SECTION */}
             {activeSection === 'identity' && (
                 <div className="space-y-6 p-8 max-w-5xl mx-auto animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="flex justify-between items-start"><div><h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">Historique KYC {isIdentityVerified && <CheckCircle2 className="h-6 w-6 text-green-500" />}</h1><p className="text-gray-500">Journal complet des vérifications d'identité biométriques.</p></div></div>
@@ -286,12 +286,10 @@ const DeviceCustomerDetails = () => {
                 </div>
             )}
 
-            {/* --- ORACLE 3D SPATIAL UI (WHITE MODE) --- */}
+            {/* --- ORACLE 2D DASHBOARD (NEW) --- */}
             {activeSection === 'billing' && oracle && (
                 <div className="w-full h-full animate-in fade-in duration-700">
-                    <Suspense fallback={<div className="h-full flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-gray-300" /><span className="ml-4 text-gray-500">Initialisation du moteur de projection...</span></div>}>
-                        <Oracle3D data={oracle} />
-                    </Suspense>
+                    <OraclePanel data={oracle} />
                 </div>
             )}
 
