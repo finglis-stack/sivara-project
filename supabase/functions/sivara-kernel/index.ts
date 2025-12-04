@@ -60,6 +60,23 @@ serve(async (req) => {
   try {
     const { action, payload, fileData, context } = await req.json();
 
+    // --- DEBUG: LOCALISATION IP ---
+    if (action === 'locate_me') {
+        const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
+        
+        if (!IP_GEO_KEY) throw new Error("Service de géolocalisation non configuré.");
+
+        const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
+        const geoData = await geoRes.json();
+
+        return new Response(JSON.stringify({ 
+            lat: parseFloat(geoData.latitude), 
+            lng: parseFloat(geoData.longitude),
+            ip: clientIp,
+            city: geoData.city
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // --- COMPILATION ---
     if (action === 'compile') {
       const { encrypted_title, encrypted_content, iv, owner_id, icon, color, salt, security } = payload;
@@ -256,8 +273,6 @@ serve(async (req) => {
 
   } catch (error) {
     console.error(error);
-    // CRITIQUE: On renvoie 200 même en cas d'erreur pour que le client reçoive le JSON { error: ... }
-    // Sinon, la couche réseau du client lance "Non-2xx status code" et cache le vrai message.
     return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })

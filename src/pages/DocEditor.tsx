@@ -23,7 +23,7 @@ import {
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
   Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool,
-  MapPin, Laptop, KeyRound, ShieldCheck
+  MapPin, Laptop, KeyRound, ShieldCheck, Crosshair
 } from 'lucide-react';
 
 import {
@@ -178,6 +178,8 @@ const DocEditor = () => {
   const [geoRadius, setGeoRadius] = useState([50]); // km
   const [geoCenter, setGeoCenter] = useState<{lat: number, lng: number} | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
+  const mapObjRef = useRef<any>(null);
+  const circleObjRef = useRef<any>(null);
 
   const titleRef = useRef(title);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
@@ -208,11 +210,22 @@ const DocEditor = () => {
       }
   }, [showExportDialog, restrictGeo]);
 
-  const initMap = () => {
+  const initMap = async () => {
       if (!mapRef.current) return;
       
-      // Default Montreal
-      const initialPos = { lat: 45.5017, lng: -73.5673 };
+      let initialPos = { lat: 45.5017, lng: -73.5673 }; // Default MTL
+
+      // Fetch Real Internet Position
+      try {
+          const { data, error } = await supabase.functions.invoke('sivara-kernel', {
+              body: { action: 'locate_me' }
+          });
+          if (!error && data?.lat) {
+              initialPos = { lat: data.lat, lng: data.lng };
+              showSuccess(`Position Internet détectée : ${data.city}`);
+          }
+      } catch (e) { console.error("Locate error", e); }
+
       setGeoCenter(initialPos);
 
       const map = new window.google.maps.Map(mapRef.current, {
@@ -220,6 +233,21 @@ const DocEditor = () => {
           zoom: 9,
           disableDefaultUI: true,
           streetViewControl: false,
+      });
+      mapObjRef.current = map;
+
+      // Marker position IP
+      new window.google.maps.Marker({
+          position: initialPos,
+          map: map,
+          title: "Votre IP (Centre de données)",
+          icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 5,
+              fillColor: "#EF4444",
+              fillOpacity: 1,
+              strokeWeight: 0
+          }
       });
 
       const circle = new window.google.maps.Circle({
@@ -230,10 +258,11 @@ const DocEditor = () => {
           fillOpacity: 0.35,
           map,
           center: initialPos,
-          radius: geoRadius[0] * 1000, // meters
+          radius: geoRadius[0] * 1000, 
           editable: true,
           draggable: true
       });
+      circleObjRef.current = circle;
 
       circle.addListener('center_changed', () => {
           const c = circle.getCenter();
@@ -244,6 +273,22 @@ const DocEditor = () => {
           const r = circle.getRadius();
           setGeoRadius([Math.round(r / 1000)]);
       });
+  };
+
+  const recenterMap = async () => {
+      if (!mapObjRef.current || !circleObjRef.current) return;
+      try {
+          const { data } = await supabase.functions.invoke('sivara-kernel', {
+              body: { action: 'locate_me' }
+          });
+          if (data?.lat) {
+              const pos = { lat: data.lat, lng: data.lng };
+              mapObjRef.current.panTo(pos);
+              circleObjRef.current.setCenter(pos);
+              setGeoCenter(pos);
+              showSuccess(`Recentré sur : ${data.city}`);
+          }
+      } catch (e) {}
   };
 
   const editor = useEditor({
@@ -814,7 +859,11 @@ const DocEditor = () => {
                         </div>
                         {restrictGeo && (
                             <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                                <div className="h-40 bg-gray-200 rounded-lg overflow-hidden" ref={mapRef}></div>
+                                <div className="h-40 bg-gray-200 rounded-lg overflow-hidden relative" ref={mapRef}>
+                                    <Button size="sm" variant="secondary" className="absolute top-2 right-2 z-10 h-6 text-xs bg-white/90 hover:bg-white shadow-sm" onClick={recenterMap}>
+                                        <Crosshair className="w-3 h-3 mr-1" /> Ma Position
+                                    </Button>
+                                </div>
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs text-gray-500 w-12">Rayon:</span>
                                     <Slider value={geoRadius} max={500} min={10} step={10} onValueChange={setGeoRadius} className="flex-1" />
