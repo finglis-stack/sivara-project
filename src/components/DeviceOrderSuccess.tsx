@@ -1,10 +1,12 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Loader2, Printer, CheckCircle2, Package, Calendar, Truck, ShieldCheck, Cpu, ArrowLeft } from 'lucide-react';
+import { Loader2, Printer, CheckCircle2, Package, Truck, ShieldCheck, Cpu, ArrowLeft, FileText } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface OrderDetails {
   id: string;
@@ -33,81 +35,185 @@ interface OrderDetails {
   updated_at: string;
 }
 
+interface Profile {
+  first_name: string;
+  last_name: string;
+  email: string;
+}
+
 const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () => void }) => {
   const { user } = useAuth();
   const [order, setOrder] = useState<OrderDetails | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [deliveryDate, setDeliveryDate] = useState<Date | null>(null);
 
   useEffect(() => {
-    const fetchOrder = async () => {
+    const fetchData = async () => {
       if (!user) return;
       
-      // On récupère la dernière unité vendue à l'utilisateur (la plus récente)
-      const { data, error } = await supabase
-        .from('device_units')
-        .select(`
-          *,
-          product:device_products (*)
-        `)
-        .eq('sold_to_user_id', user.id)
-        .eq('status', 'sold') // Important: seulement ceux vendus
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .single();
+      try {
+        // 1. Récupérer le profil pour le nom complet
+        const { data: profileData } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, email')
+            .eq('id', user.id)
+            .single();
+        
+        if (profileData) setProfile(profileData as any);
 
-      if (error || !data) {
-        console.error("Order fetch error", error);
-      } else {
-        setOrder(data as any);
-        
-        // Calcul date de livraison
-        const method = data.shipping_address?.delivery_method || 'standard';
-        const date = new Date();
-        // Express = Aujourd'hui (si avant cutoff) ou Demain. Disons Demain pour être safe.
-        // Standard = +3 jours
-        const daysToAdd = method === 'express' ? 1 : 3;
-        date.setDate(date.getDate() + daysToAdd);
-        
-        // Skip weekend simple logic
-        if (date.getDay() === 0) date.setDate(date.getDate() + 1); // Dimanche -> Lundi
-        if (date.getDay() === 6) date.setDate(date.getDate() + 2); // Samedi -> Lundi
-        
-        setDeliveryDate(date);
+        // 2. Récupérer la dernière commande
+        const { data: orderData, error } = await supabase
+            .from('device_units')
+            .select(`
+            *,
+            product:device_products (*)
+            `)
+            .eq('sold_to_user_id', user.id)
+            .eq('status', 'sold')
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error || !orderData) {
+            console.error("Order fetch error", error);
+        } else {
+            setOrder(orderData as any);
+            
+            // Calcul date de livraison
+            const method = orderData.shipping_address?.delivery_method || 'standard';
+            const date = new Date();
+            const daysToAdd = method === 'express' ? 1 : 3;
+            date.setDate(date.getDate() + daysToAdd);
+            
+            // Skip weekend simple logic
+            if (date.getDay() === 0) date.setDate(date.getDate() + 1); // Dimanche -> Lundi
+            if (date.getDay() === 6) date.setDate(date.getDate() + 2); // Samedi -> Lundi
+            
+            setDeliveryDate(date);
+        }
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setLoading(false);
       }
-      setLoading(false);
     };
 
-    fetchOrder();
+    fetchData();
   }, [user]);
 
-  const handlePrint = () => {
-    window.print();
+  // Formatage strict JJ/MM/AAAA
+  const formatDateSimple = (date: Date) => {
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
   };
 
   const formatDateFrench = (date: Date) => {
-    return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   };
 
-  // Calculs financiers pour la facture
+  // Calculs financiers
   const getFinancials = () => {
-      if (!order) return { monthly: 0, tax: 0, totalMonthly: 0 };
+      if (!order) return { monthly: '0.00', deposit: '0.00', tax: '0.00', subtotal: '0.00' };
       const price = order.unit_price;
       const taxRate = 0.14975;
       const totalUnit = price * (1 + taxRate);
-      const upfront = totalUnit * 0.20;
+      const upfront = totalUnit * 0.20; // 20%
       const remainder = totalUnit - upfront;
       const monthly = remainder / 16;
+      
       return {
           monthly: monthly.toFixed(2),
-          deposit: upfront.toFixed(2)
+          deposit: upfront.toFixed(2),
+          subtotal: (upfront / (1 + taxRate)).toFixed(2), // Approx hors taxe du dépôt
+          tax: (upfront - (upfront / (1 + taxRate))).toFixed(2) // Approx taxes du dépôt
       };
+  };
+
+  // Génération PDF Professionnel
+  const generatePDF = () => {
+    if (!order || !profile) return;
+    const doc = new jsPDF();
+    const financials = getFinancials();
+    const invoiceRef = orderId.replace('session_id=', '').slice(0, 10).toUpperCase();
+    const dateStr = formatDateSimple(new Date());
+
+    // Header
+    doc.setFontSize(20);
+    doc.text("SIVARA", 20, 20);
+    doc.setFontSize(10);
+    doc.text("Facture & Reçu de transaction", 20, 26);
+
+    doc.setFontSize(9);
+    doc.text("Sivara Canada Inc.", 20, 35);
+    doc.text("Montréal, QC", 20, 39);
+    doc.text("support@sivara.ca", 20, 43);
+
+    // Info Client & Facture
+    doc.text(`Facture #: ${invoiceRef}`, 140, 35);
+    doc.text(`Date: ${dateStr}`, 140, 39);
+    doc.text(`Client: ${profile.first_name} ${profile.last_name}`, 140, 48);
+    doc.text(`Email: ${profile.email}`, 140, 52);
+    if (order.shipping_address) {
+        doc.text(`${order.shipping_address.line1}`, 140, 56);
+        doc.text(`${order.shipping_address.city}, ${order.shipping_address.postal_code}`, 140, 60);
+    }
+
+    // Tableau Articles
+    autoTable(doc, {
+        startY: 75,
+        head: [['Description', 'S/N', 'Qté', 'Montant']],
+        body: [
+            [`Dépôt Initial - ${order.product.name} (${order.specific_specs.ram_size}GB/${order.specific_specs.storage}GB)`, order.serial_number, '1', `${financials.subtotal} $`],
+            ['Activation Service', '-', '1', 'Inclus'],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255] },
+    });
+
+    // Totaux
+    // @ts-ignore
+    let finalY = doc.lastAutoTable.finalY + 10;
+    
+    doc.text(`Sous-total:`, 140, finalY);
+    doc.text(`${financials.subtotal} $`, 180, finalY, { align: 'right' });
+    
+    finalY += 6;
+    doc.text(`Taxes (TPS/TVQ):`, 140, finalY);
+    doc.text(`${financials.tax} $`, 180, finalY, { align: 'right' });
+    
+    finalY += 8;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text(`TOTAL PAYÉ:`, 140, finalY);
+    doc.text(`${financials.deposit} $`, 180, finalY, { align: 'right' });
+
+    // Note Abonnement
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    finalY += 15;
+    doc.text("Termes de l'abonnement:", 20, finalY);
+    finalY += 5;
+    doc.text(`- Mensualité à venir: ${financials.monthly} $/mois`, 25, finalY);
+    finalY += 5;
+    doc.text(`- Durée restante: 16 mois`, 25, finalY);
+    finalY += 5;
+    doc.text(`- Garantie incluse: ${order.product.warranty_type || 'Standard'}`, 25, finalY);
+
+    // Footer
+    doc.setFontSize(8);
+    doc.text("Merci de votre confiance. Ce document tient lieu de preuve d'achat.", 105, 280, { align: 'center' });
+
+    doc.save(`Facture_Sivara_${invoiceRef}.pdf`);
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-black"><Loader2 className="h-10 w-10 animate-spin text-white" /></div>;
   if (!order) return <div className="h-screen flex flex-col items-center justify-center bg-black text-white"><p>Commande introuvable.</p><Button onClick={onBack} variant="outline" className="mt-4">Retour</Button></div>;
 
   const financials = getFinancials();
+  const userName = profile ? `${profile.first_name} ${profile.last_name}` : user?.email?.split('@')[0];
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-slate-900 selection:text-white">
@@ -122,7 +228,7 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/20 border border-green-500/30 text-green-300 text-sm font-medium mb-4 backdrop-blur-md">
                 <CheckCircle2 className="h-4 w-4" /> Commande Confirmée
             </div>
-            <h1 className="text-5xl md:text-7xl font-thin tracking-tight mb-2">Merci, {user?.email?.split('@')[0]}.</h1>
+            <h1 className="text-4xl md:text-6xl font-thin tracking-tight mb-2">Merci, {userName}.</h1>
             <p className="text-xl font-light text-white/80">Votre Sivara Book est en route.</p>
          </div>
       </div>
@@ -147,7 +253,8 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                             <div className="flex justify-between items-start mb-6">
                                 <div>
                                     <h2 className="text-2xl font-bold text-slate-900">{order.product.name}</h2>
-                                    <p className="text-slate-500 font-light">Série Pro • Modèle {new Date().getFullYear()}</p>
+                                    {/* MODIFICATION: Suppression des mentions "Pro/2025" inventées */}
+                                    <p className="text-slate-500 font-light">Configuration personnalisée</p>
                                 </div>
                                 <Badge variant="outline" className="font-mono text-xs border-slate-200">S/N: {order.serial_number}</Badge>
                             </div>
@@ -189,8 +296,8 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                     </CardContent>
                 </Card>
 
-                {/* ADRESSE & CONTACT (Print Only or Detail) */}
-                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 print:border print:shadow-none">
+                {/* ADRESSE */}
+                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 print:hidden">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Adresse de livraison</h3>
                     <div className="font-light text-slate-900 text-lg">
                         {order.shipping_address ? (
@@ -208,23 +315,24 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
 
             {/* COLONNE DROITE : FACTURE / REÇU */}
             <div className="lg:col-span-1">
-                <Card className="border-0 shadow-xl bg-slate-900 text-white rounded-2xl overflow-hidden print:bg-white print:text-black print:shadow-none print:border">
+                <Card className="border-0 shadow-xl bg-slate-900 text-white rounded-2xl overflow-hidden print:hidden">
                     <CardContent className="p-8">
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="text-xl font-bold">Reçu de transaction</h3>
-                            <div className="h-8 w-8 bg-white/10 rounded-lg flex items-center justify-center print:bg-black/10">
-                                <span className="font-serif font-bold text-white print:text-black">S</span>
+                            <div className="h-8 w-8 bg-white/10 rounded-lg flex items-center justify-center">
+                                <span className="font-serif font-bold text-white">S</span>
                             </div>
                         </div>
 
-                        <div className="space-y-4 mb-8 text-sm font-light text-white/80 print:text-slate-600">
+                        <div className="space-y-4 mb-8 text-sm font-light text-white/80">
                             <div className="flex justify-between">
                                 <span>Référence</span>
                                 <span className="font-mono">{orderId.replace('session_id=', '').slice(0, 10).toUpperCase()}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span>Date</span>
-                                <span>{new Date().toLocaleDateString()}</span>
+                                {/* MODIFICATION: Format JJ/MM/AAAA */}
+                                <span>{formatDateSimple(new Date())}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span>Méthode</span>
@@ -232,7 +340,7 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                             </div>
                         </div>
 
-                        <div className="space-y-3 py-6 border-y border-white/10 print:border-slate-200 mb-6">
+                        <div className="space-y-3 py-6 border-y border-white/10 mb-6">
                             <div className="flex justify-between text-sm">
                                 <span>Dépôt Initial (Payé)</span>
                                 <span>{financials.deposit} $</span>
@@ -241,7 +349,7 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                                 <span>Mensualité (À venir)</span>
                                 <span>{financials.monthly} $/mois</span>
                             </div>
-                            <div className="flex justify-between text-sm text-white/60 print:text-slate-400">
+                            <div className="flex justify-between text-sm text-white/60">
                                 <span>Durée du terme</span>
                                 <span>16 Mois</span>
                             </div>
@@ -252,12 +360,13 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                             <span className="text-3xl font-bold">{financials.deposit} $</span>
                         </div>
 
-                        <Button onClick={handlePrint} className="w-full bg-white text-black hover:bg-gray-200 font-bold h-12 print:hidden">
-                            <Printer className="mr-2 h-4 w-4" /> Imprimer le reçu
+                        {/* BOUTON PDF PROFESSIONNEL */}
+                        <Button onClick={generatePDF} className="w-full bg-white text-black hover:bg-gray-200 font-bold h-12">
+                            <FileText className="mr-2 h-4 w-4" /> Télécharger la facture (PDF)
                         </Button>
                         
-                        <p className="text-[10px] text-center mt-4 text-white/40 print:hidden">
-                            Une copie de la facture a été envoyée par email.
+                        <p className="text-[10px] text-center mt-4 text-white/40">
+                            Une copie de la facture a été envoyée à {user?.email}.
                         </p>
                     </CardContent>
                 </Card>
