@@ -109,15 +109,16 @@ const MoneyFlowVisualizer = ({ data }: { data: OracleData }) => {
       {/* COUT MATERIEL (Barre Rouge vers le bas) */}
       <mesh position={[0, -costHeight/2, 0.5]}>
         <boxGeometry args={[0.8, costHeight, 0.8]} />
-        {/* Standard material for better compatibility */}
+        {/* Utilisation de meshPhysicalMaterial natif pour éviter les crashs Drei */}
         <meshPhysicalMaterial 
             color="#ef4444"
-            transmission={0.6}
-            opacity={1}
-            metalness={0}
-            roughness={0}
+            transparent
+            opacity={0.7}
+            transmission={0.2}
+            roughness={0.2}
+            metalness={0.1}
             ior={1.5}
-            thickness={0.5}
+            thickness={1}
         />
       </mesh>
       <Html position={[0, -costHeight - 0.5, 0.5]} center>
@@ -131,12 +132,13 @@ const MoneyFlowVisualizer = ({ data }: { data: OracleData }) => {
         <boxGeometry args={[0.8, depositHeight, 0.8]} />
         <meshPhysicalMaterial 
             color="#10b981"
-            transmission={0.6}
-            opacity={1}
-            metalness={0}
-            roughness={0}
+            transparent
+            opacity={0.7}
+            transmission={0.2}
+            roughness={0.2}
+            metalness={0.1}
             ior={1.5}
-            thickness={0.5}
+            thickness={1}
         />
       </mesh>
       <Html position={[0, depositHeight + 0.5, 0.5]} center>
@@ -251,7 +253,6 @@ export default function Oracle3D({ data }: { data: OracleData }) {
       </div>
       
       <Canvas shadows camera={{ position: [0, 5, 20], fov: 45 }}>
-        {/* Removed SoftShadows to fix compatibility issues */}
         <SceneContent data={data} />
         <OrbitControls 
             enablePan={false} 
