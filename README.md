@@ -76,6 +76,11 @@ Un service de "Device-as-a-Service" permettant la location d'ordinateurs optimis
     *   Calcul dynamique des frais de livraison et des délais (Standard vs Express) basé sur la distance géodésique entre l'entrepôt (Montréal) et l'adresse client via l'API Google Places/Geometry.
 *   **Intégration Hardware/Software :**
     *   Les appareils sont livrés avec **Zorin OS** pré-configuré, garantissant une stack 100% open-source et sans télémétrie dès le premier démarrage.
+*   **Oracle Financier (Moteur Prédictif) :**
+    *   Le DaaS n'est pas qu'une simple location, c'est un produit financier complexe nécessitant une gestion de risque algorithmique. L'Oracle est un système de modélisation en temps réel qui croise les données de **coût matériel**, de **risque client (KYC)** et de **dynamiques de marché** pour piloter la rentabilité de chaque contrat.
+    *   **Simulation Monte-Carlo Dynamique :** Contrairement à un simple calcul linéaire, l'Oracle projette des milliers de scénarios de flux de trésorerie (Cashflow) sur 24 mois. Il prend en compte des variables stochastiques comme l'inflation, la volatilité du marché secondaire et le risque de défaut de paiement (Churn).
+    *   **Scoring de Confiance (TrustScore) :** Le "TrustScore" généré lors du KYC biométrique (0-100) n'est pas juste binaire (Accept/Reject). Il alimente directement le modèle financier pour ajuster la **prime de risque** et prédire le "Point de Rupture" (moment probable de résiliation). Un score faible augmente automatiquement la provision pour risque, impactant la VAN (Valeur Actuelle Nette) projetée.
+    *   **Stratégie de Sortie (Asset Valuation) :** L'Oracle calcule en permanence la valeur de liquidation de la flotte. Il détermine le "Flip Month" optimal : le moment précis où la valeur résiduelle du matériel + le cash accumulé maximise le profit avant que la dépréciation ne s'accélère. Cela permet une gestion proactive du cycle de vie des actifs (renouvellement anticipé vs maintien).
 
 ### 8. Protocole de Vérification Biométrique (KYC) - `id.sivara.ca`
 Une forteresse de validation d'identité "Zero-Trust" requise pour l'accès aux infrastructures critiques (Device Rental) et la lutte contre la fraude.
