@@ -11,13 +11,12 @@ import {
   CheckCircle2, AlertCircle, Shield, LayoutDashboard, FileText, 
   History, Eye, XCircle, Clock, AlertTriangle, Fingerprint, Activity, MapPin,
   TrendingUp, Calendar, Zap, BrainCircuit, RefreshCw, Sparkles, DollarSign,
-  TrendingDown, MinusCircle
+  TrendingDown, MinusCircle, Target, ArrowUpRight, Lock
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
-import { Separator } from '@/components/ui/separator';
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, Legend } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, Legend, ComposedChart, Line, Bar } from 'recharts';
 
 interface Customer {
   id: string;
@@ -37,7 +36,7 @@ interface Unit {
   unit_price: number;
   cost_price: number;
   shipping_address?: any;
-  created_at: string; 
+  created_at: string;
   product: {
     name: string;
     image_url: string;
@@ -64,7 +63,6 @@ const DeviceCustomerDetails = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<'overview' | 'identity' | 'devices' | 'billing'>('overview');
   
-  // Data
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [devices, setDevices] = useState<Unit[]>([]);
   const [verifications, setVerifications] = useState<Verification[]>([]);
@@ -78,7 +76,6 @@ const DeviceCustomerDetails = () => {
     const fetchData = async () => {
       if (!id) return;
       setIsLoading(true);
-      
       try {
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', id).single();
         setCustomer(profile);
@@ -101,118 +98,143 @@ const DeviceCustomerDetails = () => {
     fetchData();
   }, [id]);
 
-  // --- ORACLE V2 : SIMULATION MULTI-SCÉNARIOS ---
-  const predictionData = useMemo(() => {
+  // --- ORACLE V3 : MOTEUR FINANCIER 3D ---
+  const oracle = useMemo(() => {
       if (!customer || devices.length === 0) return null;
 
-      // 1. INPUTS
-      const latestVerif = verifications.find(v => v.status === 'approved') || verifications[0];
-      const trustScore = latestVerif?.verification_metadata?.trust_score || 50; // Sur 100
+      // 1. CONSTANTES & INPUTS
+      const TAX_RATE = 1.14975; // Québec
+      const DEPOSIT_RATE = 0.20; // 20%
+      const TERM_MONTHS = 16;
       
+      const latestVerif = verifications.find(v => v.status === 'approved') || verifications[0];
+      const trustScore = latestVerif?.verification_metadata?.trust_score || 50; 
+      
+      // Totaux Flotte
       const totalHardwareCost = devices.reduce((acc, unit) => acc + (unit.cost_price || 0), 0);
       const totalSalePrice = devices.reduce((acc, unit) => acc + unit.unit_price, 0);
+      const totalWithTax = totalSalePrice * TAX_RATE;
       
-      const totalWithTax = totalSalePrice * 1.14975;
-      const deposit = totalWithTax * 0.20; 
-      const monthlyRevenue = (totalWithTax * 0.80) / 16; 
+      // Flux de Trésorerie Mensuel
+      const depositAmount = totalWithTax * DEPOSIT_RATE;
+      const amountToFinance = totalWithTax - depositAmount;
+      const monthlyPayment = amountToFinance / TERM_MONTHS;
       
-      // 2. RISQUE & PROBABILITÉS
-      // Calcul du mois de rupture probable pour le scénario catastrophe
-      // Trust 100 => Rupture mois 20 (Très tard)
-      // Trust 20 => Rupture mois 3 (Très tôt)
-      const crashMonth = Math.max(2, Math.floor((trustScore / 100) * 18));
-      
-      // Taux de rétention mensuel (Probabilité que le client paie le mois suivant)
-      // Trust 90 => 99% retention. Trust 50 => 95% retention.
-      const retentionRate = 0.94 + ((trustScore / 100) * 0.05); 
+      // Frais Ops (Stripe 2.9% + 0.30$ + Marge risque)
+      const monthlyFees = (monthlyPayment * 0.035) + 0.30;
+      const netMonthly = monthlyPayment - monthlyFees;
 
-      // 3. SIMULATION (24 MOIS)
+      // 2. SCÉNARIOS
       const projections = [];
-      const firstDeviceDate = new Date(devices[devices.length - 1].created_at);
-      const today = new Date();
-      const monthsSinceStart = Math.floor((today.getTime() - firstDeviceDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
-
       let accOptimistic = 0;
       let accProbable = 0;
       let accPessimistic = 0;
-      let currentProb = 1.0;
+      
+      // Calcul du mois de crash pour le scénario pessimiste (basé sur le Trust Score inversé)
+      // Trust 100 -> Crash impossible (Mois 99)
+      // Trust 20 -> Crash rapide (Mois 3)
+      const crashMonth = Math.max(2, Math.floor((trustScore / 100) * 12));
+      
+      // Probabilité de rétention mensuelle (Pour scénario Probable)
+      const retentionRate = 0.95 + ((trustScore / 100) * 0.049); // Entre 95% et 99.9%
 
+      let currentRetentionProb = 1.0;
+      let breakEvenMonth = -1;
+
+      // Simulation sur 24 mois
       for (let i = 0; i <= 24; i++) {
-          const simDate = new Date(firstDeviceDate);
-          simDate.setMonth(firstDeviceDate.getMonth() + i);
-          
           let flowOptimistic = 0;
-          let flowPessimistic = 0; 
           let flowProbable = 0;
+          let flowPessimistic = 0;
 
-          // --- MOIS 0 (ACHAT) ---
+          // --- MOIS 0 (INITIALISATION) ---
           if (i === 0) {
-              // Cashflow = Dépôt - Coût Matériel
-              const initialFlow = deposit - totalHardwareCost;
+              // Cashflow = Dépôt Client (IN) - Achat Matériel (OUT)
+              const initialFlow = depositAmount - totalHardwareCost;
+              
               flowOptimistic = initialFlow;
               flowProbable = initialFlow;
               flowPessimistic = initialFlow;
           } 
           // --- MOIS 1 à 24 ---
           else {
-              // OPTIMISTE : Tout va bien, le client paie tout le temps.
-              flowOptimistic = monthlyRevenue;
+              // OPTIMISTE : Le client paie toujours
+              flowOptimistic = netMonthly;
 
-              // PROBABLE : Pondéré par la probabilité qu'il soit encore là
-              currentProb *= retentionRate;
-              flowProbable = monthlyRevenue * currentProb;
+              // PROBABLE : Pondération par risque de défaut
+              currentRetentionProb *= retentionRate;
+              flowProbable = netMonthly * currentRetentionProb;
 
-              // PESSIMISTE : Arrêt brutal au "Crash Month"
+              // PESSIMISTE : Arrêt brutal
               if (i < crashMonth) {
-                  flowPessimistic = monthlyRevenue;
+                  flowPessimistic = netMonthly;
               } else if (i === crashMonth) {
-                  // Rupture : Perte du client + Frais de recouvrement/perte matériel résiduel
-                  // On simule une perte sèche (ex: le client part avec l'ordi)
-                  // Valeur résiduelle perdue = Coût initial * (1 - amortissement linéaire)
-                  const amortizedValue = totalHardwareCost * ((24 - i) / 24);
-                  flowPessimistic = -amortizedValue * 0.5; // On récupère 50% via huissier ou assurances
+                  // Perte sèche du matériel restant (Amortissement linéaire non récupéré)
+                  // Valeur résiduelle = Coût initial * (Temps restant / Durée vie 3 ans)
+                  const residualValue = totalHardwareCost * ((36 - i) / 36);
+                  // On suppose qu'on perd 60% de la valeur (recouvrement partiel ou vol)
+                  flowPessimistic = -(residualValue * 0.6); 
               } else {
-                  flowPessimistic = 0;
+                  flowPessimistic = 0; // Client parti/contentieux
               }
           }
-
-          // Frais op (Stripe etc) ~3%
-          flowOptimistic *= 0.97;
-          flowProbable *= 0.97;
-          // Pessimiste garde ses frais s'il y a revenu
 
           accOptimistic += flowOptimistic;
           accProbable += flowProbable;
           accPessimistic += flowPessimistic;
+
+          // Détection Point de Rupture (ROI positif)
+          if (breakEvenMonth === -1 && accProbable > 0) {
+              breakEvenMonth = i;
+          }
 
           projections.push({
               month: `M${i}`,
               optimistic: Math.round(accOptimistic),
               probable: Math.round(accProbable),
               pessimistic: Math.round(accPessimistic),
-              isCurrent: i === monthsSinceStart
+              revenue: i > 0 ? Math.round(monthlyPayment) : Math.round(depositAmount), // Pour le tableau
+              costs: i === 0 ? Math.round(totalHardwareCost) : Math.round(monthlyFees) // Pour le tableau
           });
       }
 
-      // Point mort (Break Even) pour le scénario probable
-      const breakEvenMonthIndex = projections.findIndex(p => p.probable > 0);
-      const breakEven = breakEvenMonthIndex > -1 ? `Mois ${breakEvenMonthIndex}` : "Jamais";
+      // --- INTELLIGENCE & RECOMMANDATIONS ---
+      let recommendation = "";
+      let actionDate = "";
+      let statusColor = "";
+
+      if (trustScore >= 80) {
+          recommendation = "Client Premium. Proposer renouvellement anticipé au mois 14 avec modèle supérieur.";
+          actionDate = "Mois 14";
+          statusColor = "text-emerald-400";
+      } else if (trustScore >= 50) {
+          recommendation = "Standard. Laisser courir le contrat jusqu'au terme (Mois 16).";
+          actionDate = "Mois 16";
+          statusColor = "text-blue-400";
+      } else {
+          recommendation = "Risque Élevé. Ne pas proposer de renouvellement automatique. Vérifier les paiements manuellement.";
+          actionDate = "Surveillance";
+          statusColor = "text-red-400";
+      }
 
       return {
           chartData: projections,
-          scenarios: {
-              optimistic: Math.round(accOptimistic),
-              probable: Math.round(accProbable),
-              pessimistic: Math.round(accPessimistic)
-          },
-          breakEven,
+          breakEven: breakEvenMonth > -1 ? `Mois ${breakEvenMonth}` : "Jamais (> 24 mois)",
+          roiTotal: Math.round(accProbable),
+          profitMargin: ((accProbable / totalHardwareCost) * 100).toFixed(1),
           trustScore,
-          crashMonth, // Mois estimé de la rupture catastrophe
-          hardwareCost: totalHardwareCost
+          recommendation,
+          actionDate,
+          statusColor,
+          details: {
+              deposit: depositAmount,
+              monthly: monthlyPayment,
+              hardwareCost: totalHardwareCost
+          }
       };
   }, [customer, devices, verifications]);
 
-  const getDuration = (start: string, end: string | null) => { if (!end) return 'En cours...'; const s = new Date(start).getTime(); const e = new Date(end).getTime(); return `${Math.round((e - s) / 1000)}s`; };
+  const getDuration = (start: string, end: string | null) => { if (!end) return '...'; const s = new Date(start).getTime(); const e = new Date(end).getTime(); return `${Math.round((e - s) / 1000)}s`; };
   const getLogColor = (log: string) => { if (log.includes('CRITICAL') || log.includes('FAIL') || log.includes('ERROR')) return 'text-red-500 font-bold'; if (log.includes('WARNING')) return 'text-amber-500 font-medium'; if (log.includes('SUCCESS')) return 'text-green-600 font-medium'; return 'text-gray-500'; };
 
   if (isLoading) return <div className="h-screen flex items-center justify-center bg-gray-50"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
@@ -222,7 +244,7 @@ const DeviceCustomerDetails = () => {
     <div className="flex h-screen bg-white font-sans overflow-hidden">
       
       {/* SIDEBAR */}
-      <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col shrink-0">
+      <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col shrink-0 z-20">
         <div className="p-6 border-b border-gray-200">
             <Button variant="ghost" onClick={() => navigate('/admin?app=device')} className="pl-0 hover:bg-transparent text-gray-500 hover:text-gray-900 mb-4 -ml-2"><ArrowLeft className="mr-2 h-4 w-4" /> Retour liste</Button>
             <div className="flex items-center gap-3">
@@ -234,13 +256,13 @@ const DeviceCustomerDetails = () => {
             <button onClick={() => setActiveSection('overview')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'overview' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><LayoutDashboard className="h-4 w-4" /> Vue d'ensemble</button>
             <button onClick={() => setActiveSection('identity')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'identity' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><Shield className="h-4 w-4" /> Identité & KYC {isIdentityVerified && <CheckCircle2 className="h-3 w-3 text-green-500 ml-auto" />}</button>
             <button onClick={() => setActiveSection('devices')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'devices' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><Laptop className="h-4 w-4" /> Appareils <Badge variant="secondary" className="ml-auto text-[10px] h-5">{devices.length}</Badge></button>
-            <button onClick={() => setActiveSection('billing')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'billing' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><CreditCard className="h-4 w-4" /> Facturation</button>
+            <button onClick={() => setActiveSection('billing')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'billing' ? 'bg-black text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><BrainCircuit className="h-4 w-4" /> L'Oracle 3D</button>
         </nav>
         <div className="p-4 border-t border-gray-200 text-xs text-gray-400">Client depuis le {new Date(customer.created_at).toLocaleDateString()}</div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-white">
-        <div className="max-w-5xl mx-auto p-8">
+      <div className="flex-1 overflow-y-auto bg-white relative">
+        <div className={`h-full ${activeSection === 'billing' ? 'p-0 bg-slate-950 text-white' : 'p-8 max-w-5xl mx-auto'}`}>
             
             {/* OVERVIEW */}
             {activeSection === 'overview' && (
@@ -273,94 +295,177 @@ const DeviceCustomerDetails = () => {
                 </div>
             )}
 
-            {/* BILLING & ORACLE */}
-            {activeSection === 'billing' && predictionData && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <BrainCircuit className="h-7 w-7 text-indigo-600" />
-                            L'Oracle Financier
-                        </h1>
-                        <p className="text-gray-500">Projection des flux de trésorerie sur 24 mois selon 3 scénarios probabilistes.</p>
+            {/* ORACLE 3D HUD */}
+            {activeSection === 'billing' && oracle && (
+                <div className="relative min-h-full flex flex-col p-8 overflow-hidden bg-slate-950">
+                    {/* AMBIANCE 3D */}
+                    <div className="absolute inset-0 pointer-events-none">
+                        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px]"></div>
+                        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[120px]"></div>
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,black,transparent)]"></div>
                     </div>
 
-                    {/* KPI CARDS */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <Card className="border-gray-200 bg-white shadow-sm border-t-4 border-t-green-500">
-                            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">SCÉNARIO OPTIMISTE</CardTitle></CardHeader>
-                            <CardContent>
-                                <div className="text-3xl font-bold text-green-600">+ {predictionData.scenarios.optimistic} $</div>
-                                <div className="text-xs text-gray-400 mt-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Client parfait (0% Churn)</div>
-                            </CardContent>
-                        </Card>
-                        <Card className="border-gray-200 bg-white shadow-sm border-t-4 border-t-blue-500 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-2 opacity-5"><BrainCircuit size={80} /></div>
-                            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">SCÉNARIO PROBABLE</CardTitle></CardHeader>
-                            <CardContent>
-                                <div className="text-3xl font-bold text-blue-600">+ {predictionData.scenarios.probable} $</div>
-                                <div className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Activity className="h-3 w-3" /> Pondéré par TrustScore ({predictionData.trustScore})</div>
-                            </CardContent>
-                        </Card>
-                        <Card className="border-gray-200 bg-white shadow-sm border-t-4 border-t-red-500">
-                            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">SCÉNARIO CATASTROPHE</CardTitle></CardHeader>
-                            <CardContent>
-                                <div className={`text-3xl font-bold ${predictionData.scenarios.pessimistic > 0 ? 'text-gray-800' : 'text-red-600'}`}>
-                                    {predictionData.scenarios.pessimistic > 0 ? '+' : ''}{predictionData.scenarios.pessimistic} $
+                    {/* HEADER ORACLE */}
+                    <div className="relative z-10 flex justify-between items-end mb-10">
+                        <div>
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-blue-500/20 rounded-lg border border-blue-500/50 backdrop-blur-md">
+                                    <BrainCircuit className="h-6 w-6 text-blue-400" />
                                 </div>
-                                <div className="text-xs text-gray-400 mt-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Rupture au Mois {predictionData.crashMonth}</div>
-                            </CardContent>
-                        </Card>
+                                <h1 className="text-3xl font-bold text-white tracking-tight">Oracle v3.0</h1>
+                            </div>
+                            <p className="text-slate-400 max-w-lg">Simulation financière prédictive basée sur le profil de risque et l'historique de paiement.</p>
+                        </div>
+                        <div className="flex items-center gap-6">
+                            <div className="text-right">
+                                <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Trust Score</p>
+                                <div className="text-3xl font-mono font-bold text-emerald-400">{oracle.trustScore}/100</div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">ROI Net (24 Mois)</p>
+                                <div className="text-3xl font-mono font-bold text-white flex items-center justify-end gap-2">
+                                    {oracle.roiTotal > 0 ? '+' : ''}{oracle.roiTotal} $
+                                    <TrendingUp className="h-5 w-5 text-emerald-500" />
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* CHART */}
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardHeader>
-                            <div className="flex justify-between items-center">
-                                <CardTitle className="text-lg font-bold text-gray-800">Projection Cashflow Cumulé (24 Mois)</CardTitle>
-                                <Badge variant="outline" className="font-mono">Point Mort Probable: {predictionData.breakEven}</Badge>
-                            </div>
-                            <CardDescription>Analyse comparative des revenus nets (Revenus - Coûts Matériels - Frais).</CardDescription>
-                        </CardHeader>
-                        <CardContent className="h-[400px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={predictionData.chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                    <defs>
-                                        <linearGradient id="colorOptimistic" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.1}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient>
-                                        <linearGradient id="colorProbable" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
-                                        <linearGradient id="colorPessimistic" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.1}/><stop offset="95%" stopColor="#ef4444" stopOpacity={0}/></linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                                    <XAxis dataKey="month" tick={{fontSize: 10}} tickLine={false} axisLine={false} />
-                                    <YAxis tick={{fontSize: 10}} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                                    <Tooltip contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                                    <Legend verticalAlign="top" height={36} iconType="circle" />
-                                    <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
-                                    
-                                    <Area type="monotone" dataKey="optimistic" name="Optimiste (100%)" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#colorOptimistic)" />
-                                    <Area type="monotone" dataKey="probable" name="Probable (IA)" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorProbable)" />
-                                    <Area type="monotone" dataKey="pessimistic" name="Catastrophe" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" fillOpacity={1} fill="url(#colorPessimistic)" />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
+                    {/* MAIN HUD 3D LAYOUT */}
+                    <div className="relative z-10 grid grid-cols-12 gap-6 perspective-[1000px]">
+                        
+                        {/* LEFT: NEURAL CORE (IA) */}
+                        <div className="col-span-3 space-y-6">
+                            <Card className="bg-slate-900/50 border-white/10 backdrop-blur-md text-white transform hover:scale-[1.02] transition-all duration-500 shadow-2xl hover:shadow-blue-900/20">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2 text-sm text-blue-300 uppercase tracking-widest">
+                                        <Sparkles className="h-4 w-4" /> Analyse I.A.
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="p-4 rounded-xl bg-gradient-to-br from-blue-900/20 to-slate-900 border border-white/5">
+                                        <p className="text-xs text-slate-400 mb-2">Recommandation Stratégique</p>
+                                        <p className={`text-sm font-medium leading-relaxed ${oracle.statusColor}`}>{oracle.recommendation}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="p-3 rounded-lg bg-white/5 border border-white/5">
+                                            <p className="text-[10px] text-slate-500 uppercase">Action Requise</p>
+                                            <p className="text-lg font-bold">{oracle.actionDate}</p>
+                                        </div>
+                                        <div className="p-3 rounded-lg bg-white/5 border border-white/5">
+                                            <p className="text-[10px] text-slate-500 uppercase">Marge Nette</p>
+                                            <p className="text-lg font-bold text-emerald-400">{oracle.profitMargin}%</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
 
-                    {/* DETAILS ANALYSE */}
-                    <div className="bg-slate-900 text-slate-200 rounded-xl p-6 shadow-xl">
-                        <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Sparkles className="h-4 w-4 text-yellow-400" /> Analyse IA & Recommandations</h3>
-                        <div className="space-y-4 text-sm font-light">
-                            <p>
-                                <strong className="text-white font-semibold">Profil de Risque :</strong> Le client a un score de confiance de <span className="font-mono text-white bg-slate-700 px-1 rounded">{predictionData.trustScore}/100</span>.
-                                Cela indique une probabilité de rétention mensuelle estimée à <span className="text-green-400">99.2%</span>.
-                            </p>
-                            <p>
-                                <strong className="text-white font-semibold">Point Critique :</strong> Le seuil de rentabilité (Break-Even) est atteint au <span className="text-blue-400">{predictionData.breakEven}</span>. 
-                                Jusqu'à cette date, le contrat est déficitaire à cause du coût matériel initial de <span className="text-red-400">-{predictionData.hardwareCost}$</span>.
-                            </p>
-                            <p>
-                                <strong className="text-white font-semibold">Scénario Catastrophe :</strong> Si le client fait défaut au mois {predictionData.crashMonth} (moment statistiquement le plus risqué pour ce profil),
-                                la perte nette serait de <span className="text-red-500 font-bold">{predictionData.scenarios.pessimistic}$</span>.
-                            </p>
+                            <Card className="bg-slate-900/50 border-white/10 backdrop-blur-md text-white">
+                                <CardContent className="p-6">
+                                    <h3 className="text-xs font-bold text-slate-500 uppercase mb-4">Structure Contrat</h3>
+                                    <div className="space-y-3 font-mono text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">Coût Matériel</span>
+                                            <span className="text-red-400">-{oracle.details.hardwareCost.toFixed(0)} $</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">Dépôt (20%)</span>
+                                            <span className="text-emerald-400">+{oracle.details.deposit.toFixed(0)} $</span>
+                                        </div>
+                                        <div className="flex justify-between border-t border-white/10 pt-2">
+                                            <span className="text-slate-400">Mensualité</span>
+                                            <span className="text-white">+{oracle.details.monthly.toFixed(2)} $/m</span>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
                         </div>
+
+                        {/* CENTER: 3D CHART */}
+                        <div className="col-span-6">
+                            <Card className="h-full bg-slate-900/80 border-white/10 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
+                                {/* Effet de grille holographique */}
+                                <div className="absolute inset-0 bg-[linear-gradient(0deg,transparent_24%,rgba(37,99,235,0.03)_25%,rgba(37,99,235,0.03)_26%,transparent_27%,transparent_74%,rgba(37,99,235,0.03)_75%,rgba(37,99,235,0.03)_76%,transparent_77%,transparent),linear-gradient(90deg,transparent_24%,rgba(37,99,235,0.03)_25%,rgba(37,99,235,0.03)_26%,transparent_27%,transparent_74%,rgba(37,99,235,0.03)_75%,rgba(37,99,235,0.03)_76%,transparent_77%,transparent)] bg-[size:50px_50px]"></div>
+                                
+                                <CardHeader className="relative z-10 pb-2">
+                                    <CardTitle className="text-sm font-medium text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Activity className="h-4 w-4 text-blue-500" /> 
+                                        Projection de Trésorerie (24 Mois)
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="h-[400px] relative z-10">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={oracle.chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                                            <defs>
+                                                <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.4}/>
+                                                    <stop offset="100%" stopColor="#34d399" stopOpacity={0}/>
+                                                </linearGradient>
+                                                <linearGradient id="splitProbable" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.6}/>
+                                                    <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.1}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                            <XAxis dataKey="month" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                                            <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}$`} />
+                                            <Tooltip 
+                                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                                                itemStyle={{ fontSize: '12px' }}
+                                            />
+                                            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+                                            
+                                            {/* Optimiste (Vert, discret) */}
+                                            <Area type="monotone" dataKey="optimistic" stroke="#34d399" strokeWidth={1} strokeDasharray="4 4" fill="url(#splitColor)" opacity={0.5} name="Optimiste" />
+                                            
+                                            {/* Catastrophe (Rouge, discret) */}
+                                            <Line type="monotone" dataKey="pessimistic" stroke="#ef4444" strokeWidth={2} dot={false} opacity={0.8} name="Catastrophe" />
+
+                                            {/* Probable (Bleu, Principal) */}
+                                            <Area type="monotone" dataKey="probable" stroke="#60a5fa" strokeWidth={3} fill="url(#splitProbable)" name="Probable (IA)" activeDot={{ r: 6, strokeWidth: 0 }} />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* RIGHT: BREAKPOINT & STATS */}
+                        <div className="col-span-3 flex flex-col gap-6">
+                            <Card className="flex-1 bg-gradient-to-b from-slate-900 to-black border-white/10 text-white relative overflow-hidden">
+                                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+                                <CardHeader>
+                                    <CardTitle className="text-sm font-medium text-slate-400 uppercase">Point de Rupture (ROI)</CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex flex-col items-center justify-center h-[120px]">
+                                    <Target className="h-10 w-10 text-emerald-500 mb-2" />
+                                    <div className="text-3xl font-bold">{oracle.breakEven}</div>
+                                    <p className="text-xs text-emerald-500/70 mt-1">Zone de profitabilité atteinte</p>
+                                </CardContent>
+                            </Card>
+
+                            <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 backdrop-blur-md">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><LayoutDashboard className="h-3 w-3" /> Données Brutes</h3>
+                                <ScrollArea className="h-[250px] pr-2">
+                                    <div className="space-y-1">
+                                        <div className="grid grid-cols-4 text-[10px] text-slate-500 font-bold uppercase mb-2 px-2">
+                                            <div>Mois</div>
+                                            <div className="text-right">Rev.</div>
+                                            <div className="text-right">Coût</div>
+                                            <div className="text-right">Net</div>
+                                        </div>
+                                        {oracle.chartData.map((row: any, i: number) => (
+                                            <div key={i} className={`grid grid-cols-4 text-xs px-2 py-1.5 rounded ${row.isToday ? 'bg-blue-500/20 border border-blue-500/30' : 'hover:bg-white/5'}`}>
+                                                <div className="font-mono text-slate-400">{row.month}</div>
+                                                <div className="text-right text-emerald-400">+{row.revenue}</div>
+                                                <div className="text-right text-red-400">-{row.costs}</div>
+                                                <div className={`text-right font-bold ${row.probable > 0 ? 'text-white' : 'text-slate-500'}`}>{row.probable}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </ScrollArea>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             )}
@@ -371,13 +476,13 @@ const DeviceCustomerDetails = () => {
       <Dialog open={!!selectedVerification} onOpenChange={(o) => !o && setSelectedVerification(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
             <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">Rapport d'analyse #...{selectedVerification?.id.slice(-6)} {selectedVerification?.status === 'approved' ? <Badge className="bg-green-600">Validé</Badge> : <Badge variant="destructive">Rejeté</Badge>}</DialogTitle>
+                <DialogTitle className="flex items-center gap-2">Rapport #...{selectedVerification?.id.slice(-6)} {selectedVerification?.status === 'approved' ? <Badge className="bg-green-600">Validé</Badge> : <Badge variant="destructive">Rejeté</Badge>}</DialogTitle>
                 <DialogDescription>Date: {new Date(selectedVerification?.started_at || '').toLocaleString()}</DialogDescription>
             </DialogHeader>
             <ScrollArea className="flex-1 border rounded-md bg-slate-950 text-slate-300 font-mono text-xs p-4">
                 <div className="space-y-1">{selectedVerification?.verification_metadata?.logs?.map((log, i) => (<div key={i} className="flex gap-2"><span className="text-slate-500 shrink-0">{log.substring(1, 9)}</span><span className={getLogColor(log)}>{log.substring(11)}</span></div>))}</div>
             </ScrollArea>
-            {selectedVerification?.verification_metadata?.ai_raw && (<div className="mt-4 bg-gray-50 p-3 rounded-lg text-xs"><h4 className="font-bold text-gray-900 mb-2">Extraction IA (Raw)</h4><div className="grid grid-cols-2 gap-2"><div className="flex justify-between border-b pb-1"><span>Nom extrait:</span> <span className="font-mono text-gray-900">{selectedVerification.verification_metadata.ai_raw.firstName} {selectedVerification.verification_metadata.ai_raw.lastName}</span></div><div className="flex justify-between border-b pb-1"><span>Document:</span> <span className="font-mono text-gray-900">{selectedVerification.verification_metadata.ai_raw.docType}</span></div><div className="flex justify-between border-b pb-1"><span>Date Naissance:</span> <span className="font-mono text-gray-900">{selectedVerification.verification_metadata.ai_raw.dateOfBirth}</span></div><div className="flex justify-between border-b pb-1"><span>Age Visuel:</span> <span className="font-mono text-gray-900">~{selectedVerification.verification_metadata.ai_raw.visualAgeEstimation} ans</span></div></div></div>)}
+            {selectedVerification?.verification_metadata?.ai_raw && (<div className="mt-4 bg-gray-50 p-3 rounded-lg text-xs"><h4 className="font-bold text-gray-900 mb-2">Extraction IA (Raw)</h4><div className="grid grid-cols-2 gap-2"><div className="flex justify-between border-b pb-1"><span>Nom:</span> <span className="font-mono text-gray-900">{selectedVerification.verification_metadata.ai_raw.firstName} {selectedVerification.verification_metadata.ai_raw.lastName}</span></div><div className="flex justify-between border-b pb-1"><span>Doc:</span> <span className="font-mono text-gray-900">{selectedVerification.verification_metadata.ai_raw.docType}</span></div><div className="flex justify-between border-b pb-1"><span>Age Visuel:</span> <span className="font-mono text-gray-900">~{selectedVerification.verification_metadata.ai_raw.visualAgeEstimation} ans</span></div></div></div>)}
         </DialogContent>
       </Dialog>
     </div>
