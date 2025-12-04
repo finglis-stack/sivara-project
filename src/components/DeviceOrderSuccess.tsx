@@ -15,6 +15,7 @@ interface OrderDetails {
   condition: string;
   specific_specs: {
     ram_size: string;
+    ram_speed?: string;
     storage: string;
     [key: string]: any;
   };
@@ -253,8 +254,7 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                             <div className="flex justify-between items-start mb-6">
                                 <div>
                                     <h2 className="text-2xl font-bold text-slate-900">{order.product.name}</h2>
-                                    {/* MODIFICATION: Suppression des mentions "Pro/2025" inventées */}
-                                    <p className="text-slate-500 font-light">Configuration personnalisée</p>
+                                    <p className="text-slate-500 font-light">Configuration système</p>
                                 </div>
                                 <Badge variant="outline" className="font-mono text-xs border-slate-200">S/N: {order.serial_number}</Badge>
                             </div>
@@ -262,7 +262,7 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                             <div className="grid grid-cols-2 gap-y-4 gap-x-8 mb-8">
                                 <div className="space-y-1">
                                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Cpu className="h-3 w-3" /> Mémoire</span>
-                                    <p className="font-medium text-slate-900">{order.specific_specs.ram_size} Go Unifiée</p>
+                                    <p className="font-medium text-slate-900">{order.specific_specs.ram_size} Go {order.specific_specs.ram_speed ? `${order.specific_specs.ram_speed} MHz` : 'DDR5'}</p>
                                 </div>
                                 <div className="space-y-1">
                                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Package className="h-3 w-3" /> Stockage</span>
@@ -331,7 +331,6 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                             </div>
                             <div className="flex justify-between">
                                 <span>Date</span>
-                                {/* MODIFICATION: Format JJ/MM/AAAA */}
                                 <span>{formatDateSimple(new Date())}</span>
                             </div>
                             <div className="flex justify-between">
