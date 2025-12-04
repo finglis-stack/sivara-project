@@ -2,17 +2,14 @@ import { useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { 
   OrbitControls, 
-  Text, 
   Html, 
   Float, 
-  MeshTransmissionMaterial, 
   Environment, 
-  SoftShadows, 
-  Line,
-  Sphere
+  Line
 } from '@react-three/drei';
 import * as THREE from 'three';
-import { BrainCircuit, Target, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { BrainCircuit, Target, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 // --- TYPES ---
 interface OracleData {
@@ -61,7 +58,7 @@ const FloatingPanel = ({ position, children, rotation = [0, 0, 0] }: any) => {
     <Float speed={2} rotationIntensity={0.2} floatIntensity={0.5}>
       <group position={position} rotation={rotation}>
         <Html transform occlude distanceFactor={1.5}>
-          <div className="w-[300px] bg-white/90 backdrop-blur-xl border border-white/50 p-6 rounded-3xl shadow-2xl select-none">
+          <div className="w-[300px] bg-white/90 backdrop-blur-xl border border-white/50 p-6 rounded-3xl shadow-2xl select-none text-left">
             {children}
           </div>
         </Html>
@@ -112,21 +109,19 @@ const MoneyFlowVisualizer = ({ data }: { data: OracleData }) => {
       {/* COUT MATERIEL (Barre Rouge vers le bas) */}
       <mesh position={[0, -costHeight/2, 0.5]}>
         <boxGeometry args={[0.8, costHeight, 0.8]} />
-        <MeshTransmissionMaterial 
-            backside
-            samples={4}
-            thickness={0.5}
-            chromaticAberration={0.1}
-            anisotropy={0.1}
-            distortion={0.1}
-            distortionScale={0.1}
-            temporalDistortion={0.2}
+        {/* Standard material for better compatibility */}
+        <meshPhysicalMaterial 
             color="#ef4444"
-            ior={1.2}
+            transmission={0.6}
+            opacity={1}
+            metalness={0}
+            roughness={0}
+            ior={1.5}
+            thickness={0.5}
         />
       </mesh>
       <Html position={[0, -costHeight - 0.5, 0.5]} center>
-        <div className="text-red-500 font-bold text-xs text-center bg-white/80 px-2 py-1 rounded backdrop-blur">
+        <div className="text-red-500 font-bold text-xs text-center bg-white/80 px-2 py-1 rounded backdrop-blur whitespace-nowrap">
           Coût Matériel<br/>-{data.details.hardwareCost.toFixed(0)}$
         </div>
       </Html>
@@ -134,21 +129,18 @@ const MoneyFlowVisualizer = ({ data }: { data: OracleData }) => {
       {/* DEPOT (Barre Verte qui compense un peu) */}
       <mesh position={[0, depositHeight/2, 0.5]}>
         <boxGeometry args={[0.8, depositHeight, 0.8]} />
-        <MeshTransmissionMaterial 
-            backside
-            samples={4}
-            thickness={0.5}
-            chromaticAberration={0.1}
-            anisotropy={0.1}
-            distortion={0.1}
-            distortionScale={0.1}
-            temporalDistortion={0.2}
+        <meshPhysicalMaterial 
             color="#10b981"
-            ior={1.2}
+            transmission={0.6}
+            opacity={1}
+            metalness={0}
+            roughness={0}
+            ior={1.5}
+            thickness={0.5}
         />
       </mesh>
       <Html position={[0, depositHeight + 0.5, 0.5]} center>
-        <div className="text-green-600 font-bold text-xs text-center bg-white/80 px-2 py-1 rounded backdrop-blur">
+        <div className="text-green-600 font-bold text-xs text-center bg-white/80 px-2 py-1 rounded backdrop-blur whitespace-nowrap">
           Dépôt (20%)<br/>+{data.details.deposit.toFixed(0)}$
         </div>
       </Html>
@@ -259,7 +251,7 @@ export default function Oracle3D({ data }: { data: OracleData }) {
       </div>
       
       <Canvas shadows camera={{ position: [0, 5, 20], fov: 45 }}>
-        <SoftShadows size={10} samples={10} />
+        {/* Removed SoftShadows to fix compatibility issues */}
         <SceneContent data={data} />
         <OrbitControls 
             enablePan={false} 
