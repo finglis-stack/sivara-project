@@ -11,9 +11,10 @@ const corsHeaders = {
 // @ts-ignore
 const IP_GEO_KEY = Deno.env.get('IPGEOLOCATION_API_KEY');
 
-// --- SIVARA INSTRUCTION SET ARCHITECTURE (S-ISA) ---
+// --- SIVARA BINARY PROTOCOL (SBP) ---
+// Structure binaire propriétaire non-linéaire
 const OP_CODES = {
-  MAGIC: 0x53, // 'S'
+  MAGIC: 0x53, // 'S' - Signature
   HEADER: 0xA1,
   IV_BLOCK: 0xB2,
   DATA_CHUNK: 0xC3,
@@ -21,6 +22,8 @@ const OP_CODES = {
   EOF: 0xFF
 };
 
+// Algorithme de brouillage binaire propriétaire (Obfuscation)
+// Rend le fichier illisible par les outils standards
 const sivaraShuffle = (buffer: Uint8Array, seed: number): Uint8Array => {
   const result = new Uint8Array(buffer.length);
   for (let i = 0; i < buffer.length; i++) {
@@ -43,9 +46,9 @@ const sivaraUnshuffle = (buffer: Uint8Array, seed: number): Uint8Array => {
 const strToBuf = (str: string) => new TextEncoder().encode(str);
 const bufToStr = (buf: Uint8Array) => new TextDecoder().decode(buf);
 
-// Formule de Haversine pour la distance GPS
+// Formule de Haversine pour la distance GPS précise
 const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371; 
+  const R = 6371; // Rayon Terre
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -61,14 +64,14 @@ serve(async (req) => {
   try {
     const { action, payload, fileData, context } = await req.json();
 
-    // --- MODE COMPILATION (EXPORT) ---
+    // --- COMPILATION (Création du fichier propriétaire) ---
     if (action === 'compile') {
       const { encrypted_title, encrypted_content, iv, owner_id, icon, color, salt, security } = payload;
       
-      // On injecte les règles de sécurité dans les métadonnées chiffrées
+      // On scelle les règles de sécurité dans les métadonnées chiffrées
       const metaJson = JSON.stringify({ 
           owner_id, icon, color, salt, v: 3,
-          security: security || {} // { allowed_fingerprints, allowed_emails, geofence: { lat, lng, radius } }
+          security: security || {} 
       });
       
       const ivBuf = new Uint8Array(atob(iv).split('').map(c => c.charCodeAt(0)));
@@ -78,15 +81,15 @@ serve(async (req) => {
 
       const parts = [];
       
-      // MAGIC "SVR3" (Version 3 pour le support Geo/Device)
+      // MAGIC "SVR3" 
       parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x03]));
 
-      // IV
+      // IV BLOCK
       parts.push(new Uint8Array([OP_CODES.IV_BLOCK]));
       parts.push(new Uint8Array([ivBuf.length]));
       parts.push(ivBuf);
 
-      // META
+      // META BLOCK (Brouillé)
       const shuffledMeta = sivaraShuffle(metaBuf, 0xAA);
       const metaLen = new Uint8Array(4);
       new DataView(metaLen.buffer).setUint32(0, shuffledMeta.length);
@@ -95,7 +98,7 @@ serve(async (req) => {
       parts.push(metaLen);
       parts.push(shuffledMeta);
 
-      // DATA
+      // DATA CHUNK (Brouillé)
       const combinedPayload = new Uint8Array(titleBuf.length + 1 + contentBuf.length);
       combinedPayload.set(titleBuf, 0);
       combinedPayload[titleBuf.length] = 0x00;
@@ -112,6 +115,7 @@ serve(async (req) => {
       // EOF
       parts.push(new Uint8Array([OP_CODES.EOF]));
 
+      // Assemblage binaire
       const totalLength = parts.reduce((acc, p) => acc + p.length, 0);
       const finalBuffer = new Uint8Array(totalLength);
       let offset = 0;
@@ -120,6 +124,7 @@ serve(async (req) => {
         offset += part.length;
       }
 
+      // Output Base64 optimisé
       let binary = '';
       const len = finalBuffer.byteLength;
       const CHUNK_SIZE = 8192;
@@ -132,7 +137,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ file: base64Output }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // --- MODE DÉCOMPILATION (IMPORT) ---
+    // --- DÉCOMPILATION (Ouverture du fichier) ---
     if (action === 'decompile') {
       const binaryString = atob(fileData);
       const bytes = new Uint8Array(binaryString.length);
@@ -141,9 +146,9 @@ serve(async (req) => {
       const view = new DataView(bytes.buffer);
       let cursor = 0;
 
-      // Check Magic
+      // Vérification Signature SBP
       if (bytes[0] !== 0x53 || bytes[1] !== 0x56 || bytes[2] !== 0x52) {
-        throw new Error("Format de fichier invalide.");
+        throw new Error("Format de fichier SBP invalide ou corrompu.");
       }
       cursor += 4; 
 
@@ -171,20 +176,18 @@ serve(async (req) => {
           try {
              metaData = JSON.parse(metaStr);
              Object.assign(result, metaData);
-          } catch(e) { console.error("Meta JSON parse error", e); }
+          } catch(e) { console.error("Meta parse error", e); }
           cursor += len;
         }
         else if (opcode === OP_CODES.DATA_CHUNK) {
-          // On ne lit les données QUE si les checks de sécurité passent
-          // Les checks dépendent des métadonnées lues juste avant
+          // --- ZONE DE SÉCURITÉ CRITIQUE ---
+          // On valide les accès AVANT de toucher aux données chiffrées
           
-          // --- SECURITY GATES ---
           if (metaData.security) {
               const sec = metaData.security;
 
-              // 1. CHECK EMAIL (Identity)
+              // 1. CHECK EMAIL/USER (Liste d'accès)
               if (sec.allowed_emails && sec.allowed_emails.length > 0) {
-                  // Besoin d'auth supabase pour vérifier l'email du demandeur
                   const supabase = createClient(
                     // @ts-ignore
                     Deno.env.get('SUPABASE_URL') ?? '',
@@ -195,45 +198,52 @@ serve(async (req) => {
                   const { data: { user } } = await supabase.auth.getUser();
                   
                   if (!user || !user.email || !sec.allowed_emails.includes(user.email.toLowerCase())) {
-                      throw new Error("ACCÈS REFUSÉ: Votre compte n'est pas autorisé à ouvrir ce document.");
+                      throw new Error("⛔ ACCÈS REFUSÉ : Votre compte n'est pas autorisé.");
                   }
               }
 
-              // 2. CHECK DEVICE (Fingerprint)
+              // 2. CHECK DEVICE (Fingerprint Machine)
               if (sec.allowed_fingerprints && sec.allowed_fingerprints.length > 0) {
                   const clientFp = context?.fingerprint;
+                  console.log(`[Security] Checking Device. Required: ${sec.allowed_fingerprints}, Provided: ${clientFp}`);
+                  
                   if (!clientFp || !sec.allowed_fingerprints.includes(clientFp)) {
-                      throw new Error("ACCÈS REFUSÉ: Cet appareil n'est pas autorisé.");
+                      throw new Error("⛔ ACCÈS REFUSÉ : Cet appareil n'est pas autorisé.");
                   }
               }
 
-              // 3. CHECK GEO (IP Geolocation)
+              // 3. CHECK GEO (Localisation Physique)
               if (sec.geofence && sec.geofence.lat && sec.geofence.lng) {
-                  // Récupération IP
                   const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
                   
-                  if (IP_GEO_KEY) {
-                      const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
-                      const geoData = await geoRes.json();
+                  if (!IP_GEO_KEY) {
+                      console.error("Clé IPGeolocation manquante sur le serveur !");
+                      // Fail Safe: Si on ne peut pas vérifier, on bloque.
+                      throw new Error("Erreur de configuration serveur (Geo).");
+                  }
+
+                  const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
+                  const geoData = await geoRes.json();
+                  
+                  if (geoData && geoData.latitude && geoData.longitude) {
+                      const dist = getDistanceKm(
+                          parseFloat(geoData.latitude), parseFloat(geoData.longitude),
+                          sec.geofence.lat, sec.geofence.lng
+                      );
                       
-                      if (geoData && geoData.latitude && geoData.longitude) {
-                          const dist = getDistanceKm(
-                              parseFloat(geoData.latitude), parseFloat(geoData.longitude),
-                              sec.geofence.lat, sec.geofence.lng
-                          );
-                          
-                          console.log(`[GeoCheck] Dist: ${dist}km (Max: ${sec.geofence.radius_km}km)`);
-                          
-                          if (dist > sec.geofence.radius_km) {
-                              throw new Error(`ACCÈS REFUSÉ: Vous êtes hors de la zone géographique autorisée (${Math.round(dist)}km).`);
-                          }
-                      } else {
-                          // Si on ne peut pas vérifier, on bloque par sécurité (Fail Close)
-                          throw new Error("ACCÈS REFUSÉ: Impossible de vérifier votre localisation.");
+                      console.log(`[Security] GeoCheck: Client à ${dist.toFixed(2)}km (Max autorisé: ${sec.geofence.radius_km}km)`);
+                      
+                      if (dist > sec.geofence.radius_km) {
+                          throw new Error(`⛔ ACCÈS REFUSÉ : Zone géographique non autorisée (Distance: ${Math.round(dist)}km).`);
                       }
+                  } else {
+                      throw new Error("⛔ ACCÈS REFUSÉ : Impossible de vérifier votre localisation.");
                   }
               }
           }
+
+          // Si on arrive ici, c'est que TOUS les checks de sécurité ont passé.
+          // On peut extraire le payload chiffré (qui demandera ensuite le mot de passe si nécessaire).
 
           const len = view.getUint32(cursor);
           cursor += 4;
