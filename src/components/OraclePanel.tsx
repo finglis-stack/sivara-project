@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
-  ComposedChart, Line, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend,
+  ComposedChart, Line, Scatter, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { 
   Target, DollarSign, Activity, ShieldCheck, 
   CreditCard, TrendingUp, TrendingDown, AlertTriangle, 
-  Settings2, Calculator, BarChart3, PieChart, Info
+  Settings2, Calculator, BarChart3, PieChart, Info,
+  Skull, Hourglass, UserCheck, Wallet
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -37,12 +38,12 @@ const formatCurrency = (value: number) =>
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white border border-gray-200 p-3 rounded-lg shadow-lg text-xs">
-        <p className="font-bold text-gray-700 mb-2 border-b pb-1">{label}</p>
+      <div className="bg-white/95 backdrop-blur border border-gray-200 p-4 rounded-xl shadow-xl text-xs font-mono z-50">
+        <p className="font-bold text-gray-500 mb-2">{label}</p>
         {payload.map((entry: any, index: number) => (
           <div key={index} className="flex items-center justify-between gap-4 mb-1">
             <span className="text-gray-600 capitalize flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color || entry.stroke }} />
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color || entry.stroke || entry.fill }} />
               {entry.name}:
             </span>
             <span className={`font-mono font-bold ${entry.value < 0 ? 'text-red-600' : 'text-gray-900'}`}>
@@ -57,7 +58,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const MetricCard = ({ title, value, icon: Icon, subtext, trend }: any) => (
-  <Card className="border-gray-200 shadow-sm">
+  <Card className="border-gray-200 shadow-sm bg-white">
     <CardContent className="p-5">
       <div className="flex justify-between items-start mb-2">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{title}</p>
@@ -71,29 +72,44 @@ const MetricCard = ({ title, value, icon: Icon, subtext, trend }: any) => (
   </Card>
 );
 
-const RangeInput = ({ label, value, min, max, unit, onChange }: any) => (
-  <div className="space-y-3">
-    <div className="flex justify-between items-center">
-      <Label className="text-xs font-medium text-gray-700">{label}</Label>
-      <Badge variant="outline" className="font-mono text-xs bg-white text-gray-900 border-gray-300">
-        {value}{unit}
-      </Badge>
+const RangeSlider = ({ value, min, max, onChange, label, unit }: any) => (
+    <div className="space-y-2">
+        <div className="flex justify-between text-xs font-medium text-gray-600">
+            <span>{label}</span>
+            <span className="font-mono text-blue-600">{value}{unit}</span>
+        </div>
+        <input 
+            type="range" 
+            min={min} 
+            max={max} 
+            step={unit === 'x' ? 0.1 : 1} 
+            value={value} 
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+        />
     </div>
-    <input 
-      type="range" min={min} max={max} step={unit === 'x' ? 0.1 : 1} value={value} 
-      onChange={(e) => onChange(Number(e.target.value))}
-      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-900"
-    />
-  </div>
 );
 
 export default function OraclePanel({ data }: { data: OracleData }) {
-  // Paramètres de simulation (Défaut = Marché actuel)
-  const [volatility, setVolatility] = useState(5); // 5% Standard deviation
-  const [inflation, setInflation] = useState(2); // 2% Inflation cible
+  // --- ÉTAT DU CHAOS ENGINE (PARAMÈTRES DYNAMIQUES) ---
+  const [marketVolatility, setMarketVolatility] = useState(15); // %
+  const [inflation, setInflation] = useState(2); // %
+  const [usageIntensity, setUsageIntensity] = useState(1.0); // Multiplicateur
   const [depreciationMode, setDepreciationMode] = useState<'standard' | 'accelerated'>('standard');
 
-  // 1. PROJECTION FINANCIÈRE (AJUSTÉE)
+  // Calculs dérivés STATIQUES (Base)
+  const breakEvenIndex = data.chartData.findIndex(d => d.probable >= 0);
+  const totalExposure = data.details.hardwareCost - data.details.deposit;
+  
+  // Analyse de Risque & Churn
+  const riskLevel = data.trustScore >= 80 ? 'Faible' : data.trustScore >= 50 ? 'Moyen' : 'Critique';
+  const riskColor = data.trustScore >= 80 ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : data.trustScore >= 50 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-red-600 bg-red-50 border-red-200';
+  
+  // Estimation du mois de rupture (Churn) basée sur le TrustScore
+  const predictedChurnMonth = Math.max(2, Math.floor((data.trustScore / 100) * 24));
+  const isChurnRiskHigh = predictedChurnMonth < 16; // Terme du contrat
+
+  // 1. DYNAMIC MONTE CARLO
   const financialProjection = useMemo(() => {
     // Facteur d'actualisation (Discounted Cash Flow)
     const discountRate = (inflation / 100) / 12; 
@@ -105,8 +121,8 @@ export default function OraclePanel({ data }: { data: OracleData }) {
       // Valeur Actuelle Nette (VAN)
       const npv = d.probable / Math.pow(1 + discountRate, i);
       
-      // Écart-type (Risque)
-      const sigma = (data.details.monthly * Math.sqrt(i)) * ((volatility / 100) + clientRiskPremium);
+      // Écart-type (Risque) - Using marketVolatility from state
+      const sigma = (data.details.monthly * Math.sqrt(i)) * ((marketVolatility / 100) + clientRiskPremium);
 
       return {
         month: d.month,
@@ -116,12 +132,11 @@ export default function OraclePanel({ data }: { data: OracleData }) {
         raw: d.probable
       };
     });
-  }, [data, volatility, inflation]);
+  }, [data, marketVolatility, inflation]);
 
   // 2. VALORISATION DES ACTIFS (ASSET VALUATION)
   const assetValuation = useMemo(() => {
     const initialVal = data.details.hardwareCost;
-    // Taux d'amortissement mensuel
     const deprRate = depreciationMode === 'standard' ? 0.025 : 0.045; // 2.5% vs 4.5%
     
     let currentVal = initialVal;
@@ -131,7 +146,6 @@ export default function OraclePanel({ data }: { data: OracleData }) {
     const chart = financialProjection.map((d, i) => {
       if (i > 0) currentVal = currentVal * (1 - deprRate);
       
-      // Valeur de Liquidation = Cash généré + Valeur Revente Matériel
       const liquidationValue = d.base + currentVal;
       
       if (liquidationValue > maxTotalValue) {
@@ -155,42 +169,46 @@ export default function OraclePanel({ data }: { data: OracleData }) {
     { metric: 'Solvabilité', value: data.trustScore, full: 100 },
     { metric: 'Liquidité', value: Math.min(100, (data.details.deposit / data.details.hardwareCost) * 400), full: 100 }, // Ratio couverture
     { metric: 'Rentabilité', value: Math.min(100, parseFloat(data.profitMargin) * 2), full: 100 },
-    { metric: 'Stabilité Marché', value: 100 - volatility, full: 100 },
+    { metric: 'Stabilité Marché', value: 100 - marketVolatility, full: 100 },
     { metric: 'Val. Résiduelle', value: Math.min(100, (assetValuation.endAssetValue / data.details.hardwareCost) * 200), full: 100 },
-  ], [data, volatility, assetValuation]);
+  ], [data, marketVolatility, assetValuation]);
 
   return (
     <div className="h-full bg-gray-50/50 p-6 font-sans overflow-y-auto">
       
-      {/* SECTION 1: KPIs FINANCIERS */}
+      {/* SECTION 1: KPIs FINANCIERS + CLIENT */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <MetricCard 
-          title="Rentabilité Nette (24M)" 
+          title="Rentabilité Client (LTV)" 
           value={formatCurrency(data.roiTotal)} 
-          icon={DollarSign} 
+          icon={Wallet} 
           trend={data.roiTotal > 0 ? 'positive' : 'negative'}
           subtext={`Marge brute: ${data.profitMargin}%`}
         />
         <MetricCard 
-          title="Point Mort (BEP)" 
-          value={data.breakEven} 
+          title="Risque de Churn" 
+          value={isChurnRiskHigh ? `Mois ${predictedChurnMonth}` : "Faible"} 
+          icon={Skull} 
+          trend={isChurnRiskHigh ? 'negative' : 'positive'}
+          subtext={isChurnRiskHigh ? "Avant terme (16M)" : "Renouvellement probable"}
+        />
+        <MetricCard 
+          title="Point de Flip (Rentable)" 
+          value={assetValuation.flipMonth > -1 ? `Mois ${assetValuation.flipMonth}` : "Jamais"} 
           icon={Target} 
-          subtext="Retour sur investissement"
+          trend="neutral"
+          subtext="Sortie optimale"
         />
-        <MetricCard 
-          title="Valeur de Sortie Max" 
-          value={formatCurrency(assetValuation.maxTotalValue)} 
-          icon={TrendingUp} 
-          trend="positive"
-          subtext={`Optimale au mois ${assetValuation.flipMonth}`}
-        />
-        <MetricCard 
-          title="Score de Confiance" 
-          value={`${data.trustScore}/100`} 
-          icon={ShieldCheck} 
-          trend={data.trustScore > 75 ? 'positive' : data.trustScore < 50 ? 'negative' : 'neutral'}
-          subtext={data.trustScore > 75 ? 'Risque Faible' : 'Surveillance Requise'}
-        />
+        <Card className={`border shadow-sm ${riskColor}`}>
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start mb-2">
+              <p className="text-xs font-bold uppercase tracking-wider opacity-80">Niveau de Risque</p>
+              <ShieldCheck size={16} />
+            </div>
+            <h3 className="text-2xl font-bold mb-1">{riskLevel}</h3>
+            <p className="text-xs opacity-80">Score IA: {data.trustScore}/100</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -205,13 +223,13 @@ export default function OraclePanel({ data }: { data: OracleData }) {
               </div>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
-              <RangeInput 
+              <RangeSlider 
                 label="Volatilité Marché" 
-                value={volatility} 
+                value={marketVolatility} 
                 min={0} max={30} unit="%" 
-                onChange={setVolatility} 
+                onChange={setMarketVolatility} 
               />
-              <RangeInput 
+              <RangeSlider 
                 label="Inflation (IPC)" 
                 value={inflation} 
                 min={0} max={15} unit="%" 
@@ -245,7 +263,7 @@ export default function OraclePanel({ data }: { data: OracleData }) {
 
           <Card className="border-gray-200 shadow-sm overflow-hidden">
              <CardHeader className="pb-2 bg-gray-50 border-b border-gray-100">
-                <CardTitle className="text-xs font-bold uppercase tracking-wider text-gray-500">Analyse de Solvabilité</CardTitle>
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-gray-500">Radar de Solvabilité</CardTitle>
              </CardHeader>
              <CardContent className="p-0">
                 <div className="h-[250px] w-full bg-white relative">
@@ -257,7 +275,7 @@ export default function OraclePanel({ data }: { data: OracleData }) {
                             <Radar name="Client" dataKey="value" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.2} />
                         </RadarChart>
                     </ResponsiveContainer>
-                    <div className="absolute bottom-2 right-2 text-[10px] text-gray-400 font-mono">Scoring v3.1</div>
+                    <div className="absolute bottom-2 right-2 text-[10px] text-gray-400 font-mono">Scoring v3.2</div>
                 </div>
              </CardContent>
           </Card>
@@ -271,9 +289,16 @@ export default function OraclePanel({ data }: { data: OracleData }) {
                   <TabsTrigger value="cashflow" className="text-xs data-[state=active]:bg-gray-100 data-[state=active]:text-gray-900">Flux de Trésorerie</TabsTrigger>
                   <TabsTrigger value="valuation" className="text-xs data-[state=active]:bg-gray-100 data-[state=active]:text-gray-900">Valorisation Actif</TabsTrigger>
                </TabsList>
-               <Badge variant="outline" className="bg-white text-gray-500 font-mono text-xs border-gray-300">
-                  VAN ACTUALISÉE @ {inflation}%
-               </Badge>
+               <div className="flex items-center gap-2">
+                   {isChurnRiskHigh && (
+                       <Badge variant="destructive" className="animate-pulse gap-1">
+                           <AlertTriangle className="h-3 w-3" /> Churn probable M{predictedChurnMonth}
+                       </Badge>
+                   )}
+                   <Badge variant="outline" className="bg-white text-gray-500 font-mono text-xs border-gray-300">
+                      VAN ACTUALISÉE @ {inflation}%
+                   </Badge>
+               </div>
             </div>
 
             <TabsContent value="cashflow" className="mt-0">
@@ -294,9 +319,14 @@ export default function OraclePanel({ data }: { data: OracleData }) {
                               <Tooltip content={<CustomTooltip />} />
                               <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="3 3" />
                               
+                              {/* Ligne de Churn Probable */}
+                              {isChurnRiskHigh && (
+                                <ReferenceLine x={`M${predictedChurnMonth}`} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'insideTop', value: 'RISQUE RÉSILIATION', fill: '#ef4444', fontSize: 10, fontWeight: 'bold' }} />
+                              )}
+
                               <Area type="monotone" dataKey="optimistic" stackId="1" stroke="transparent" fill="transparent" />
                               <Area type="monotone" dataKey="pessimistic" stackId="1" stroke="#ef4444" fill="#fee2e2" strokeOpacity={0.5} strokeDasharray="4 4" name="Zone de Risque (VaR)" />
-                              <Area type="monotone" dataKey="base" stroke="#2563eb" strokeWidth={3} fill="url(#colorBase)" name="Scénario Central" activeDot={{ r: 6, strokeWidth: 0 }} />
+                              <Area type="monotone" dataKey="base" stroke="#2563eb" strokeWidth={3} fill="url(#colorBase)" name="Rentabilité Client (Net)" activeDot={{ r: 6, strokeWidth: 0 }} />
                            </AreaChart>
                         </ResponsiveContainer>
                      </div>
