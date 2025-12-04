@@ -10,7 +10,13 @@ export const sivaraVM = {
       body: { action: 'compile', payload }
     });
 
-    if (error || !data.file) throw new Error("Erreur de compilation SIVARA");
+    if (error) {
+        throw new Error(error.message || "Erreur de compilation SIVARA");
+    }
+    
+    if (!data.file) {
+        throw new Error("Réponse kernel invalide");
+    }
 
     // Conversion Base64 -> Blob Binaire
     const binaryString = atob(data.file);
@@ -38,7 +44,21 @@ export const sivaraVM = {
                     body: { action: 'decompile', fileData: base64Content }
                 });
 
-                if (error) throw new Error("Fichier corrompu ou format invalide");
+                if (error) {
+                    console.error("Kernel Error:", error);
+                    // On essaie d'extraire le message JSON si possible
+                    try {
+                        const errBody = JSON.parse(error.message);
+                        throw new Error(errBody.error || "Fichier corrompu");
+                    } catch {
+                        throw new Error(error.message || "Fichier corrompu ou format invalide");
+                    }
+                }
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
                 resolve(data);
             } catch (e) {
                 reject(e);
