@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import confetti from 'canvas-confetti';
+import DeviceOrderSuccess from '@/components/DeviceOrderSuccess';
 
 // --- TYPES ---
 interface RawUnit {
@@ -54,8 +55,8 @@ const DeviceLanding = () => {
   const [showConfig, setShowConfig] = useState(false);
   const [loadingInventory, setLoadingInventory] = useState(false);
   
-  // --- SUCCESS STATE ---
-  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  // --- SUCCESS STATE (FULL PAGE) ---
+  const [showOrderSuccess, setShowOrderSuccess] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   
   // Data
@@ -87,21 +88,16 @@ const DeviceLanding = () => {
       const sessionId = searchParams.get('session_id');
       
       if (successParam) {
-          setShowSuccessDialog(true);
-          // On utilise l'ID de session Stripe comme référence de commande (tronqué)
-          setOrderId(sessionId ? `SIV-${sessionId.slice(-8).toUpperCase()}` : `SIV-${Date.now().toString().slice(-6)}`);
+          // Switch to Full Page Success
+          setShowOrderSuccess(true);
+          setOrderId(sessionId || `SIV-${Date.now().toString().slice(-6)}`);
           
           confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 }
+            particleCount: 150,
+            spread: 100,
+            origin: { y: 0.6 },
+            colors: ['#000000', '#ffffff', '#3b82f6']
           });
-
-          // Clean URL
-          const newParams = new URLSearchParams(searchParams);
-          newParams.delete('order_success');
-          newParams.delete('session_id');
-          setSearchParams(newParams);
       }
   }, [searchParams]);
 
@@ -241,6 +237,21 @@ const DeviceLanding = () => {
     const returnUrl = 'https://device.sivara.ca';
     window.location.href = `https://account.sivara.ca${path}?returnTo=${encodeURIComponent(returnUrl)}`;
   };
+
+  const handleBackFromSuccess = () => {
+      // Nettoie l'URL
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('order_success');
+      newParams.delete('session_id');
+      setSearchParams(newParams);
+      setShowOrderSuccess(false);
+      navigate('/?app=device');
+  };
+
+  // --- CONDITIONAL RENDER: SUCCESS PAGE ---
+  if (showOrderSuccess && orderId) {
+      return <DeviceOrderSuccess orderId={orderId} onBack={handleBackFromSuccess} />;
+  }
 
   return (
     <div className="min-h-screen bg-black font-sans selection:bg-white selection:text-black overflow-x-hidden text-white">
@@ -650,32 +661,6 @@ const DeviceLanding = () => {
                     </Button>
                 </DialogFooter>
             )}
-        </DialogContent>
-      </Dialog>
-
-      {/* SUCCESS DIALOG */}
-      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent className="sm:max-w-md text-center bg-white text-black">
-            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <CheckCircle2 className="h-10 w-10 text-green-600" />
-            </div>
-            <DialogHeader>
-                <DialogTitle className="text-2xl font-bold text-center">Commande Confirmée</DialogTitle>
-                <DialogDescription className="text-center text-lg">
-                    Merci pour votre confiance.
-                </DialogDescription>
-            </DialogHeader>
-            <div className="py-4 space-y-3">
-                <p className="text-gray-600">Votre abonnement est actif. L'ordinateur sera expédié sous 48h.</p>
-                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 font-mono text-sm">
-                    Commande #{orderId}
-                </div>
-            </div>
-            <DialogFooter className="sm:justify-center">
-                <Button onClick={() => setShowSuccessDialog(false)} className="w-full bg-black hover:bg-gray-900 text-white">
-                    Fermer
-                </Button>
-            </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
