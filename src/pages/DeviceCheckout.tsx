@@ -337,7 +337,7 @@ const DeviceCheckout = () => {
                 <h1 className="text-3xl lg:text-4xl font-light text-gray-900 leading-tight mb-2">
                     {unit?.product.name}
                 </h1>
-                <p className="text-gray-500 font-light">Location avec option d'achat • Résiliable</p>
+                <p className="text-gray-500 font-light">Abonnement avec location • Résiliable</p>
             </div>
 
             <div className="space-y-6 mb-10">
