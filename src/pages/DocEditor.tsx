@@ -14,6 +14,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle } from '@tiptap/extension-text-style';
 import FontFamily from '@tiptap/extension-font-family';
+import FingerprintJS from '@fingerprintjs/fingerprintjs';
 
 import {
   ArrowLeft, Download, Share2, Users, Loader2, Star, MoreVertical, Trash2, Copy, Shield, Lock,
@@ -21,7 +22,8 @@ import {
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
-  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool
+  Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool,
+  MapPin, Laptop, KeyRound, ShieldCheck
 } from 'lucide-react';
 
 import {
@@ -38,6 +40,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 const FontSize = Extension.create({
@@ -130,6 +134,12 @@ const COLOR_PALETTE = [
   { name: 'Gris', value: '#6B7280' }
 ];
 
+declare global {
+  interface Window {
+    google: any;
+  }
+}
+
 const DocEditor = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -159,7 +169,15 @@ const DocEditor = () => {
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
   const [newInviteEmail, setNewInviteEmail] = useState('');
   const [invitePermission, setInvitePermission] = useState<'read' | 'write'>('read');
+  
+  // Security Inputs (Export)
   const [exportPassword, setExportPassword] = useState('');
+  const [restrictDevice, setRestrictDevice] = useState(false);
+  const [restrictUsers, setRestrictUsers] = useState(false);
+  const [restrictGeo, setRestrictGeo] = useState(false);
+  const [geoRadius, setGeoRadius] = useState([50]); // km
+  const [geoCenter, setGeoCenter] = useState<{lat: number, lng: number} | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
 
   const titleRef = useRef(title);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
@@ -170,6 +188,63 @@ const DocEditor = () => {
   const myColorRef = useRef(CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)]);
 
   useEffect(() => { titleRef.current = title; }, [title]);
+
+  // Load Google Maps Script for Geofencing
+  useEffect(() => {
+      if (showExportDialog && restrictGeo && !window.google) {
+          const loadMaps = async () => {
+              const { data } = await supabase.functions.invoke('get-maps-key');
+              if (data?.key) {
+                  const script = window.document.createElement('script');
+                  script.src = `https://maps.googleapis.com/maps/api/js?key=${data.key}`;
+                  script.async = true;
+                  script.onload = () => initMap();
+                  window.document.head.appendChild(script);
+              }
+          };
+          loadMaps();
+      } else if (showExportDialog && restrictGeo && window.google) {
+          setTimeout(initMap, 100);
+      }
+  }, [showExportDialog, restrictGeo]);
+
+  const initMap = () => {
+      if (!mapRef.current) return;
+      
+      // Default Montreal
+      const initialPos = { lat: 45.5017, lng: -73.5673 };
+      setGeoCenter(initialPos);
+
+      const map = new window.google.maps.Map(mapRef.current, {
+          center: initialPos,
+          zoom: 9,
+          disableDefaultUI: true,
+          streetViewControl: false,
+      });
+
+      const circle = new window.google.maps.Circle({
+          strokeColor: '#3B82F6',
+          strokeOpacity: 0.8,
+          strokeWeight: 2,
+          fillColor: '#3B82F6',
+          fillOpacity: 0.35,
+          map,
+          center: initialPos,
+          radius: geoRadius[0] * 1000, // meters
+          editable: true,
+          draggable: true
+      });
+
+      circle.addListener('center_changed', () => {
+          const c = circle.getCenter();
+          setGeoCenter({ lat: c.lat(), lng: c.lng() });
+      });
+
+      circle.addListener('radius_changed', () => {
+          const r = circle.getRadius();
+          setGeoRadius([Math.round(r / 1000)]);
+      });
+  };
 
   const editor = useEditor({
     extensions: [
@@ -269,7 +344,6 @@ const DocEditor = () => {
     };
     
     if (channelRef.current) { 
-        // Update existing presence (e.g. if avatar loaded late)
         channelRef.current.track(myPresenceState); 
         return; 
     }
@@ -365,13 +439,11 @@ const DocEditor = () => {
       const isDocOwner = user?.id === doc.owner_id;
       setIsOwner(isDocOwner);
       
-      // --- ROBUST PERMISSION LOGIC ---
       let userPermission: 'read' | 'write' = 'read';
       
       if (isDocOwner) {
           userPermission = 'write';
       } else {
-          // 1. Check for specific access entry (Priority)
           let explicitPermission = null;
           if (user && user.email) {
              const { data: accessEntries } = await supabase
@@ -387,24 +459,14 @@ const DocEditor = () => {
              }
           }
 
-          // 2. Apply Hierarchy: Explicit Write > Public Write > Public Read > Explicit Read
-          if (explicitPermission === 'write') {
-              userPermission = 'write';
-          } else if (doc.visibility === 'public' && doc.public_permission === 'write') {
-              userPermission = 'write';
-          } else if (explicitPermission === 'read') {
-              userPermission = 'read';
-          } else if (doc.visibility === 'public') {
-              userPermission = 'read';
-          } else {
-              // Limited/Private and no explicit access
-              throw new Error("Document inaccessible");
-          }
+          if (explicitPermission === 'write') userPermission = 'write';
+          else if (doc.visibility === 'public' && doc.public_permission === 'write') userPermission = 'write';
+          else if (explicitPermission === 'read') userPermission = 'read';
+          else if (doc.visibility === 'public') userPermission = 'read';
+          else throw new Error("Document inaccessible");
       }
       
-      console.log(`[Auth] Mode: ${userPermission}`);
       setPermission(userPermission);
-      // Note: editor.setEditable est aussi géré par le useEffect dédié maintenant
 
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
@@ -439,7 +501,6 @@ const DocEditor = () => {
   const handleContentChange = (content: string) => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = setTimeout(() => handleSave('content', content), 500); };
   
   const updateVisibility = async (visibility: 'private' | 'limited' | 'public') => { if (!document) return; await supabase.from('documents').update({ visibility }).eq('id', id); setDocument({ ...document, visibility }); showSuccess(`Visibilité changée`); };
-  const updatePublicPermission = async (perm: 'read' | 'write') => { if (!document) return; await supabase.from('documents').update({ public_permission: perm }).eq('id', id); setDocument({ ...document, public_permission: perm }); };
   
   const inviteUser = async () => { 
       if (!newInviteEmail) return; 
@@ -464,7 +525,7 @@ const DocEditor = () => {
     window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`; 
   };
 
-  // --- NOUVEAU HANDLE EXPORT PROPRIÉTAIRE ---
+  // --- HANDLE EXPORT PROPRIÉTAIRE (SIVARA KERNEL) ---
   const handleExportSivara = async () => {
     if (!document || !user) return;
     setIsExporting(true);
@@ -472,27 +533,48 @@ const DocEditor = () => {
         let encryptedTitle = document.title;
         let encryptedContent = document.content;
         let iv = document.encryption_iv;
-        let isPasswordProtected = false;
         let salt = null;
 
+        // Mode Mot de passe
         if (exportPassword) {
             const saltValue = crypto.randomUUID();
             await encryptionService.initialize(exportPassword, saltValue);
-            
             const { encrypted: encTitle, iv: newIv } = await encryptionService.encrypt(titleRef.current);
             const { encrypted: encContent } = await encryptionService.encrypt(contentRef.current, newIv);
-            
             encryptedTitle = encTitle;
             encryptedContent = encContent;
             iv = newIv;
-            isPasswordProtected = true;
             salt = saltValue;
-
-            // Restaure la clé utilisateur pour la suite
             await encryptionService.initialize(user.id);
         }
 
-        // Préparation du Payload pour le Kernel SIVARA
+        // --- CONTEXTE DE SÉCURITÉ ---
+        const securityContext: any = {};
+
+        // 1. Device Fingerprint
+        if (restrictDevice) {
+            const fp = await FingerprintJS.load();
+            const result = await fp.get();
+            securityContext.allowed_fingerprints = [result.visitorId];
+        }
+
+        // 2. User Access
+        if (restrictUsers) {
+            const allowedEmails = accessList.map(a => a.email.toLowerCase());
+            allowedEmails.push(user.email!.toLowerCase());
+            securityContext.allowed_emails = allowedEmails;
+        }
+
+        // 3. Geofencing
+        if (restrictGeo && geoCenter) {
+            securityContext.geofence = {
+                lat: geoCenter.lat,
+                lng: geoCenter.lng,
+                radius_km: geoRadius[0]
+            };
+        }
+
+        // Payload pour le Kernel SIVARA
         const payload = {
             encrypted_title: encryptedTitle,
             encrypted_content: encryptedContent,
@@ -500,21 +582,19 @@ const DocEditor = () => {
             owner_id: document.owner_id,
             icon: document.icon || 'FileText',
             color: document.color || '#3B82F6',
-            salt: salt
+            salt: salt,
+            security: securityContext // Le Kernel va sceller ces règles dans le binaire
         };
 
-        // --- MAGIE DU KERNEL ---
-        // Appel au VM pour obtenir le binaire propriétaire
         const blob = await sivaraVM.compile(payload);
         
-        // Téléchargement
         const url = URL.createObjectURL(blob);
         const a = window.document.createElement('a');
         a.href = url;
         a.download = `secure-${document.id.slice(0, 8)}.sivara`;
         a.click();
         
-        showSuccess(isPasswordProtected ? "Exporté & Verrouillé (SBP)" : "Exporté (Sivara Binary Protocol)");
+        showSuccess("Exporté et sécurisé par Sivara Kernel");
         setShowExportDialog(false);
         setExportPassword('');
     } catch (e: any) {
@@ -680,31 +760,78 @@ const DocEditor = () => {
           </Tabs>
         </DialogContent>
       </Dialog>
+      
       <Dialog open={showIconPicker} onOpenChange={setShowIconPicker}><DialogContent className="max-w-[95vw]"><DialogHeader><DialogTitle>Icône</DialogTitle></DialogHeader><div className="grid grid-cols-6 gap-2">{AVAILABLE_ICONS.map(i => <button key={i.name} onClick={() => { setSelectedIcon(i.name); handleSave('icon', i.name); setShowIconPicker(false); }} className={`p-2 rounded hover:bg-gray-100 ${selectedIcon === i.name ? 'bg-blue-50 ring-1' : ''}`}><i.icon className="h-6 w-6 mx-auto" /></button>)}</div><div className="border-t pt-4 mt-2"><Label>Couleur</Label><div className="flex gap-2 mt-2 overflow-x-auto pb-2">{COLOR_PALETTE.map(c => <button key={c.value} onClick={() => { setSelectedColor(c.value); handleSave('color', c.value); }} className={`h-6 w-6 shrink-0 rounded-full ${selectedColor === c.value ? 'ring-2 ring-offset-2 ring-black' : ''}`} style={{ backgroundColor: c.value }} />)}</div></div></DialogContent></Dialog>
       
+      {/* EXPORT DIALOG WITH SECURITY */}
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-                <DialogTitle>Export Sécurisé</DialogTitle>
-                <DialogDescription>Protégez ce fichier avec un mot de passe (optionnel mais recommandé pour le partage).</DialogDescription>
+                <DialogTitle>Export Sécurisé (.sivara)</DialogTitle>
+                <DialogDescription>Créez un conteneur chiffré autoportant.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-                <div className="space-y-2">
-                    <Label>Mot de passe (Optionnel)</Label>
-                    <Input 
-                        type="password" 
-                        placeholder="Laisser vide pour utiliser la clé propriétaire" 
-                        value={exportPassword}
-                        onChange={(e) => setExportPassword(e.target.value)}
-                    />
-                    <p className="text-xs text-gray-500">Si défini, ce mot de passe sera requis pour importer le fichier.</p>
-                </div>
-            </div>
+            
+            <Tabs defaultValue="standard">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="standard">Standard</TabsTrigger>
+                    <TabsTrigger value="security" className="text-blue-600"><ShieldCheck className="h-3 w-3 mr-2" /> Sécurité</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="standard" className="py-4 space-y-4">
+                    <div className="space-y-2">
+                        <Label>Mot de passe (Optionnel)</Label>
+                        <Input 
+                            type="password" 
+                            placeholder="Protéger par clé..." 
+                            value={exportPassword}
+                            onChange={(e) => setExportPassword(e.target.value)}
+                        />
+                        <p className="text-xs text-gray-500">Si vide, le fichier sera lié à votre compte Sivara.</p>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="security" className="py-4 space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="space-y-0.5">
+                            <Label className="text-sm font-bold flex items-center gap-2"><Laptop className="h-4 w-4" /> Verrouillage Appareil</Label>
+                            <p className="text-xs text-gray-500">Fichier ouvrable uniquement sur CET ordinateur.</p>
+                        </div>
+                        <Switch checked={restrictDevice} onCheckedChange={setRestrictDevice} />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="space-y-0.5">
+                            <Label className="text-sm font-bold flex items-center gap-2"><Users className="h-4 w-4" /> Restriction Utilisateurs</Label>
+                            <p className="text-xs text-gray-500">Seuls les collaborateurs actuels pourront ouvrir.</p>
+                        </div>
+                        <Switch checked={restrictUsers} onCheckedChange={setRestrictUsers} />
+                    </div>
+
+                    <div className="border p-3 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                            <Label className="text-sm font-bold flex items-center gap-2"><MapPin className="h-4 w-4" /> Geofencing</Label>
+                            <Switch checked={restrictGeo} onCheckedChange={setRestrictGeo} />
+                        </div>
+                        {restrictGeo && (
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                <div className="h-40 bg-gray-200 rounded-lg overflow-hidden" ref={mapRef}></div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500 w-12">Rayon:</span>
+                                    <Slider value={geoRadius} max={500} min={10} step={10} onValueChange={setGeoRadius} className="flex-1" />
+                                    <span className="text-xs font-bold w-10 text-right">{geoRadius[0]}km</span>
+                                </div>
+                                <p className="text-[10px] text-gray-400">Le fichier s'auto-détruira s'il est ouvert hors zone.</p>
+                            </div>
+                        )}
+                    </div>
+                </TabsContent>
+            </Tabs>
+
             <DialogFooter>
                 <Button variant="outline" onClick={() => setShowExportDialog(false)}>Annuler</Button>
-                <Button onClick={handleExportSivara} disabled={isExporting}>
-                    {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileKey className="mr-2 h-4 w-4" />}
-                    Exporter (.sivara)
+                <Button onClick={handleExportSivara} disabled={isExporting} className="bg-black hover:bg-gray-800 text-white">
+                    {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
+                    Générer le fichier
                 </Button>
             </DialogFooter>
         </DialogContent>
