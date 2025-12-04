@@ -12,11 +12,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Switch } from '@/components/ui/switch';
 import { showSuccess, showError } from '@/utils/toast';
 import { 
   Package, Plus, Search, Barcode, Laptop, ArrowLeft, 
   Trash2, CheckCircle2, Upload, Globe, Loader2,
-  Mail, Phone, ChevronRight
+  Mail, Phone, ChevronRight, Hand, Wifi, Bluetooth, Fingerprint
 } from 'lucide-react';
 
 interface Product {
@@ -37,6 +38,7 @@ interface Unit {
   status: 'available' | 'sold' | 'reserved' | 'maintenance';
   condition: 'new' | 'refurbished';
   unit_price: number;
+  cost_price: number; // NOUVEAU
   sold_to_user_id?: string;
   specific_specs: {
     ram_size: string;
@@ -70,7 +72,6 @@ const DeviceAdmin = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   
-  // CHANGEMENT: Onglet Clients par défaut
   const [activeTab, setActiveTab] = useState<'inventory' | 'customers'>('customers');
 
   // Inventory Data
@@ -98,16 +99,16 @@ const DeviceAdmin = () => {
       warranty_type: 'standard' 
   });
 
-  const defaultFeatures = { touch: false, wifi: true, bluetooth: true, fingerprint: true };
   const [unitForm, setUnitForm] = useState({ 
       serial_number: '',
       status: 'available', 
       condition: 'new',
       unit_price: 0,
+      cost_price: 0, // NOUVEAU CHAMP
       ram_size: '16',
       ram_speed: '5200',
       storage: '512',
-      features: defaultFeatures
+      features: { touch: false, wifi: true, bluetooth: true, fingerprint: true }
   });
 
   // 1. Check Vendor Role
@@ -148,14 +149,12 @@ const DeviceAdmin = () => {
 
       setIsSearchingCustomers(true);
       try {
-          // Recherche Profiles (Nom, Email, Tel)
           const { data: profiles } = await supabase
             .from('profiles')
             .select('*')
             .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone_number.ilike.%${query}%`)
             .limit(5);
 
-          // Recherche par S/N (Device) pour trouver le proprio
           let serialMatches: any[] = [];
           if (query.length > 3) {
              const { data: units } = await supabase
@@ -172,7 +171,6 @@ const DeviceAdmin = () => {
              }
           }
 
-          // Merge unique results
           const combined = [...(profiles || []), ...serialMatches];
           const unique = Array.from(new Map(combined.map(item => [item.id, item])).values()).slice(0, 5);
           
@@ -185,7 +183,6 @@ const DeviceAdmin = () => {
   };
 
   const openCustomerDetails = (customer: Customer) => {
-      // NAVIGATION VERS LA NOUVELLE PAGE
       navigate(`/admin/customer/${customer.id}?app=device`);
   };
 
@@ -263,10 +260,11 @@ const DeviceAdmin = () => {
           status: 'available',
           condition: 'new',
           unit_price: selectedProduct?.base_price || 0,
+          cost_price: (selectedProduct?.base_price || 0) * 0.65, // Estimation auto du coût (65% du prix)
           ram_size: '16',
           ram_speed: '5200',
           storage: '512',
-          features: defaultFeatures
+          features: { touch: false, wifi: true, bluetooth: true, fingerprint: true }
       });
       setShowUnitDialog(true);
   };
@@ -282,6 +280,7 @@ const DeviceAdmin = () => {
               status: unitForm.status,
               condition: unitForm.condition,
               unit_price: unitForm.unit_price,
+              cost_price: unitForm.cost_price, // Save Cost
               specific_specs: {
                   ram_size: unitForm.ram_size,
                   ram_speed: unitForm.ram_speed,
@@ -337,7 +336,7 @@ const DeviceAdmin = () => {
 
         <div className="flex-1 container mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8 overflow-hidden h-[calc(100vh-64px)]">
             
-            {/* VIEW: CUSTOMERS (Maintenant en premier) */}
+            {/* VIEW: CUSTOMERS */}
             {activeTab === 'customers' && (
                 <div className="w-full flex flex-col items-center max-w-4xl mx-auto h-full">
                     <div className="w-full mb-8">
@@ -389,9 +388,6 @@ const DeviceAdmin = () => {
                                 </div>
                             </Card>
                         ))}
-                        {customerResults.length === 0 && customerSearch.length > 1 && !isSearchingCustomers && (
-                            <div className="text-center py-12 text-gray-400">Aucun client trouvé.</div>
-                        )}
                     </div>
                 </div>
             )}
@@ -433,7 +429,6 @@ const DeviceAdmin = () => {
                                                 </div>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <Badge variant="outline" className="text-[10px] h-4 px-1">{product.availability}</Badge>
-                                                    <Badge variant="secondary" className="text-[10px] h-4 px-1">{product.warranty_type === 'extended' ? 'Garantie Étendue' : 'Standard'}</Badge>
                                                 </div>
                                             </div>
                                         </div>
@@ -462,31 +457,34 @@ const DeviceAdmin = () => {
                                 </div>
 
                                 <Card className="flex-1 flex flex-col overflow-hidden border-gray-200 shadow-sm">
-                                    <div className="grid grid-cols-6 gap-4 p-4 border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <div className="grid grid-cols-7 gap-4 p-4 border-b border-gray-100 bg-gray-50/50 text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         <div className="col-span-2">Info Unité</div>
-                                        <div>Specs</div>
-                                        <div>Prix</div>
-                                        <div>État</div>
+                                        <div className="col-span-2">Specs</div>
+                                        <div>Prix Vente</div>
+                                        <div>Coût</div>
                                         <div className="text-right">Action</div>
                                     </div>
                                     <ScrollArea className="flex-1">
                                         <div className="divide-y divide-gray-100">
                                             {units.map(unit => (
-                                                <div key={unit.id} className="grid grid-cols-6 gap-4 p-4 items-center text-sm hover:bg-gray-50 transition-colors group">
+                                                <div key={unit.id} className="grid grid-cols-7 gap-4 p-4 items-center text-sm hover:bg-gray-50 transition-colors group">
                                                     <div className="col-span-2">
                                                         <div className="font-mono text-gray-900 flex items-center gap-2 font-medium">
                                                             <Barcode className="h-4 w-4 text-gray-400" />
                                                             {unit.serial_number}
                                                         </div>
-                                                        <div className="text-xs text-gray-500 capitalize">{unit.condition === 'new' ? 'Neuf' : 'Reconditionné'}</div>
+                                                        <div className="text-xs text-gray-500 capitalize">{unit.condition === 'new' ? 'Neuf' : 'Reconditionné'} • <span className={unit.status === 'available' ? 'text-green-600' : 'text-blue-600'}>{unit.status}</span></div>
                                                     </div>
-                                                    <div className="text-xs text-gray-600">
+                                                    <div className="col-span-2 text-xs text-gray-600">
                                                         <div className="font-semibold">{unit.specific_specs?.ram_size}GB RAM • {unit.specific_specs?.storage}GB</div>
+                                                        <div className="flex gap-2 mt-1 text-gray-400">
+                                                            {unit.specific_specs?.features?.touch && <Hand className="h-3 w-3" />}
+                                                            {unit.specific_specs?.features?.wifi && <Wifi className="h-3 w-3" />}
+                                                            {unit.specific_specs?.features?.fingerprint && <Fingerprint className="h-3 w-3" />}
+                                                        </div>
                                                     </div>
-                                                    <div className="font-medium">${unit.unit_price}</div>
-                                                    <div>
-                                                        <Badge variant="outline" className={`${unit.status === 'available' ? 'bg-green-50 text-green-700' : unit.status === 'sold' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{unit.status}</Badge>
-                                                    </div>
+                                                    <div className="font-medium text-green-700">${unit.unit_price}</div>
+                                                    <div className="font-medium text-red-700">${unit.cost_price || 0}</div>
                                                     <div className="text-right opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDeleteUnit(unit.id)}><Trash2 className="h-4 w-4" /></Button>
                                                     </div>
@@ -515,7 +513,7 @@ const DeviceAdmin = () => {
                     <div className="space-y-4">
                         <div className="space-y-2"><Label>Nom du modèle</Label><Input value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} placeholder="ex: Sivara Book Pro" /></div>
                         <div className="space-y-2"><Label>Description courte</Label><Textarea value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})} placeholder="Caractéristiques principales..." /></div>
-                        <div className="space-y-2"><Label>Prix de base ($)</Label><Input type="number" value={prodForm.base_price} onChange={e => setProdForm({...prodForm, base_price: parseFloat(e.target.value)})} /></div>
+                        <div className="space-y-2"><Label>Prix de base Vente ($)</Label><Input type="number" value={prodForm.base_price} onChange={e => setProdForm({...prodForm, base_price: parseFloat(e.target.value)})} /></div>
                     </div>
                     
                     <div className="space-y-4">
@@ -542,13 +540,47 @@ const DeviceAdmin = () => {
                         <div className="space-y-4">
                             <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Spécifications</h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2"><Label>Quantité RAM</Label><Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="16">16 GB</SelectItem><SelectItem value="32">32 GB</SelectItem><SelectItem value="64">64 GB</SelectItem></SelectContent></Select></div>
-                                <div className="space-y-2"><Label>Stockage</Label><Select value={unitForm.storage} onValueChange={(v) => setUnitForm({...unitForm, storage: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="256">256 GB</SelectItem><SelectItem value="512">512 GB</SelectItem><SelectItem value="1024">1 TB</SelectItem></SelectContent></Select></div>
+                                <div className="space-y-2"><Label>Quantité RAM</Label><Select value={unitForm.ram_size} onValueChange={(v) => setUnitForm({...unitForm, ram_size: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="8">8 GB</SelectItem><SelectItem value="16">16 GB</SelectItem><SelectItem value="32">32 GB</SelectItem><SelectItem value="64">64 GB</SelectItem></SelectContent></Select></div>
+                                <div className="space-y-2"><Label>Stockage</Label><Select value={unitForm.storage} onValueChange={(v) => setUnitForm({...unitForm, storage: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="256">256 GB</SelectItem><SelectItem value="512">512 GB</SelectItem><SelectItem value="1024">1 TB</SelectItem><SelectItem value="2048">2 TB</SelectItem></SelectContent></Select></div>
                             </div>
+                            <div className="space-y-2">
+                                <Label>Fréquence RAM</Label>
+                                <Input value={unitForm.ram_speed} onChange={(e) => setUnitForm({...unitForm, ram_speed: e.target.value})} placeholder="ex: 5200" />
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Fonctionnalités</h3>
+                            <div className="flex items-center justify-between"><Label>Écran Tactile</Label><Switch checked={unitForm.features.touch} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, touch: c}})} /></div>
+                            <div className="flex items-center justify-between"><Label>Lecteur d'empreinte</Label><Switch checked={unitForm.features.fingerprint} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, fingerprint: c}})} /></div>
+                            <div className="flex items-center justify-between"><Label>WiFi 6E</Label><Switch checked={unitForm.features.wifi} onCheckedChange={(c) => setUnitForm({...unitForm, features: {...unitForm.features, wifi: c}})} /></div>
                         </div>
                     </div>
                     <div className="space-y-6">
-                        <div className="space-y-4"><h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Prix & Statut</h3><div className="space-y-2"><Label>Prix ($)</Label><Input type="number" value={unitForm.unit_price} onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} /></div></div>
+                        <div className="space-y-4">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">Prix & Coûts</h3>
+                            <div className="space-y-2">
+                                <Label>Prix Vente Client ($)</Label>
+                                <Input type="number" value={unitForm.unit_price} onChange={(e) => setUnitForm({...unitForm, unit_price: parseFloat(e.target.value)})} />
+                                <p className="text-xs text-gray-500">Prix affiché au client pour le calcul de l'abonnement.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-red-700">Coût d'achat/Révient ($)</Label>
+                                <Input type="number" className="border-red-200 focus:ring-red-200" value={unitForm.cost_price} onChange={(e) => setUnitForm({...unitForm, cost_price: parseFloat(e.target.value)})} />
+                                <p className="text-xs text-gray-500">Votre coût d'achat. Invisible pour le client. Utilisé pour calculer le ROI.</p>
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <h3 className="font-semibold text-sm text-gray-900 border-b pb-2">État</h3>
+                            <Select value={unitForm.condition} onValueChange={(v: any) => setUnitForm({...unitForm, condition: v})}>
+                                <SelectTrigger><SelectValue placeholder="Condition" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="new">Neuf</SelectItem>
+                                    <SelectItem value="refurbished">Reconditionné</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                 </div>
                 <DialogFooter><Button onClick={handleSaveUnit}>Ajouter au stock</Button></DialogFooter>

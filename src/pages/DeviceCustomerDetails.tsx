@@ -10,13 +10,13 @@ import {
   Loader2, ArrowLeft, Mail, Phone, Laptop, Package, CreditCard, 
   CheckCircle2, AlertCircle, Shield, LayoutDashboard, FileText, 
   History, Eye, XCircle, Clock, AlertTriangle, Fingerprint, Activity, MapPin,
-  TrendingUp, Calendar, Zap, BrainCircuit, RefreshCw, Sparkles
+  TrendingUp, Calendar, Zap, BrainCircuit, RefreshCw, Sparkles, DollarSign
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
 import { Separator } from '@/components/ui/separator';
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
 
 interface Customer {
   id: string;
@@ -34,6 +34,7 @@ interface Unit {
   id: string;
   serial_number: string;
   unit_price: number;
+  cost_price: number;
   shipping_address?: any;
   created_at: string; // Date de début de location
   product: {
@@ -99,13 +100,14 @@ const DeviceCustomerDetails = () => {
         const approved = verifs?.find((v: any) => v.status === 'approved');
         setIsIdentityVerified(!!approved);
 
-        // 3. Fetch Customer Devices with Shipping Info
+        // 3. Fetch Customer Devices with Shipping Info AND COST PRICE
         const { data: units } = await supabase
             .from('device_units')
             .select(`
                 id,
                 serial_number,
                 unit_price,
+                cost_price,
                 shipping_address,
                 updated_at,
                 created_at,
@@ -134,7 +136,7 @@ const DeviceCustomerDetails = () => {
     fetchData();
   }, [id]);
 
-  // --- ORACLE ALGORITHM ---
+  // --- ORACLE ALGORITHM: CASHFLOW & ROI ---
   const predictionData = useMemo(() => {
       if (!customer || devices.length === 0) return null;
 
@@ -144,82 +146,113 @@ const DeviceCustomerDetails = () => {
       const idType = latestVerif?.verification_metadata?.ai_raw?.docType || 'UNKNOWN';
       const trustScore = latestVerif?.verification_metadata?.trust_score || 50;
       
-      // Calcul du MRR total
-      const totalMonthlyRevenue = devices.reduce((acc, unit) => acc + (unit.unit_price * 1.14975 * 0.8 / 16), 0);
+      // Totaux Flotte
+      const totalHardwareCost = devices.reduce((acc, unit) => acc + (unit.cost_price || 0), 0);
+      const totalSalePrice = devices.reduce((acc, unit) => acc + unit.unit_price, 0);
+      
+      // Calcul Revenus (Taxes QC 14.975%)
+      const totalWithTax = totalSalePrice * 1.14975;
+      const deposit = totalWithTax * 0.20; // 20% Dépôt
+      const monthlyRevenue = (totalWithTax * 0.80) / 16; // Reste sur 16 mois
       
       // 2. Facteurs de risque (Churn Probability)
       let baseChurnRate = 0.02; // 2% de base
 
-      // Age Factor: Les jeunes (<25) sont plus volatiles, les seniors (>50) plus fidèles
       if (age < 25) baseChurnRate += 0.03;
       else if (age > 50) baseChurnRate -= 0.01;
 
-      // ID Factor: Passeport = Voyageur/International (Risque moyen), RAMQ/DL = Local (Stable)
-      if (idType === 'PASSPORT') baseChurnRate += 0.015;
-      
-      // Trust Factor
-      if (trustScore < 70) baseChurnRate += 0.05; // Risque élevé
-      if (trustScore > 90) baseChurnRate -= 0.01; // Très fiable
+      if (idType === 'PASSPORT') baseChurnRate += 0.015; // International = Risque départ
+      if (trustScore < 70) baseChurnRate += 0.05; 
+      if (trustScore > 90) baseChurnRate -= 0.01; 
 
-      // Hardware Value Factor: Plus c'est cher, plus l'engagement est "lourd" (sauf si fraude)
-      const avgDevicePrice = devices.reduce((acc, u) => acc + u.unit_price, 0) / devices.length;
+      const avgDevicePrice = totalSalePrice / devices.length;
       if (avgDevicePrice > 2500) baseChurnRate -= 0.005;
 
-      // Cap des limites
       baseChurnRate = Math.max(0.005, Math.min(0.20, baseChurnRate));
 
-      // 3. Simulation temporelle (24 mois)
+      // 3. Simulation temporelle (24 mois) - CASHFLOW RÉEL
       const projections = [];
-      let retentionProb = 1.0;
-      let cumulativeProfit = 0;
+      let cumulativeCashflow = 0;
       const today = new Date();
       
       // Date du plus vieux device actif pour caler le cycle
       const firstDeviceDate = new Date(devices[devices.length - 1].created_at);
-      const monthsSinceStart = (today.getFullYear() - firstDeviceDate.getFullYear()) * 12 + (today.getMonth() - firstDeviceDate.getMonth());
-      const currentCycleMonth = monthsSinceStart % 16;
       
-      let nextRenewalDate: Date | null = null;
-
-      for (let i = 0; i < 24; i++) {
-          const projectedDate = new Date();
-          projectedDate.setMonth(today.getMonth() + i);
+      // On simule depuis le début du contrat pour voir le "trou" initial
+      // Si le contrat a commencé il y a 3 mois, on montre l'historique et le futur
+      const monthsSinceStart = Math.floor((today.getTime() - firstDeviceDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+      
+      // On commence la projection à T=0 (Achat)
+      let currentMonthIndex = 0; 
+      let retentionProb = 1.0;
+      
+      // Simulation sur 32 mois (2 cycles)
+      for (let i = 0; i < 32; i++) {
+          const simDate = new Date(firstDeviceDate);
+          simDate.setMonth(firstDeviceDate.getMonth() + i);
           
-          const monthInCycle = (currentCycleMonth + i) % 16;
-          const isRenewalMonth = monthInCycle === 15; // 16ème mois (0-indexed -> 15)
+          let monthlyFlow = 0;
+          let event = null;
 
-          if (isRenewalMonth && !nextRenewalDate) nextRenewalDate = new Date(projectedDate);
+          // CYCLE 1 (Mois 0 à 15)
+          if (i === 0) {
+              // Démarrage : On paie le matériel, on encaisse le dépôt
+              monthlyFlow = deposit - totalHardwareCost;
+              event = "Achat initial";
+          } else if (i <= 16) {
+              monthlyFlow = monthlyRevenue;
+          }
 
-          // Risque de churn augmente drastiquement à la fin du cycle (Mois 16)
-          let monthlyChurn = baseChurnRate;
-          if (isRenewalMonth) monthlyChurn += 0.15; // +15% de chance de drop au renouvellement
+          // RENOUVELLEMENT (Mois 16)
+          if (i === 16) {
+              // Hypothèse : Renouvellement avec machine équivalente
+              // On repaie le matériel neuf (-Cost), On ré-encaisse un dépôt (+Deposit)
+              // Note: Le churn s'applique ici
+              const renewalRate = 1 - (baseChurnRate * 5); // Gros risque de churn au renouvellement
+              retentionProb *= renewalRate;
+              
+              monthlyFlow = (deposit - totalHardwareCost) * retentionProb;
+              event = "Renouvellement Matériel";
+          } else if (i > 16) {
+              monthlyFlow = monthlyRevenue * retentionProb;
+          }
 
-          retentionProb *= (1 - monthlyChurn);
-          
-          const revenue = totalMonthlyRevenue * retentionProb;
-          // Coûts estimés (Support, Stripe, Cloud, Amortissement) ~30%
-          const costs = revenue * 0.30; 
-          
-          const monthlyProfit = revenue - costs;
-          cumulativeProfit += monthlyProfit;
+          // Coûts opérationnels mensuels (Support, Serveurs, Stripe Fees) ~5% du revenu
+          monthlyFlow -= (monthlyRevenue * 0.05);
+
+          cumulativeCashflow += monthlyFlow;
+
+          // Marqueur "Aujourd'hui"
+          const isCurrentMonth = i === monthsSinceStart;
 
           projections.push({
-              month: projectedDate.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
-              profit: Math.round(cumulativeProfit),
-              retention: Math.round(retentionProb * 100),
-              isRenewal: isRenewalMonth
+              month: simDate.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
+              cashflow: Math.round(cumulativeCashflow),
+              isRenewal: i === 16,
+              isToday: isCurrentMonth,
+              event: event
           });
       }
+
+      // Date de renouvellement estimée
+      const renewalDate = new Date(firstDeviceDate);
+      renewalDate.setMonth(firstDeviceDate.getMonth() + 16);
 
       return {
           chartData: projections,
           churnRisk: (baseChurnRate * 100).toFixed(1),
-          predictedLTV: Math.round(cumulativeProfit),
-          renewalDate: nextRenewalDate,
+          currentROI: Math.round(cumulativeCashflow), // À date
+          renewalDate: renewalDate,
+          breakEvenMonth: projections.find(p => p.cashflow > 0)?.month || "N/A",
           customerPersona: {
               age,
               stability: trustScore > 80 ? 'Élevée' : trustScore > 50 ? 'Moyenne' : 'Critique',
               docType: idType
+          },
+          financials: {
+              hardwareCost: totalHardwareCost,
+              deposit: deposit,
+              monthly: monthlyRevenue
           }
       };
   }, [customer, devices, verifications]);
@@ -463,7 +496,8 @@ const DeviceCustomerDetails = () => {
                                 </div>
                             </div>
                             <div className="text-right">
-                                <div className="font-medium text-sm">${unit.unit_price}</div>
+                                <div className="font-medium text-sm text-gray-500">Coût: ${unit.cost_price}</div>
+                                <div className="font-bold text-sm">${unit.unit_price}</div>
                                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 mt-1">Actif</Badge>
                             </div>
                         </div>
@@ -509,10 +543,6 @@ const DeviceCustomerDetails = () => {
                                     <span className="text-sm text-gray-600">Type Document</span>
                                     <span className="font-mono text-xs font-bold">{predictionData.customerPersona.docType}</span>
                                 </div>
-                                <div className="flex justify-between items-center pb-2">
-                                    <span className="text-sm text-gray-600">Âge Visuel IA</span>
-                                    <span className="font-mono text-sm">{predictionData.customerPersona.age} ans</span>
-                                </div>
                                 <div className="pt-2">
                                     <div className="flex justify-between text-xs mb-1">
                                         <span className="text-gray-500">Risque de Churn Mensuel</span>
@@ -532,15 +562,21 @@ const DeviceCustomerDetails = () => {
                             <CardHeader>
                                 <div className="flex items-center gap-2 text-emerald-600 mb-1">
                                     <TrendingUp className="h-4 w-4" />
-                                    <span className="text-xs font-bold uppercase tracking-wider">Projection LTV</span>
+                                    <span className="text-xs font-bold uppercase tracking-wider">Projection ROI</span>
                                 </div>
-                                <CardTitle className="text-lg">Rentabilité 24 Mois</CardTitle>
+                                <CardTitle className="text-lg">Rentabilité Nette</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-4xl font-bold text-gray-900 mb-1">
-                                    ${predictionData.predictedLTV}
+                                <div className="flex justify-between items-end mb-4">
+                                    <div>
+                                        <div className="text-xs text-gray-500">Investissement Matériel</div>
+                                        <div className="font-mono text-red-600 font-bold">-${predictionData.financials.hardwareCost}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-xs text-gray-500">Point mort (Break-Even)</div>
+                                        <div className="font-bold text-gray-900">{predictionData.breakEvenMonth}</div>
+                                    </div>
                                 </div>
-                                <p className="text-xs text-gray-500 mb-6">Profit net estimé après coûts et churn.</p>
                                 
                                 {predictionData.renewalDate && (
                                     <div className="bg-white/60 p-3 rounded-lg border border-emerald-100 flex items-start gap-3">
@@ -549,7 +585,7 @@ const DeviceCustomerDetails = () => {
                                         </div>
                                         <div>
                                             <div className="text-xs font-bold text-emerald-900 uppercase">Prochain Cycle</div>
-                                            <div className="text-sm text-gray-700">Contacter pour upgrade :</div>
+                                            <div className="text-sm text-gray-700">Suggestion Renouvellement :</div>
                                             <div className="font-bold text-gray-900">{predictionData.renewalDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>
                                         </div>
                                     </div>
@@ -560,15 +596,19 @@ const DeviceCustomerDetails = () => {
 
                     <Card className="border-gray-200 shadow-sm">
                         <CardHeader>
-                            <CardTitle className="text-sm font-medium text-gray-500">Trajectoire de Rentabilité</CardTitle>
+                            <CardTitle className="text-sm font-medium text-gray-500">Trajectoire Cashflow (Réel vs Coût)</CardTitle>
                         </CardHeader>
                         <CardContent className="h-[300px]">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={predictionData.chartData}>
                                     <defs>
-                                        <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                        <linearGradient id="colorCashflow" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
                                             <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                        </linearGradient>
+                                        <linearGradient id="colorNegative" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -578,14 +618,15 @@ const DeviceCustomerDetails = () => {
                                         contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                         labelStyle={{ color: '#6b7280', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
                                     />
+                                    <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
                                     <Area 
                                         type="monotone" 
-                                        dataKey="profit" 
-                                        stroke="#10b981" 
+                                        dataKey="cashflow" 
+                                        stroke="#000" 
                                         strokeWidth={2}
                                         fillOpacity={1} 
-                                        fill="url(#colorProfit)" 
-                                        name="Profit Cumulé"
+                                        fill="url(#colorCashflow)" 
+                                        name="Cashflow Cumulé"
                                     />
                                 </AreaChart>
                             </ResponsiveContainer>
