@@ -173,6 +173,7 @@ const DeviceCustomerDetails = () => {
       // 3. Simulation temporelle (24 mois) - CASHFLOW RÉEL
       const projections = [];
       let cumulativeCashflow = 0;
+      let profitAt24Months = 0;
       const today = new Date();
       
       // Date du plus vieux device actif pour caler le cycle
@@ -182,11 +183,9 @@ const DeviceCustomerDetails = () => {
       // Si le contrat a commencé il y a 3 mois, on montre l'historique et le futur
       const monthsSinceStart = Math.floor((today.getTime() - firstDeviceDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
       
-      // On commence la projection à T=0 (Achat)
-      let currentMonthIndex = 0; 
       let retentionProb = 1.0;
       
-      // Simulation sur 32 mois (2 cycles)
+      // Simulation sur 32 mois (2 cycles complets)
       for (let i = 0; i < 32; i++) {
           const simDate = new Date(firstDeviceDate);
           simDate.setMonth(firstDeviceDate.getMonth() + i);
@@ -196,18 +195,18 @@ const DeviceCustomerDetails = () => {
 
           // CYCLE 1 (Mois 0 à 15)
           if (i === 0) {
-              // Démarrage : On paie le matériel, on encaisse le dépôt
+              // Démarrage : On encaisse le dépôt mais on paie le matériel
               monthlyFlow = deposit - totalHardwareCost;
               event = "Achat initial";
-          } else if (i <= 16) {
+          } else if (i <= 15) {
               monthlyFlow = monthlyRevenue;
           }
 
-          // RENOUVELLEMENT (Mois 16)
+          // RENOUVELLEMENT (Mois 16) - Cycle 2
           if (i === 16) {
               // Hypothèse : Renouvellement avec machine équivalente
               // On repaie le matériel neuf (-Cost), On ré-encaisse un dépôt (+Deposit)
-              // Note: Le churn s'applique ici
+              // Note: Le churn s'applique ici drastiquement
               const renewalRate = 1 - (baseChurnRate * 5); // Gros risque de churn au renouvellement
               retentionProb *= renewalRate;
               
@@ -222,6 +221,11 @@ const DeviceCustomerDetails = () => {
 
           cumulativeCashflow += monthlyFlow;
 
+          // Capture du profit à 24 mois
+          if (i === 24) {
+              profitAt24Months = cumulativeCashflow;
+          }
+
           // Marqueur "Aujourd'hui"
           const isCurrentMonth = i === monthsSinceStart;
 
@@ -234,14 +238,17 @@ const DeviceCustomerDetails = () => {
           });
       }
 
-      // Date de renouvellement estimée
+      // Date de renouvellement estimée (Fin du 16ème mois)
       const renewalDate = new Date(firstDeviceDate);
       renewalDate.setMonth(firstDeviceDate.getMonth() + 16);
+
+      // Si on est avant 24 mois, on prend la valeur calculée, sinon la dernière
+      const final24Value = profitAt24Months || cumulativeCashflow;
 
       return {
           chartData: projections,
           churnRisk: (baseChurnRate * 100).toFixed(1),
-          currentROI: Math.round(cumulativeCashflow), // À date
+          profit24Months: Math.round(final24Value),
           renewalDate: renewalDate,
           breakEvenMonth: projections.find(p => p.cashflow > 0)?.month || "N/A",
           customerPersona: {
@@ -562,21 +569,15 @@ const DeviceCustomerDetails = () => {
                             <CardHeader>
                                 <div className="flex items-center gap-2 text-emerald-600 mb-1">
                                     <TrendingUp className="h-4 w-4" />
-                                    <span className="text-xs font-bold uppercase tracking-wider">Projection ROI</span>
+                                    <span className="text-xs font-bold uppercase tracking-wider">Projection LTV</span>
                                 </div>
-                                <CardTitle className="text-lg">Rentabilité Nette</CardTitle>
+                                <CardTitle className="text-lg">Rentabilité Nette (24 Mois)</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="flex justify-between items-end mb-4">
-                                    <div>
-                                        <div className="text-xs text-gray-500">Investissement Matériel</div>
-                                        <div className="font-mono text-red-600 font-bold">-${predictionData.financials.hardwareCost}</div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-xs text-gray-500">Point mort (Break-Even)</div>
-                                        <div className="font-bold text-gray-900">{predictionData.breakEvenMonth}</div>
-                                    </div>
+                                <div className="text-4xl font-bold text-gray-900 mb-1">
+                                    ${predictionData.profit24Months}
                                 </div>
+                                <p className="text-xs text-gray-500 mb-6">Profit net estimé après matériel et coûts.</p>
                                 
                                 {predictionData.renewalDate && (
                                     <div className="bg-white/60 p-3 rounded-lg border border-emerald-100 flex items-start gap-3">
@@ -585,7 +586,7 @@ const DeviceCustomerDetails = () => {
                                         </div>
                                         <div>
                                             <div className="text-xs font-bold text-emerald-900 uppercase">Prochain Cycle</div>
-                                            <div className="text-sm text-gray-700">Suggestion Renouvellement :</div>
+                                            <div className="text-sm text-gray-700">Contacter pour upgrade :</div>
                                             <div className="font-bold text-gray-900">{predictionData.renewalDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>
                                         </div>
                                     </div>
