@@ -170,7 +170,8 @@ const DeviceCustomerDetails = () => {
 
       baseChurnRate = Math.max(0.005, Math.min(0.20, baseChurnRate));
 
-      // 3. Simulation temporelle (24 mois) - CASHFLOW RÉEL
+      // 3. Simulation temporelle (24 mois) - CASHFLOW RÉEL SANS CHURN APPLIQUÉ AU MONTANT
+      // On montre le POTENTIEL si le client reste.
       const projections = [];
       let cumulativeCashflow = 0;
       let profitAt24Months = 0;
@@ -179,13 +180,10 @@ const DeviceCustomerDetails = () => {
       // Date du plus vieux device actif pour caler le cycle
       const firstDeviceDate = new Date(devices[devices.length - 1].created_at);
       
-      // On simule depuis le début du contrat pour voir le "trou" initial
-      // Si le contrat a commencé il y a 3 mois, on montre l'historique et le futur
+      // On simule depuis le début du contrat
       const monthsSinceStart = Math.floor((today.getTime() - firstDeviceDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
       
-      let retentionProb = 1.0;
-      
-      // Simulation sur 32 mois (2 cycles complets)
+      // Simulation sur 32 mois
       for (let i = 0; i < 32; i++) {
           const simDate = new Date(firstDeviceDate);
           simDate.setMonth(firstDeviceDate.getMonth() + i);
@@ -193,31 +191,27 @@ const DeviceCustomerDetails = () => {
           let monthlyFlow = 0;
           let event = null;
 
-          // CYCLE 1 (Mois 0 à 15)
+          // MOIS 0 : Achat
           if (i === 0) {
-              // Démarrage : On encaisse le dépôt mais on paie le matériel
+              // Cashflow négatif initial : Dépôt reçu - Coût matériel
               monthlyFlow = deposit - totalHardwareCost;
               event = "Achat initial";
-          } else if (i <= 15) {
+          } 
+          // MOIS 16 : Renouvellement (Rotation Stock)
+          else if (i === 16) {
+              // Rotation : On considère que c'est neutre (ancien ordi rentabilisé/revendu, nouveau fourni)
+              // Le client continue de payer, potentiellement un nouveau petit dépôt ou frais de dossier ?
+              // Pour ce modèle simplifié "baisé" : On continue juste d'encaisser le mensuel.
+              monthlyFlow = monthlyRevenue;
+              event = "Renouvellement (Cycle 2)";
+          } 
+          // TOUS LES AUTRES MOIS
+          else {
               monthlyFlow = monthlyRevenue;
           }
 
-          // RENOUVELLEMENT (Mois 16) - Cycle 2
-          if (i === 16) {
-              // Hypothèse : Renouvellement avec machine équivalente
-              // On repaie le matériel neuf (-Cost), On ré-encaisse un dépôt (+Deposit)
-              // Note: Le churn s'applique ici drastiquement
-              const renewalRate = 1 - (baseChurnRate * 5); // Gros risque de churn au renouvellement
-              retentionProb *= renewalRate;
-              
-              monthlyFlow = (deposit - totalHardwareCost) * retentionProb;
-              event = "Renouvellement Matériel";
-          } else if (i > 16) {
-              monthlyFlow = monthlyRevenue * retentionProb;
-          }
-
-          // Coûts opérationnels mensuels (Support, Serveurs, Stripe Fees) ~5% du revenu
-          monthlyFlow -= (monthlyRevenue * 0.05);
+          // Frais opérationnels minimes (Stripe, etc) ~3%
+          monthlyFlow -= (monthlyRevenue * 0.03);
 
           cumulativeCashflow += monthlyFlow;
 
@@ -226,7 +220,6 @@ const DeviceCustomerDetails = () => {
               profitAt24Months = cumulativeCashflow;
           }
 
-          // Marqueur "Aujourd'hui"
           const isCurrentMonth = i === monthsSinceStart;
 
           projections.push({
@@ -569,15 +562,15 @@ const DeviceCustomerDetails = () => {
                             <CardHeader>
                                 <div className="flex items-center gap-2 text-emerald-600 mb-1">
                                     <TrendingUp className="h-4 w-4" />
-                                    <span className="text-xs font-bold uppercase tracking-wider">Projection LTV</span>
+                                    <span className="text-xs font-bold uppercase tracking-wider">Projection LTV (24 Mois)</span>
                                 </div>
-                                <CardTitle className="text-lg">Rentabilité Nette (24 Mois)</CardTitle>
+                                <CardTitle className="text-lg">Rentabilité Nette Potentielle</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="text-4xl font-bold text-gray-900 mb-1">
                                     ${predictionData.profit24Months}
                                 </div>
-                                <p className="text-xs text-gray-500 mb-6">Profit net estimé après matériel et coûts.</p>
+                                <p className="text-xs text-gray-500 mb-6">Profit estimé si le client complète 24 mois (sans pénalité de rotation).</p>
                                 
                                 {predictionData.renewalDate && (
                                     <div className="bg-white/60 p-3 rounded-lg border border-emerald-100 flex items-start gap-3">
@@ -585,8 +578,8 @@ const DeviceCustomerDetails = () => {
                                             <RefreshCw className="h-4 w-4" />
                                         </div>
                                         <div>
-                                            <div className="text-xs font-bold text-emerald-900 uppercase">Prochain Cycle</div>
-                                            <div className="text-sm text-gray-700">Contacter pour upgrade :</div>
+                                            <div className="text-xs font-bold text-emerald-900 uppercase">Fin de cycle matériel</div>
+                                            <div className="text-sm text-gray-700">Rotation & Upgrade :</div>
                                             <div className="font-bold text-gray-900">{predictionData.renewalDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>
                                         </div>
                                     </div>
