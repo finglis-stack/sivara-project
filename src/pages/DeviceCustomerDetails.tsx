@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
-import Oracle3D from '@/components/Oracle3D';
+
+// Lazy Load du composant lourd 3D pour protéger le reste de l'app
+const Oracle3D = lazy(() => import('@/components/Oracle3D'));
 
 interface Customer {
   id: string;
@@ -286,8 +288,10 @@ const DeviceCustomerDetails = () => {
 
             {/* --- ORACLE 3D SPATIAL UI (WHITE MODE) --- */}
             {activeSection === 'billing' && oracle && (
-                <div className="w-full h-full">
-                    <Oracle3D data={oracle} />
+                <div className="w-full h-full animate-in fade-in duration-700">
+                    <Suspense fallback={<div className="h-full flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-gray-300" /><span className="ml-4 text-gray-500">Initialisation du moteur de projection...</span></div>}>
+                        <Oracle3D data={oracle} />
+                    </Suspense>
                 </div>
             )}
 

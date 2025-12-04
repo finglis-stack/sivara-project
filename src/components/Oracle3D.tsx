@@ -5,7 +5,6 @@ import {
   Html, 
   Float, 
   Environment, 
-  Line
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { BrainCircuit, Target, TrendingUp, AlertTriangle } from 'lucide-react';
@@ -30,26 +29,20 @@ interface OracleData {
 // --- 3D COMPONENTS ---
 
 const DataCurve = ({ data, dataKey, color, thickness = 0.1, opacity = 1 }: any) => {
-  const points = useMemo(() => {
-    // Normalisation des données pour l'espace 3D
-    // X = Mois (0 à 24) -> mappé sur -10 à 10
-    // Y = Argent -> mappé sur -5 à 5
-    // Z = Profondeur (pour séparer les courbes)
-    return data.map((d: any, i: number) => {
+  const geometry = useMemo(() => {
+    const points = data.map((d: any, i: number) => {
       const x = (i / 24) * 20 - 10;
-      const y = (d[dataKey] / 2000) * 3; // Scale factor arbitraire pour la vue
-      return [x, y, 0];
-    }).map((p: any) => new THREE.Vector3(...p));
+      const y = (d[dataKey] / 2000) * 3; 
+      return new THREE.Vector3(x, y, 0);
+    });
+    return new THREE.BufferGeometry().setFromPoints(points);
   }, [data, dataKey]);
 
   return (
-    <Line
-      points={points}
-      color={color}
-      lineWidth={thickness}
-      transparent
-      opacity={opacity}
-    />
+    // @ts-ignore
+    <line geometry={geometry}>
+      <lineBasicMaterial color={color} transparent opacity={opacity} linewidth={2} />
+    </line>
   );
 };
 
@@ -68,12 +61,11 @@ const FloatingPanel = ({ position, children, rotation = [0, 0, 0] }: any) => {
 };
 
 const BreakEvenMarker = ({ data }: { data: OracleData }) => {
-  // Trouver la position 3D du break-even sur la courbe probable
   const breakEvenIndex = data.chartData.findIndex((d: any) => d.probable > 0);
   if (breakEvenIndex === -1) return null;
 
   const x = (breakEvenIndex / 24) * 20 - 10;
-  const y = 0; // Y=0 est le point mort
+  const y = 0; 
 
   return (
     <group position={[x, y, 0]}>
@@ -96,29 +88,19 @@ const BreakEvenMarker = ({ data }: { data: OracleData }) => {
 };
 
 const MoneyFlowVisualizer = ({ data }: { data: OracleData }) => {
-  // Visualisation du "Trou" initial (Dépôt vs Coût)
-  // On place ça au début du graph (x = -10)
-  
-  // Bar Rouge (Coût Matériel) qui descend
   const costHeight = (data.details.hardwareCost / 2000) * 3;
-  // Bar Verte (Dépôt) qui monte (un peu)
   const depositHeight = (data.details.deposit / 2000) * 3;
 
   return (
     <group position={[-10, 0, 0]}>
-      {/* COUT MATERIEL (Barre Rouge vers le bas) */}
       <mesh position={[0, -costHeight/2, 0.5]}>
         <boxGeometry args={[0.8, costHeight, 0.8]} />
-        {/* Utilisation de meshPhysicalMaterial natif pour éviter les crashs Drei */}
         <meshPhysicalMaterial 
             color="#ef4444"
             transparent
-            opacity={0.7}
-            transmission={0.2}
+            opacity={0.8}
+            metalness={0.2}
             roughness={0.2}
-            metalness={0.1}
-            ior={1.5}
-            thickness={1}
         />
       </mesh>
       <Html position={[0, -costHeight - 0.5, 0.5]} center>
@@ -127,18 +109,14 @@ const MoneyFlowVisualizer = ({ data }: { data: OracleData }) => {
         </div>
       </Html>
 
-      {/* DEPOT (Barre Verte qui compense un peu) */}
       <mesh position={[0, depositHeight/2, 0.5]}>
         <boxGeometry args={[0.8, depositHeight, 0.8]} />
         <meshPhysicalMaterial 
             color="#10b981"
             transparent
-            opacity={0.7}
-            transmission={0.2}
+            opacity={0.8}
+            metalness={0.2}
             roughness={0.2}
-            metalness={0.1}
-            ior={1.5}
-            thickness={1}
         />
       </mesh>
       <Html position={[0, depositHeight + 0.5, 0.5]} center>
@@ -154,7 +132,6 @@ const GridFloor = () => {
   return (
     <group position={[0, -2, 0]}>
       <gridHelper args={[30, 30, 0xdddddd, 0xf0f0f0]} position={[0, 0, 0]} />
-      {/* Ligne Zéro (Axe du temps) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
         <planeGeometry args={[30, 0.1]} />
         <meshBasicMaterial color="#94a3b8" />
@@ -171,18 +148,16 @@ const SceneContent = ({ data }: { data: OracleData }) => {
       <spotLight position={[-10, 10, 10]} intensity={0.5} />
       
       <group position={[0, 0, 0]}>
-        {/* COURBES */}
-        <DataCurve data={data.chartData} dataKey="optimistic" color="#22c55e" thickness={3} opacity={0.3} />
-        <DataCurve data={data.chartData} dataKey="pessimistic" color="#ef4444" thickness={3} opacity={0.3} />
-        <DataCurve data={data.chartData} dataKey="probable" color="#3b82f6" thickness={8} opacity={1} /> {/* Main Curve */}
+        {/* COURBES (Native lines) */}
+        <DataCurve data={data.chartData} dataKey="optimistic" color="#22c55e" opacity={0.3} />
+        <DataCurve data={data.chartData} dataKey="pessimistic" color="#ef4444" opacity={0.3} />
+        <DataCurve data={data.chartData} dataKey="probable" color="#3b82f6" opacity={1} /> 
 
         <BreakEvenMarker data={data} />
         <MoneyFlowVisualizer data={data} />
         <GridFloor />
 
-        {/* PANNEAUX D'INFORMATION FLOTTANTS DANS L'ESPACE */}
-        
-        {/* Panneau IA (Gauche) */}
+        {/* PANNEAUX */}
         <FloatingPanel position={[-7, 4, -2]} rotation={[0, 0.3, 0]}>
             <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-2">
                 <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
@@ -201,7 +176,6 @@ const SceneContent = ({ data }: { data: OracleData }) => {
             </div>
         </FloatingPanel>
 
-        {/* Panneau ROI (Droite / Fin de courbe) */}
         <FloatingPanel position={[8, 5, -2]} rotation={[0, -0.3, 0]}>
             <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-2">
                 <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600">
@@ -221,7 +195,6 @@ const SceneContent = ({ data }: { data: OracleData }) => {
             </div>
         </FloatingPanel>
 
-        {/* Panneau Risque (Bas / Milieu) */}
         <FloatingPanel position={[2, -3, 2]} rotation={[-0.2, 0, 0]}>
              <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle className="w-4 h-4 text-orange-500" />
