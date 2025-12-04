@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -11,12 +11,12 @@ import {
   CheckCircle2, AlertCircle, Shield, LayoutDashboard, FileText, 
   History, Eye, XCircle, Clock, AlertTriangle, Fingerprint, Activity, MapPin,
   TrendingUp, Calendar, Zap, BrainCircuit, RefreshCw, Sparkles, DollarSign,
-  TrendingDown, MinusCircle, Target, ArrowUpRight, Lock
+  TrendingDown, MinusCircle, Target, ArrowUpRight, Lock, MousePointer2
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, Legend, ComposedChart, Line, Bar } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, Legend, Line } from 'recharts';
 
 interface Customer {
   id: string;
@@ -72,6 +72,10 @@ const DeviceCustomerDetails = () => {
   const [isIdentityVerified, setIsIdentityVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 3D Tilt State
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [rotation, setRotation] = useState({ x: 0, y: 0 });
+
   useEffect(() => {
     const fetchData = async () => {
       if (!id) return;
@@ -98,6 +102,23 @@ const DeviceCustomerDetails = () => {
     fetchData();
   }, [id]);
 
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    const { width, height, left, top } = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - left;
+    const y = e.clientY - top;
+    const xPct = x / width;
+    const yPct = y / height;
+    // Rotation légère (max 5 deg)
+    const rotateX = (0.5 - yPct) * 10;
+    const rotateY = (xPct - 0.5) * 10;
+    setRotation({ x: rotateX, y: rotateY });
+  };
+
+  const handleMouseLeave = () => {
+      setRotation({ x: 0, y: 0 });
+  };
+
   // --- ORACLE V3 : MOTEUR FINANCIER 3D ---
   const oracle = useMemo(() => {
       if (!customer || devices.length === 0) return null;
@@ -110,17 +131,14 @@ const DeviceCustomerDetails = () => {
       const latestVerif = verifications.find(v => v.status === 'approved') || verifications[0];
       const trustScore = latestVerif?.verification_metadata?.trust_score || 50; 
       
-      // Totaux Flotte
       const totalHardwareCost = devices.reduce((acc, unit) => acc + (unit.cost_price || 0), 0);
       const totalSalePrice = devices.reduce((acc, unit) => acc + unit.unit_price, 0);
       const totalWithTax = totalSalePrice * TAX_RATE;
       
-      // Flux de Trésorerie Mensuel
+      // Flux de Trésorerie
       const depositAmount = totalWithTax * DEPOSIT_RATE;
       const amountToFinance = totalWithTax - depositAmount;
       const monthlyPayment = amountToFinance / TERM_MONTHS;
-      
-      // Frais Ops (Stripe 2.9% + 0.30$ + Marge risque)
       const monthlyFees = (monthlyPayment * 0.035) + 0.30;
       const netMonthly = monthlyPayment - monthlyFees;
 
@@ -130,52 +148,43 @@ const DeviceCustomerDetails = () => {
       let accProbable = 0;
       let accPessimistic = 0;
       
-      // Calcul du mois de crash pour le scénario pessimiste (basé sur le Trust Score inversé)
-      // Trust 100 -> Crash impossible (Mois 99)
-      // Trust 20 -> Crash rapide (Mois 3)
       const crashMonth = Math.max(2, Math.floor((trustScore / 100) * 12));
-      
-      // Probabilité de rétention mensuelle (Pour scénario Probable)
-      const retentionRate = 0.95 + ((trustScore / 100) * 0.049); // Entre 95% et 99.9%
+      const retentionRate = 0.95 + ((trustScore / 100) * 0.049); 
 
       let currentRetentionProb = 1.0;
       let breakEvenMonth = -1;
 
-      // Simulation sur 24 mois
       for (let i = 0; i <= 24; i++) {
           let flowOptimistic = 0;
           let flowProbable = 0;
           let flowPessimistic = 0;
 
-          // --- MOIS 0 (INITIALISATION) ---
+          // MOIS 0 : LE CREUX INITIAL
           if (i === 0) {
               // Cashflow = Dépôt Client (IN) - Achat Matériel (OUT)
+              // C'est ici qu'on "perd" de l'argent initialement
               const initialFlow = depositAmount - totalHardwareCost;
-              
               flowOptimistic = initialFlow;
               flowProbable = initialFlow;
               flowPessimistic = initialFlow;
           } 
-          // --- MOIS 1 à 24 ---
           else {
-              // OPTIMISTE : Le client paie toujours
+              // OPTIMISTE
               flowOptimistic = netMonthly;
 
-              // PROBABLE : Pondération par risque de défaut
+              // PROBABLE
               currentRetentionProb *= retentionRate;
               flowProbable = netMonthly * currentRetentionProb;
 
-              // PESSIMISTE : Arrêt brutal
+              // CATASTROPHE
               if (i < crashMonth) {
                   flowPessimistic = netMonthly;
               } else if (i === crashMonth) {
-                  // Perte sèche du matériel restant (Amortissement linéaire non récupéré)
-                  // Valeur résiduelle = Coût initial * (Temps restant / Durée vie 3 ans)
+                  // Perte de la valeur résiduelle du matériel
                   const residualValue = totalHardwareCost * ((36 - i) / 36);
-                  // On suppose qu'on perd 60% de la valeur (recouvrement partiel ou vol)
                   flowPessimistic = -(residualValue * 0.6); 
               } else {
-                  flowPessimistic = 0; // Client parti/contentieux
+                  flowPessimistic = 0; 
               }
           }
 
@@ -183,49 +192,41 @@ const DeviceCustomerDetails = () => {
           accProbable += flowProbable;
           accPessimistic += flowPessimistic;
 
-          // Détection Point de Rupture (ROI positif)
           if (breakEvenMonth === -1 && accProbable > 0) {
               breakEvenMonth = i;
           }
 
           projections.push({
               month: `M${i}`,
-              optimistic: Math.round(accOptimistic),
-              probable: Math.round(accProbable),
-              pessimistic: Math.round(accPessimistic),
-              revenue: i > 0 ? Math.round(monthlyPayment) : Math.round(depositAmount), // Pour le tableau
-              costs: i === 0 ? Math.round(totalHardwareCost) : Math.round(monthlyFees) // Pour le tableau
+              Optimiste: Math.round(accOptimistic),
+              Probable: Math.round(accProbable),
+              Catastrophe: Math.round(accPessimistic),
           });
       }
 
-      // --- INTELLIGENCE & RECOMMANDATIONS ---
+      // Recommandations
       let recommendation = "";
       let actionDate = "";
-      let statusColor = "";
-
+      
       if (trustScore >= 80) {
-          recommendation = "Client Premium. Proposer renouvellement anticipé au mois 14 avec modèle supérieur.";
+          recommendation = "Profil Elite. Proposer renouvellement anticipé au mois 14.";
           actionDate = "Mois 14";
-          statusColor = "text-emerald-400";
       } else if (trustScore >= 50) {
-          recommendation = "Standard. Laisser courir le contrat jusqu'au terme (Mois 16).";
+          recommendation = "Profil Standard. Laisser courir jusqu'au terme.";
           actionDate = "Mois 16";
-          statusColor = "text-blue-400";
       } else {
-          recommendation = "Risque Élevé. Ne pas proposer de renouvellement automatique. Vérifier les paiements manuellement.";
-          actionDate = "Surveillance";
-          statusColor = "text-red-400";
+          recommendation = "Profil Risqué. Surveillance active requise.";
+          actionDate = "Immédiat";
       }
 
       return {
           chartData: projections,
-          breakEven: breakEvenMonth > -1 ? `Mois ${breakEvenMonth}` : "Jamais (> 24 mois)",
+          breakEven: breakEvenMonth > -1 ? `Mois ${breakEvenMonth}` : "> 24 mois",
           roiTotal: Math.round(accProbable),
           profitMargin: ((accProbable / totalHardwareCost) * 100).toFixed(1),
           trustScore,
           recommendation,
           actionDate,
-          statusColor,
           details: {
               deposit: depositAmount,
               monthly: monthlyPayment,
@@ -235,8 +236,7 @@ const DeviceCustomerDetails = () => {
   }, [customer, devices, verifications]);
 
   const getDuration = (start: string, end: string | null) => { if (!end) return '...'; const s = new Date(start).getTime(); const e = new Date(end).getTime(); return `${Math.round((e - s) / 1000)}s`; };
-  const getLogColor = (log: string) => { if (log.includes('CRITICAL') || log.includes('FAIL') || log.includes('ERROR')) return 'text-red-500 font-bold'; if (log.includes('WARNING')) return 'text-amber-500 font-medium'; if (log.includes('SUCCESS')) return 'text-green-600 font-medium'; return 'text-gray-500'; };
-
+  
   if (isLoading) return <div className="h-screen flex items-center justify-center bg-gray-50"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
   if (!customer) return <div className="h-screen flex items-center justify-center">Client introuvable</div>;
 
@@ -244,7 +244,7 @@ const DeviceCustomerDetails = () => {
     <div className="flex h-screen bg-white font-sans overflow-hidden">
       
       {/* SIDEBAR */}
-      <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col shrink-0 z-20">
+      <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col shrink-0 z-30">
         <div className="p-6 border-b border-gray-200">
             <Button variant="ghost" onClick={() => navigate('/admin?app=device')} className="pl-0 hover:bg-transparent text-gray-500 hover:text-gray-900 mb-4 -ml-2"><ArrowLeft className="mr-2 h-4 w-4" /> Retour liste</Button>
             <div className="flex items-center gap-3">
@@ -256,15 +256,14 @@ const DeviceCustomerDetails = () => {
             <button onClick={() => setActiveSection('overview')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'overview' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><LayoutDashboard className="h-4 w-4" /> Vue d'ensemble</button>
             <button onClick={() => setActiveSection('identity')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'identity' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><Shield className="h-4 w-4" /> Identité & KYC {isIdentityVerified && <CheckCircle2 className="h-3 w-3 text-green-500 ml-auto" />}</button>
             <button onClick={() => setActiveSection('devices')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'devices' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}><Laptop className="h-4 w-4" /> Appareils <Badge variant="secondary" className="ml-auto text-[10px] h-5">{devices.length}</Badge></button>
-            <button onClick={() => setActiveSection('billing')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'billing' ? 'bg-black text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><BrainCircuit className="h-4 w-4" /> L'Oracle 3D</button>
+            <button onClick={() => setActiveSection('billing')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeSection === 'billing' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100'}`}><BrainCircuit className="h-4 w-4" /> L'Oracle</button>
         </nav>
-        <div className="p-4 border-t border-gray-200 text-xs text-gray-400">Client depuis le {new Date(customer.created_at).toLocaleDateString()}</div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-white relative">
-        <div className={`h-full ${activeSection === 'billing' ? 'p-0 bg-slate-950 text-white' : 'p-8 max-w-5xl mx-auto'}`}>
+      <div className="flex-1 overflow-y-auto bg-gray-50 relative">
+        <div className={`h-full ${activeSection === 'billing' ? 'p-0 overflow-hidden' : 'p-8 max-w-5xl mx-auto'}`}>
             
-            {/* OVERVIEW */}
+            {/* OVERVIEW SECTION (Standard UI) */}
             {activeSection === 'overview' && (
                 <div className="space-y-8 animate-in fade-in duration-300">
                     <div><h1 className="text-2xl font-bold text-gray-900">Vue d'ensemble</h1><p className="text-gray-500">Synthèse du compte client.</p></div>
@@ -272,200 +271,155 @@ const DeviceCustomerDetails = () => {
                         <Card className="border-gray-100 shadow-sm"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Risque Identité</CardTitle></CardHeader><CardContent>{verifications.length > 0 ? (<><div className={`text-2xl font-bold ${isIdentityVerified ? 'text-green-600' : 'text-red-600'}`}>{isIdentityVerified ? 'Vérifié' : 'Non Vérifié'}</div><div className="text-xs text-gray-400 mt-1">{verifications.length} tentative(s)</div></>) : (<div className="text-2xl font-bold text-gray-400">Aucune donnée</div>)}</CardContent></Card>
                         <Card className="border-gray-100 shadow-sm"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Flotte Active</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-gray-900">{devices.length}</div><div className="text-xs text-gray-400 mt-1">Appareils loués</div></CardContent></Card>
                     </div>
-                    <div className="bg-gray-50 rounded-xl p-6 border border-gray-100"><h3 className="font-bold text-gray-900 mb-4">Informations de contact</h3><div className="grid grid-cols-2 gap-6 text-sm"><div className="space-y-3"><div className="flex items-center gap-2 text-gray-600"><Mail className="h-4 w-4" /> {customer.email}</div><div className="flex items-center gap-2 text-gray-600"><Phone className="h-4 w-4" /> {customer.phone_number || 'Non renseigné'}</div></div>{lastShippingAddress ? (<div className="space-y-1"><div className="flex items-center gap-2 text-gray-900 font-medium mb-1"><MapPin className="h-4 w-4 text-blue-600" /> Adresse de livraison (Dernière commande)</div><div className="pl-6 text-gray-600 leading-relaxed">{lastShippingAddress.line1}<br/>{lastShippingAddress.city}, {lastShippingAddress.postal_code}<br/>{lastShippingAddress.country}</div></div>) : (<div className="flex items-center gap-2 text-gray-400 italic"><MapPin className="h-4 w-4" /> Aucune adresse enregistrée</div>)}</div></div>
                 </div>
             )}
 
-            {/* IDENTITY */}
-            {activeSection === 'identity' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="flex justify-between items-start"><div><h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">Historique KYC {isIdentityVerified && <CheckCircle2 className="h-6 w-6 text-green-500" />}</h1><p className="text-gray-500">Journal complet des vérifications d'identité biométriques.</p></div><div className="text-right"><div className="text-sm font-medium text-gray-500">Score de confiance actuel</div><div className="text-2xl font-bold font-mono">{verifications[0]?.verification_metadata?.trust_score ?? 0}/100</div></div></div>
-                    <div className="space-y-4">
-                        {verifications.map((verif) => (<Card key={verif.id} onClick={() => setSelectedVerification(verif)} className="cursor-pointer hover:border-blue-300 transition-all border-gray-200 shadow-sm group"><div className="p-4 flex items-center justify-between"><div className="flex items-center gap-4"><div className={`w-10 h-10 rounded-full flex items-center justify-center ${verif.status === 'approved' ? 'bg-green-100 text-green-600' : verif.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{verif.status === 'approved' ? <CheckCircle2 className="h-5 w-5" /> : verif.status === 'rejected' ? <XCircle className="h-5 w-5" /> : <Activity className="h-5 w-5" />}</div><div><div className="font-bold text-gray-900 flex items-center gap-2">{verif.status === 'approved' ? 'Validé' : verif.status === 'rejected' ? 'Rejeté' : 'En cours'}<span className="text-xs font-normal text-gray-400">• {new Date(verif.started_at).toLocaleString()}</span></div><div className="text-xs text-gray-500 flex items-center gap-3 mt-1"><span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Durée: {getDuration(verif.started_at, verif.completed_at)}</span><span className="flex items-center gap-1"><Fingerprint className="h-3 w-3" /> Score: {verif.verification_metadata?.trust_score || 0}%</span></div></div></div><div className="flex items-center gap-4">{verif.rejection_reason && (<Badge variant="outline" className="text-red-500 border-red-200 bg-red-50 hidden sm:flex"><AlertTriangle className="h-3 w-3 mr-1" /> Motif: {verif.rejection_reason.split('|')[0].substring(0, 20)}...</Badge>)}<Button variant="ghost" size="sm" className="text-gray-400 group-hover:text-blue-600">Détails <Eye className="ml-2 h-4 w-4" /></Button></div></div></Card>))}
-                        {verifications.length === 0 && (<div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl"><History className="h-10 w-10 text-gray-300 mx-auto mb-2" /><p className="text-gray-500">Aucune vérification effectuée.</p></div>)}
-                    </div>
-                </div>
-            )}
-
-            {/* DEVICES */}
+            {/* DEVICES SECTION (Standard UI) */}
             {activeSection === 'devices' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div><h1 className="text-2xl font-bold text-gray-900">Parc Informatique</h1><p className="text-gray-500">Liste des appareils loués et actifs.</p></div>
+                <div className="space-y-6 p-8 max-w-5xl mx-auto animate-in fade-in slide-in-from-right-4 duration-300">
                     {devices.map(unit => (<div key={unit.id} className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 shadow-sm"><div className="flex items-center gap-4"><div className="h-14 w-14 bg-gray-50 rounded-lg flex items-center justify-center border border-gray-100 p-1">{unit.product?.image_url ? <img src={unit.product.image_url} className="w-full h-full object-contain" /> : <Laptop className="h-6 w-6 text-gray-300" />}</div><div><div className="font-bold text-gray-900">{unit.product?.name}</div><div className="text-xs text-gray-500 font-mono mt-1 flex items-center gap-2"><span className="bg-gray-100 px-1.5 py-0.5 rounded">S/N: {unit.serial_number}</span></div></div></div><div className="text-right"><div className="font-medium text-sm text-gray-500">Coût: ${unit.cost_price}</div><div className="font-bold text-sm">${unit.unit_price}</div><Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 mt-1">Actif</Badge></div></div>))}
                 </div>
             )}
 
-            {/* ORACLE 3D HUD */}
+            {/* IDENTITY SECTION (Standard UI) */}
+            {activeSection === 'identity' && (
+                <div className="space-y-6 p-8 max-w-5xl mx-auto animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="flex justify-between items-start"><div><h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">Historique KYC {isIdentityVerified && <CheckCircle2 className="h-6 w-6 text-green-500" />}</h1><p className="text-gray-500">Journal complet des vérifications d'identité biométriques.</p></div></div>
+                    <div className="space-y-4">
+                        {verifications.map((verif) => (<Card key={verif.id} onClick={() => setSelectedVerification(verif)} className="cursor-pointer hover:border-blue-300 transition-all border-gray-200 shadow-sm group"><div className="p-4 flex items-center justify-between"><div className="flex items-center gap-4"><div className={`w-10 h-10 rounded-full flex items-center justify-center ${verif.status === 'approved' ? 'bg-green-100 text-green-600' : verif.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{verif.status === 'approved' ? <CheckCircle2 className="h-5 w-5" /> : verif.status === 'rejected' ? <XCircle className="h-5 w-5" /> : <Activity className="h-5 w-5" />}</div><div><div className="font-bold text-gray-900 flex items-center gap-2">{verif.status === 'approved' ? 'Validé' : verif.status === 'rejected' ? 'Rejeté' : 'En cours'}<span className="text-xs font-normal text-gray-400">• {new Date(verif.started_at).toLocaleString()}</span></div><div className="text-xs text-gray-500 flex items-center gap-3 mt-1"><span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Durée: {getDuration(verif.started_at, verif.completed_at)}</span><span className="flex items-center gap-1"><Fingerprint className="h-3 w-3" /> Score: {verif.verification_metadata?.trust_score || 0}%</span></div></div></div><div className="flex items-center gap-4">{verif.rejection_reason && (<Badge variant="outline" className="text-red-500 border-red-200 bg-red-50 hidden sm:flex"><AlertTriangle className="h-3 w-3 mr-1" /> Motif: {verif.rejection_reason.split('|')[0].substring(0, 20)}...</Badge>)}<Button variant="ghost" size="sm" className="text-gray-400 group-hover:text-blue-600">Détails <Eye className="ml-2 h-4 w-4" /></Button></div></div></Card>))}
+                    </div>
+                </div>
+            )}
+
+            {/* --- ORACLE 3D SPATIAL UI (WHITE MODE) --- */}
             {activeSection === 'billing' && oracle && (
-                <div className="relative min-h-full flex flex-col p-8 overflow-hidden bg-slate-950">
-                    {/* AMBIANCE 3D */}
+                <div 
+                    className="relative w-full h-full flex items-center justify-center bg-gray-50 perspective-[2000px] overflow-hidden"
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={handleMouseLeave}
+                >
+                    {/* Background Gradients (Light) */}
                     <div className="absolute inset-0 pointer-events-none">
-                        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px]"></div>
-                        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[120px]"></div>
-                        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,black,transparent)]"></div>
+                        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-100/50 rounded-full blur-[120px] mix-blend-multiply"></div>
+                        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-purple-100/50 rounded-full blur-[120px] mix-blend-multiply"></div>
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.03)_1px,transparent_1px)] bg-[size:40px_40px]"></div>
                     </div>
 
-                    {/* HEADER ORACLE */}
-                    <div className="relative z-10 flex justify-between items-end mb-10">
-                        <div>
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-blue-500/20 rounded-lg border border-blue-500/50 backdrop-blur-md">
-                                    <BrainCircuit className="h-6 w-6 text-blue-400" />
+                    {/* 3D TILT CONTAINER */}
+                    <div 
+                        ref={containerRef}
+                        className="relative w-[90%] max-w-6xl h-[85%] transition-transform duration-100 ease-out preserve-3d"
+                        style={{ 
+                            transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)`,
+                            transformStyle: 'preserve-3d'
+                        }}
+                    >
+                        {/* --- FLOATING CARDS (KPIs) --- */}
+                        <div className="absolute top-0 left-0 right-0 flex justify-between items-start translate-z-10 gap-6">
+                            <div className="bg-white/80 backdrop-blur-xl border border-white/60 p-6 rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.1)] w-1/3 transform hover:translate-y-[-10px] transition-transform duration-300">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Confiance (IA)</h3>
+                                    <BrainCircuit className="h-5 w-5 text-indigo-500" />
                                 </div>
-                                <h1 className="text-3xl font-bold text-white tracking-tight">Oracle v3.0</h1>
+                                <div className="text-4xl font-bold text-gray-900 mb-1">{oracle.trustScore}<span className="text-lg text-gray-400">/100</span></div>
+                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden mt-2">
+                                    <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-500" style={{ width: `${oracle.trustScore}%` }}></div>
+                                </div>
                             </div>
-                            <p className="text-slate-400 max-w-lg">Simulation financière prédictive basée sur le profil de risque et l'historique de paiement.</p>
-                        </div>
-                        <div className="flex items-center gap-6">
-                            <div className="text-right">
-                                <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Trust Score</p>
-                                <div className="text-3xl font-mono font-bold text-emerald-400">{oracle.trustScore}/100</div>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">ROI Net (24 Mois)</p>
-                                <div className="text-3xl font-mono font-bold text-white flex items-center justify-end gap-2">
-                                    {oracle.roiTotal > 0 ? '+' : ''}{oracle.roiTotal} $
+
+                            <div className="bg-white/80 backdrop-blur-xl border border-white/60 p-6 rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.1)] w-1/3 transform hover:translate-y-[-10px] transition-transform duration-300 delay-75">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">ROI Net (24 Mois)</h3>
                                     <TrendingUp className="h-5 w-5 text-emerald-500" />
                                 </div>
+                                <div className="text-4xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                    {oracle.roiTotal > 0 ? '+' : ''}{oracle.roiTotal} $
+                                </div>
+                                <div className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md inline-block">
+                                    Rentabilité : {oracle.profitMargin}%
+                                </div>
                             </div>
-                        </div>
-                    </div>
 
-                    {/* MAIN HUD 3D LAYOUT */}
-                    <div className="relative z-10 grid grid-cols-12 gap-6 perspective-[1000px]">
-                        
-                        {/* LEFT: NEURAL CORE (IA) */}
-                        <div className="col-span-3 space-y-6">
-                            <Card className="bg-slate-900/50 border-white/10 backdrop-blur-md text-white transform hover:scale-[1.02] transition-all duration-500 shadow-2xl hover:shadow-blue-900/20">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2 text-sm text-blue-300 uppercase tracking-widest">
-                                        <Sparkles className="h-4 w-4" /> Analyse I.A.
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="p-4 rounded-xl bg-gradient-to-br from-blue-900/20 to-slate-900 border border-white/5">
-                                        <p className="text-xs text-slate-400 mb-2">Recommandation Stratégique</p>
-                                        <p className={`text-sm font-medium leading-relaxed ${oracle.statusColor}`}>{oracle.recommendation}</p>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="p-3 rounded-lg bg-white/5 border border-white/5">
-                                            <p className="text-[10px] text-slate-500 uppercase">Action Requise</p>
-                                            <p className="text-lg font-bold">{oracle.actionDate}</p>
-                                        </div>
-                                        <div className="p-3 rounded-lg bg-white/5 border border-white/5">
-                                            <p className="text-[10px] text-slate-500 uppercase">Marge Nette</p>
-                                            <p className="text-lg font-bold text-emerald-400">{oracle.profitMargin}%</p>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="bg-slate-900/50 border-white/10 backdrop-blur-md text-white">
-                                <CardContent className="p-6">
-                                    <h3 className="text-xs font-bold text-slate-500 uppercase mb-4">Structure Contrat</h3>
-                                    <div className="space-y-3 font-mono text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400">Coût Matériel</span>
-                                            <span className="text-red-400">-{oracle.details.hardwareCost.toFixed(0)} $</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400">Dépôt (20%)</span>
-                                            <span className="text-emerald-400">+{oracle.details.deposit.toFixed(0)} $</span>
-                                        </div>
-                                        <div className="flex justify-between border-t border-white/10 pt-2">
-                                            <span className="text-slate-400">Mensualité</span>
-                                            <span className="text-white">+{oracle.details.monthly.toFixed(2)} $/m</span>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        {/* CENTER: 3D CHART */}
-                        <div className="col-span-6">
-                            <Card className="h-full bg-slate-900/80 border-white/10 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
-                                {/* Effet de grille holographique */}
-                                <div className="absolute inset-0 bg-[linear-gradient(0deg,transparent_24%,rgba(37,99,235,0.03)_25%,rgba(37,99,235,0.03)_26%,transparent_27%,transparent_74%,rgba(37,99,235,0.03)_75%,rgba(37,99,235,0.03)_76%,transparent_77%,transparent),linear-gradient(90deg,transparent_24%,rgba(37,99,235,0.03)_25%,rgba(37,99,235,0.03)_26%,transparent_27%,transparent_74%,rgba(37,99,235,0.03)_75%,rgba(37,99,235,0.03)_76%,transparent_77%,transparent)] bg-[size:50px_50px]"></div>
-                                
-                                <CardHeader className="relative z-10 pb-2">
-                                    <CardTitle className="text-sm font-medium text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                        <Activity className="h-4 w-4 text-blue-500" /> 
-                                        Projection de Trésorerie (24 Mois)
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="h-[400px] relative z-10">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={oracle.chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.4}/>
-                                                    <stop offset="100%" stopColor="#34d399" stopOpacity={0}/>
-                                                </linearGradient>
-                                                <linearGradient id="splitProbable" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.6}/>
-                                                    <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.1}/>
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                            <XAxis dataKey="month" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                                            <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}$`} />
-                                            <Tooltip 
-                                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
-                                                itemStyle={{ fontSize: '12px' }}
-                                            />
-                                            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
-                                            
-                                            {/* Optimiste (Vert, discret) */}
-                                            <Area type="monotone" dataKey="optimistic" stroke="#34d399" strokeWidth={1} strokeDasharray="4 4" fill="url(#splitColor)" opacity={0.5} name="Optimiste" />
-                                            
-                                            {/* Catastrophe (Rouge, discret) */}
-                                            <Line type="monotone" dataKey="pessimistic" stroke="#ef4444" strokeWidth={2} dot={false} opacity={0.8} name="Catastrophe" />
-
-                                            {/* Probable (Bleu, Principal) */}
-                                            <Area type="monotone" dataKey="probable" stroke="#60a5fa" strokeWidth={3} fill="url(#splitProbable)" name="Probable (IA)" activeDot={{ r: 6, strokeWidth: 0 }} />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        {/* RIGHT: BREAKPOINT & STATS */}
-                        <div className="col-span-3 flex flex-col gap-6">
-                            <Card className="flex-1 bg-gradient-to-b from-slate-900 to-black border-white/10 text-white relative overflow-hidden">
-                                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
-                                <CardHeader>
-                                    <CardTitle className="text-sm font-medium text-slate-400 uppercase">Point de Rupture (ROI)</CardTitle>
-                                </CardHeader>
-                                <CardContent className="flex flex-col items-center justify-center h-[120px]">
-                                    <Target className="h-10 w-10 text-emerald-500 mb-2" />
-                                    <div className="text-3xl font-bold">{oracle.breakEven}</div>
-                                    <p className="text-xs text-emerald-500/70 mt-1">Zone de profitabilité atteinte</p>
-                                </CardContent>
-                            </Card>
-
-                            <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 backdrop-blur-md">
-                                <h3 className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><LayoutDashboard className="h-3 w-3" /> Données Brutes</h3>
-                                <ScrollArea className="h-[250px] pr-2">
-                                    <div className="space-y-1">
-                                        <div className="grid grid-cols-4 text-[10px] text-slate-500 font-bold uppercase mb-2 px-2">
-                                            <div>Mois</div>
-                                            <div className="text-right">Rev.</div>
-                                            <div className="text-right">Coût</div>
-                                            <div className="text-right">Net</div>
-                                        </div>
-                                        {oracle.chartData.map((row: any, i: number) => (
-                                            <div key={i} className={`grid grid-cols-4 text-xs px-2 py-1.5 rounded ${row.isToday ? 'bg-blue-500/20 border border-blue-500/30' : 'hover:bg-white/5'}`}>
-                                                <div className="font-mono text-slate-400">{row.month}</div>
-                                                <div className="text-right text-emerald-400">+{row.revenue}</div>
-                                                <div className="text-right text-red-400">-{row.costs}</div>
-                                                <div className={`text-right font-bold ${row.probable > 0 ? 'text-white' : 'text-slate-500'}`}>{row.probable}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </ScrollArea>
+                            <div className="bg-white/80 backdrop-blur-xl border border-white/60 p-6 rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.1)] w-1/3 transform hover:translate-y-[-10px] transition-transform duration-300 delay-150">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Point de Rupture</h3>
+                                    <Target className="h-5 w-5 text-orange-500" />
+                                </div>
+                                <div className="text-4xl font-bold text-gray-900 mb-1">{oracle.breakEven}</div>
+                                <p className="text-xs text-gray-500">Zone de profitabilité atteinte.</p>
                             </div>
                         </div>
 
+                        {/* --- MAIN CHART (FLOATING) --- */}
+                        <div className="absolute top-[200px] bottom-[140px] left-0 right-0 bg-white/90 backdrop-blur-xl border border-white/50 rounded-3xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.12)] p-6 translate-z-20">
+                            <h3 className="text-sm font-bold text-gray-900 mb-6 flex items-center gap-2">
+                                <Activity className="h-4 w-4 text-blue-600" /> 
+                                PROJECTION CASHFLOW (3 SCÉNARIOS)
+                            </h3>
+                            <ResponsiveContainer width="100%" height="85%">
+                                <AreaChart data={oracle.chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id="gradOptimistic" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.2}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient>
+                                        <linearGradient id="gradProbable" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
+                                        <linearGradient id="gradPessimistic" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/><stop offset="95%" stopColor="#ef4444" stopOpacity={0}/></linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                    <XAxis dataKey="month" tick={{fontSize: 12, fill: '#94a3b8'}} tickLine={false} axisLine={false} />
+                                    <YAxis tick={{fontSize: 12, fill: '#94a3b8'}} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}$`} />
+                                    <Tooltip contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '12px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }} />
+                                    <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ paddingBottom: '20px' }} />
+                                    <ReferenceLine y={0} stroke="#cbd5e1" />
+                                    
+                                    <Area type="monotone" dataKey="Optimiste" stroke="#22c55e" strokeWidth={2} fill="url(#gradOptimistic)" name="Optimiste" />
+                                    <Area type="monotone" dataKey="Probable" stroke="#3b82f6" strokeWidth={4} fill="url(#gradProbable)" name="Probable (IA)" />
+                                    <Area type="monotone" dataKey="Catastrophe" stroke="#ef4444" strokeWidth={2} fill="url(#gradPessimistic)" name="Catastrophe" strokeDasharray="5 5" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* --- BOTTOM CARDS (RECOMMENDATIONS & STRUCTURE) --- */}
+                        <div className="absolute bottom-0 left-0 right-0 h-[120px] flex gap-6 translate-z-30">
+                            
+                            {/* RECOMMENDATION AI */}
+                            <div className="flex-1 bg-white/80 backdrop-blur-md border border-white/60 rounded-2xl p-5 shadow-lg flex items-center gap-4 hover:bg-white transition-colors">
+                                <div className="h-12 w-12 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+                                    <Sparkles className="h-6 w-6 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Stratégie Recommandée</h4>
+                                    <p className="text-sm font-medium text-gray-800">{oracle.recommendation}</p>
+                                    <div className="mt-1 flex items-center gap-2">
+                                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-100 text-[10px]">
+                                            Action: {oracle.actionDate}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* STRUCTURE FINANCIERE (PREUVE 20%) */}
+                            <div className="flex-1 bg-white/80 backdrop-blur-md border border-white/60 rounded-2xl p-5 shadow-lg flex items-center justify-between hover:bg-white transition-colors">
+                                <div>
+                                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Structure Capital</h4>
+                                    <div className="space-y-1 text-sm">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-red-400"></div>
+                                            <span className="text-gray-500">Coût Matériel:</span>
+                                            <span className="font-mono font-bold">-${oracle.details.hardwareCost.toFixed(0)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                                            <span className="text-gray-500">Dépôt (20%):</span>
+                                            <span className="font-mono font-bold text-green-600">+{oracle.details.deposit.toFixed(0)}$</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xs text-gray-400 mb-1">Mensualité</div>
+                                    <div className="text-2xl font-bold text-gray-900">{oracle.details.monthly.toFixed(2)}$</div>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
                 </div>
             )}
@@ -480,9 +434,8 @@ const DeviceCustomerDetails = () => {
                 <DialogDescription>Date: {new Date(selectedVerification?.started_at || '').toLocaleString()}</DialogDescription>
             </DialogHeader>
             <ScrollArea className="flex-1 border rounded-md bg-slate-950 text-slate-300 font-mono text-xs p-4">
-                <div className="space-y-1">{selectedVerification?.verification_metadata?.logs?.map((log, i) => (<div key={i} className="flex gap-2"><span className="text-slate-500 shrink-0">{log.substring(1, 9)}</span><span className={getLogColor(log)}>{log.substring(11)}</span></div>))}</div>
+                <div className="space-y-1">{selectedVerification?.verification_metadata?.logs?.map((log, i) => (<div key={i} className="flex gap-2"><span className="text-slate-500 shrink-0">{log.substring(1, 9)}</span><span className={log.includes('FAIL') ? 'text-red-500 font-bold' : 'text-gray-500'}>{log.substring(11)}</span></div>))}</div>
             </ScrollArea>
-            {selectedVerification?.verification_metadata?.ai_raw && (<div className="mt-4 bg-gray-50 p-3 rounded-lg text-xs"><h4 className="font-bold text-gray-900 mb-2">Extraction IA (Raw)</h4><div className="grid grid-cols-2 gap-2"><div className="flex justify-between border-b pb-1"><span>Nom:</span> <span className="font-mono text-gray-900">{selectedVerification.verification_metadata.ai_raw.firstName} {selectedVerification.verification_metadata.ai_raw.lastName}</span></div><div className="flex justify-between border-b pb-1"><span>Doc:</span> <span className="font-mono text-gray-900">{selectedVerification.verification_metadata.ai_raw.docType}</span></div><div className="flex justify-between border-b pb-1"><span>Age Visuel:</span> <span className="font-mono text-gray-900">~{selectedVerification.verification_metadata.ai_raw.visualAgeEstimation} ans</span></div></div></div>)}
         </DialogContent>
       </Dialog>
     </div>
