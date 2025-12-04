@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptionService } from '@/lib/encryption';
+import { sivaraVM } from '@/lib/sivara-vm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
@@ -146,6 +147,7 @@ const DocEditor = () => {
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [cursors, setCursors] = useState<Record<string, RemoteCursor>>({});
   const [accessList, setAccessList] = useState<AccessEntry[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
   
   // UI Dialogs
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -462,8 +464,10 @@ const DocEditor = () => {
     window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`; 
   };
 
+  // --- NOUVEAU HANDLE EXPORT PROPRIÉTAIRE ---
   const handleExportSivara = async () => {
     if (!document || !user) return;
+    setIsExporting(true);
     try {
         let encryptedTitle = document.title;
         let encryptedContent = document.content;
@@ -484,35 +488,40 @@ const DocEditor = () => {
             isPasswordProtected = true;
             salt = saltValue;
 
+            // Restaure la clé utilisateur pour la suite
             await encryptionService.initialize(user.id);
         }
 
-        const exportData = {
-            header: isPasswordProtected ? 'SIVARA_SECURE_DOC_V2' : 'SIVARA_SECURE_DOC_V1',
-            id: document.id,
+        // Préparation du Payload pour le Kernel SIVARA
+        const payload = {
             encrypted_title: encryptedTitle,
             encrypted_content: encryptedContent,
             iv: iv,
             owner_id: document.owner_id,
-            exported_at: new Date().toISOString(),
             icon: document.icon || 'FileText',
             color: document.color || '#3B82F6',
-            salt: salt 
+            salt: salt
         };
+
+        // --- MAGIE DU KERNEL ---
+        // Appel au VM pour obtenir le binaire propriétaire
+        const blob = await sivaraVM.compile(payload);
         
-        const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
+        // Téléchargement
         const url = URL.createObjectURL(blob);
         const a = window.document.createElement('a');
         a.href = url;
         a.download = `secure-${document.id.slice(0, 8)}.sivara`;
         a.click();
         
-        showSuccess(isPasswordProtected ? "Document exporté et verrouillé par mot de passe" : "Document exporté (Format sécurisé .sivara)");
+        showSuccess(isPasswordProtected ? "Exporté & Verrouillé (SBP)" : "Exporté (Sivara Binary Protocol)");
         setShowExportDialog(false);
         setExportPassword('');
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
-        showError("Erreur lors de l'exportation");
+        showError(e.message || "Erreur lors de l'exportation");
+    } finally {
+        setIsExporting(false);
         if (user) await encryptionService.initialize(user.id);
     }
   };
@@ -693,7 +702,10 @@ const DocEditor = () => {
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setShowExportDialog(false)}>Annuler</Button>
-                <Button onClick={handleExportSivara}>Exporter</Button>
+                <Button onClick={handleExportSivara} disabled={isExporting}>
+                    {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileKey className="mr-2 h-4 w-4" />}
+                    Exporter (.sivara)
+                </Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>

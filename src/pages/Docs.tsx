@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptionService } from '@/lib/encryption';
+import { sivaraVM } from '@/lib/sivara-vm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -390,25 +391,33 @@ const Docs = () => {
     }
   };
 
-  // --- IMPORT PROPRIÉTAIRE .SIVARA (MIGRATION SÉCURISÉE) ---
+  // --- IMPORT PROPRIÉTAIRE .SIVARA (MIGRATION SÉCURISÉE VIA KERNEL) ---
   const processImport = async (data: any, password?: string) => {
     if (!user) return;
     
     try {
         setIsImporting(true);
 
-        // 1. DÉCHIFFREMENT INITIAL
+        // 1. DÉCHIFFREMENT INITIAL (Local)
+        // On doit toujours utiliser la lib crypto locale pour déchiffrer ce qui vient du kernel
+        // MAIS ici le kernel nous renvoie du JSON qui contient déjà les IVs et payloads chiffrés avec la logique d'origine
+        
+        // Wait, le Kernel renvoie le JSON { encrypted_title, iv... }
+        // Le Kernel a fait le "Unshuffle" binaire. 
+        // Maintenant on doit déchiffrer le contenu AES avec la bonne clé.
+
         if (data.header === 'SIVARA_SECURE_DOC_V2' && password && data.salt) {
             // Mode Mot de passe (V2)
             await encryptionService.initialize(password, data.salt);
         } else if (data.header === 'SIVARA_SECURE_DOC_V1' || data.header === 'SIVARA_SECURE_DOC_V2') {
             // Mode Legacy/Propriétaire (V1) ou tentative sans mot de passe
+            // Ici, data.owner_id est présent dans le JSON renvoyé par le Kernel
             await encryptionService.initialize(data.owner_id);
         } else {
             throw new Error("Format non supporté");
         }
         
-        // Tentative de déchiffrement du contenu original
+        // Tentative de déchiffrement du contenu original (AES)
         let decryptedTitle = '';
         let decryptedContent = '';
         
@@ -418,16 +427,14 @@ const Docs = () => {
         } catch (decryptError) {
             // Si échec, c'est probablement le mauvais mot de passe ou la mauvaise clé propriétaire
             if (data.header === 'SIVARA_SECURE_DOC_V2' && !password) {
-                // Si c'est un V2 et qu'on a pas encore demandé le mot de passe, on le demande maintenant
                 setImportPasswordDialog({ isOpen: true, fileData: data });
                 setIsImporting(false);
                 return;
             }
-            throw new Error("Clé de déchiffrement invalide. Le fichier est peut-être protégé par un autre compte ou un mot de passe incorrect.");
+            throw new Error("Clé de déchiffrement invalide.");
         }
 
         // 3. RECHIFFREMENT (Clé de l'utilisateur actuel)
-        // Important: On rebascule sur la clé de l'utilisateur connecté pour sécuriser le nouveau doc
         await encryptionService.initialize(user.id);
         
         const { encrypted: newEncTitle, iv: newIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
@@ -454,12 +461,10 @@ const Docs = () => {
         setImportPasswordDialog({ isOpen: false, fileData: null });
         setImportPassword('');
         
-        // On s'assure que le fetch utilise bien la bonne clé
         await fetchDocuments(); 
 
     } catch (err: any) {
         console.error(err);
-        // En cas d'erreur, on s'assure de restaurer le service sur l'utilisateur courant
         if (user) await encryptionService.initialize(user.id);
         showError(err.message || "Erreur lors de l'importation");
     } finally {
@@ -472,27 +477,23 @@ const Docs = () => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const content = e.target?.result as string;
-            const data = JSON.parse(content);
-            
-            // Vérification sommaire
-            if (!data.header || !data.id || !data.iv) throw new Error("Fichier invalide");
-
-            // Si c'est un V2 (protégé par mot de passe), on ouvre le dialogue directement
-            if (data.header === 'SIVARA_SECURE_DOC_V2') {
-                setImportPasswordDialog({ isOpen: true, fileData: data });
-            } else {
-                // Sinon on tente l'import direct (V1 propriétaire)
-                await processImport(data);
-            }
-        } catch (err) {
-            showError("Fichier corrompu ou invalide");
+    try {
+        setIsImporting(true);
+        // On envoie le fichier binaire au Kernel pour qu'il le décompile en JSON
+        const data = await sivaraVM.decompile(file);
+        
+        // Si c'est un V2 (protégé par mot de passe), on ouvre le dialogue
+        if (data.header === 'SIVARA_SECURE_DOC_V2') {
+            setImportPasswordDialog({ isOpen: true, fileData: data });
+            setIsImporting(false); // On arrête le loading le temps du dialogue
+        } else {
+            // Sinon on tente l'import direct
+            await processImport(data);
         }
-    };
-    reader.readAsText(file);
+    } catch (err: any) {
+        showError(err.message || "Fichier invalide");
+        setIsImporting(false);
+    }
   };
 
   // --- NAVIGATION & DND ---
