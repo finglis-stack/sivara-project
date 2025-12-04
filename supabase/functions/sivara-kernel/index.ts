@@ -12,9 +12,8 @@ const corsHeaders = {
 const IP_GEO_KEY = Deno.env.get('IPGEOLOCATION_API_KEY');
 
 // --- SIVARA BINARY PROTOCOL (SBP) ---
-// Structure binaire propriétaire non-linéaire
 const OP_CODES = {
-  MAGIC: 0x53, // 'S' - Signature
+  MAGIC: 0x53, // 'S'
   HEADER: 0xA1,
   IV_BLOCK: 0xB2,
   DATA_CHUNK: 0xC3,
@@ -22,8 +21,6 @@ const OP_CODES = {
   EOF: 0xFF
 };
 
-// Algorithme de brouillage binaire propriétaire (Obfuscation)
-// Rend le fichier illisible par les outils standards
 const sivaraShuffle = (buffer: Uint8Array, seed: number): Uint8Array => {
   const result = new Uint8Array(buffer.length);
   for (let i = 0; i < buffer.length; i++) {
@@ -46,9 +43,8 @@ const sivaraUnshuffle = (buffer: Uint8Array, seed: number): Uint8Array => {
 const strToBuf = (str: string) => new TextEncoder().encode(str);
 const bufToStr = (buf: Uint8Array) => new TextDecoder().decode(buf);
 
-// Formule de Haversine pour la distance GPS précise
 const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371; // Rayon Terre
+  const R = 6371; 
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -64,11 +60,10 @@ serve(async (req) => {
   try {
     const { action, payload, fileData, context } = await req.json();
 
-    // --- COMPILATION (Création du fichier propriétaire) ---
+    // --- COMPILATION ---
     if (action === 'compile') {
       const { encrypted_title, encrypted_content, iv, owner_id, icon, color, salt, security } = payload;
       
-      // On scelle les règles de sécurité dans les métadonnées chiffrées
       const metaJson = JSON.stringify({ 
           owner_id, icon, color, salt, v: 3,
           security: security || {} 
@@ -81,15 +76,15 @@ serve(async (req) => {
 
       const parts = [];
       
-      // MAGIC "SVR3" 
+      // MAGIC "SVR3"
       parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x03]));
 
-      // IV BLOCK
+      // IV
       parts.push(new Uint8Array([OP_CODES.IV_BLOCK]));
       parts.push(new Uint8Array([ivBuf.length]));
       parts.push(ivBuf);
 
-      // META BLOCK (Brouillé)
+      // META
       const shuffledMeta = sivaraShuffle(metaBuf, 0xAA);
       const metaLen = new Uint8Array(4);
       new DataView(metaLen.buffer).setUint32(0, shuffledMeta.length);
@@ -98,7 +93,7 @@ serve(async (req) => {
       parts.push(metaLen);
       parts.push(shuffledMeta);
 
-      // DATA CHUNK (Brouillé)
+      // DATA
       const combinedPayload = new Uint8Array(titleBuf.length + 1 + contentBuf.length);
       combinedPayload.set(titleBuf, 0);
       combinedPayload[titleBuf.length] = 0x00;
@@ -115,7 +110,6 @@ serve(async (req) => {
       // EOF
       parts.push(new Uint8Array([OP_CODES.EOF]));
 
-      // Assemblage binaire
       const totalLength = parts.reduce((acc, p) => acc + p.length, 0);
       const finalBuffer = new Uint8Array(totalLength);
       let offset = 0;
@@ -124,7 +118,6 @@ serve(async (req) => {
         offset += part.length;
       }
 
-      // Output Base64 optimisé
       let binary = '';
       const len = finalBuffer.byteLength;
       const CHUNK_SIZE = 8192;
@@ -137,7 +130,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ file: base64Output }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // --- DÉCOMPILATION (Ouverture du fichier) ---
+    // --- DÉCOMPILATION ---
     if (action === 'decompile') {
       const binaryString = atob(fileData);
       const bytes = new Uint8Array(binaryString.length);
@@ -146,7 +139,6 @@ serve(async (req) => {
       const view = new DataView(bytes.buffer);
       let cursor = 0;
 
-      // Vérification Signature SBP
       if (bytes[0] !== 0x53 || bytes[1] !== 0x56 || bytes[2] !== 0x52) {
         throw new Error("Format de fichier SBP invalide ou corrompu.");
       }
@@ -180,13 +172,11 @@ serve(async (req) => {
           cursor += len;
         }
         else if (opcode === OP_CODES.DATA_CHUNK) {
-          // --- ZONE DE SÉCURITÉ CRITIQUE ---
-          // On valide les accès AVANT de toucher aux données chiffrées
-          
+          // --- SÉCURITÉ ---
           if (metaData.security) {
               const sec = metaData.security;
 
-              // 1. CHECK EMAIL/USER (Liste d'accès)
+              // EMAIL
               if (sec.allowed_emails && sec.allowed_emails.length > 0) {
                   const supabase = createClient(
                     // @ts-ignore
@@ -198,28 +188,24 @@ serve(async (req) => {
                   const { data: { user } } = await supabase.auth.getUser();
                   
                   if (!user || !user.email || !sec.allowed_emails.includes(user.email.toLowerCase())) {
-                      throw new Error("⛔ ACCÈS REFUSÉ : Votre compte n'est pas autorisé.");
+                      throw new Error("Acces refuse : Votre compte n'est pas autorise.");
                   }
               }
 
-              // 2. CHECK DEVICE (Fingerprint Machine)
+              // DEVICE
               if (sec.allowed_fingerprints && sec.allowed_fingerprints.length > 0) {
                   const clientFp = context?.fingerprint;
-                  console.log(`[Security] Checking Device. Required: ${sec.allowed_fingerprints}, Provided: ${clientFp}`);
-                  
                   if (!clientFp || !sec.allowed_fingerprints.includes(clientFp)) {
-                      throw new Error("⛔ ACCÈS REFUSÉ : Cet appareil n'est pas autorisé.");
+                      throw new Error("Acces refuse : Cet appareil n'est pas autorise.");
                   }
               }
 
-              // 3. CHECK GEO (Localisation Physique)
+              // GEO
               if (sec.geofence && sec.geofence.lat && sec.geofence.lng) {
                   const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
                   
                   if (!IP_GEO_KEY) {
-                      console.error("Clé IPGeolocation manquante sur le serveur !");
-                      // Fail Safe: Si on ne peut pas vérifier, on bloque.
-                      throw new Error("Erreur de configuration serveur (Geo).");
+                      throw new Error("Erreur serveur : Service de localisation non configure.");
                   }
 
                   const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
@@ -231,19 +217,16 @@ serve(async (req) => {
                           sec.geofence.lat, sec.geofence.lng
                       );
                       
-                      console.log(`[Security] GeoCheck: Client à ${dist.toFixed(2)}km (Max autorisé: ${sec.geofence.radius_km}km)`);
+                      console.log(`[GeoCheck] Distance: ${dist}km (Max: ${sec.geofence.radius_km}km)`);
                       
                       if (dist > sec.geofence.radius_km) {
-                          throw new Error(`⛔ ACCÈS REFUSÉ : Zone géographique non autorisée (Distance: ${Math.round(dist)}km).`);
+                          throw new Error(`Acces refuse : Zone geographique non autorisee (Distance: ${Math.round(dist)}km).`);
                       }
                   } else {
-                      throw new Error("⛔ ACCÈS REFUSÉ : Impossible de vérifier votre localisation.");
+                      throw new Error("Acces refuse : Impossible de verifier votre localisation.");
                   }
               }
           }
-
-          // Si on arrive ici, c'est que TOUS les checks de sécurité ont passé.
-          // On peut extraire le payload chiffré (qui demandera ensuite le mot de passe si nécessaire).
 
           const len = view.getUint32(cursor);
           cursor += 4;
@@ -273,6 +256,8 @@ serve(async (req) => {
 
   } catch (error) {
     console.error(error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // CRITIQUE: On renvoie 200 même en cas d'erreur pour que le client reçoive le JSON { error: ... }
+    // Sinon, la couche réseau du client lance "Non-2xx status code" et cache le vrai message.
+    return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })
