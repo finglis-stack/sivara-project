@@ -278,17 +278,17 @@ const DeviceOrderSuccess = ({ orderId, onBack }: { orderId: string, onBack: () =
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex items-start gap-4">
-                                <div className="bg-white p-2 rounded-full shadow-sm text-blue-600">
+                            <div className="bg-slate-900 rounded-xl p-5 border border-slate-800 flex items-start gap-4 shadow-inner">
+                                <div className="bg-white/10 p-2.5 rounded-full text-white">
                                     <Truck className="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-bold text-slate-900 mb-0.5">Livraison Estimée</p>
-                                    <p className="text-lg font-light text-blue-700 capitalize">
+                                    <p className="text-sm font-bold text-white mb-0.5">Livraison Estimée</p>
+                                    <p className="text-lg font-light text-white/90 capitalize">
                                         {deliveryDate ? formatDateFrench(deliveryDate) : 'Date inconnue'}
                                     </p>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        Via {order.shipping_address?.delivery_method === 'express' ? 'Sivara Flash (Coursier)' : 'Postes Canada Xpresspost'}
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        {order.shipping_address?.delivery_method === 'express' ? 'Livraison Express' : 'Livraison Standard'}
                                     </p>
                                 </div>
                             </div>
