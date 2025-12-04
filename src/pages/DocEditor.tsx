@@ -210,6 +210,19 @@ const DocEditor = () => {
       }
   }, [showExportDialog, restrictGeo]);
 
+  // Sync Radius Slider -> Map Circle (FIX: Mise à jour en temps réel)
+  useEffect(() => {
+      if (circleObjRef.current && geoRadius.length > 0) {
+          const currentMapRadius = circleObjRef.current.getRadius();
+          const targetRadius = geoRadius[0] * 1000; // km to m
+          
+          // On met à jour seulement si la différence est significative pour éviter les boucles
+          if (Math.abs(currentMapRadius - targetRadius) > 100) {
+              circleObjRef.current.setRadius(targetRadius);
+          }
+      }
+  }, [geoRadius]);
+
   const initMap = async () => {
       if (!mapRef.current) return;
       
