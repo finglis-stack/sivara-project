@@ -46,17 +46,39 @@ L'architecture de facturation délègue la complexité transactionnelle à Strip
 *   **Edge Webhooks :** Un pipeline de webhooks sécurisé (`stripe-webhook`) intercepte les événements de paiement en temps réel pour mettre à jour les statuts `is_pro` via des fonctions serveur privilégiées.
 *   **Syncronisation Forcée :** Mécanisme de vérification à la demande permettant à l'utilisateur de forcer la réconciliation des états entre Stripe et la base de données en cas de latence des webhooks.
 
-### 5. Protocole d'Échange Cryptographique (.sivara)
-Un format de fichier conteneur propriétaire conçu pour la migration de données "Zero-Trust" et la résilience.
+### 5. Langage Propriétaire et Protocole SBP (.sivara)
+Au cœur de la portabilité sécurisée se trouve le **Sivara Binary Protocol (SBP)**, un langage de bas niveau interprété par le **Sivara Kernel** (Edge VM). Contrairement aux formats passifs (JSON, XML), un fichier `.sivara` est un programme exécutable par notre machine virtuelle.
 
-*   **Encapsulation Sécurisée :** Le fichier `.sivara` contient le payload chiffré (AES-256-GCM), l'IV unique, l'ID du propriétaire original ainsi que les métadonnées visuelles (icône, couleur). Le fichier ne contient **aucune** clé de déchiffrement.
-*   **Transmutation à la Volée (Re-Encryption) :**
-    *   Lors de l'importation, le client effectue une opération de **Transmutation Cryptographique** locale :
-        1. Dérivation temporaire de la clé publique basée sur l'ID du créateur original (stocké dans le fichier).
-        2. Déchiffrement du contenu en mémoire volatile.
-        3. Rechiffrement immédiat avec la clé privée de l'utilisateur courant.
-        4. Insertion d'un **nouveau** document en base de données.
-    *   **Résilience :** Ce processus permet de restaurer des données même si l'enregistrement original a été supprimé des serveurs (Deep Backup), car le fichier contient tout le nécessaire pour reconstruire l'information de manière autonome et sécurisée.
+#### Architecture du Langage SBP
+Le format repose sur une structure de **Bytecode** séquentiel définie par des OP_CODES stricts. Chaque segment du fichier est une instruction pour la VM.
+
+#### Structure Binaire (Hexdump)
+```
+[MAGIC: SVR3] [OP: IV] [LEN] [PAYLOAD] [OP: META] [LEN] [SHUFFLED_DATA] [OP: EOF]
+```
+
+*   **Magic Bytes (`0x53 0x56 0x52 0x03`) :** Signature numérique ("SVR3") validant l'intégrité et la version du conteneur.
+*   **Jeu d'Instructions (Opcodes) :**
+    *   `0xB2` (**IV_BLOCK**) : Définit le vecteur d'initialisation cryptographique nécessaire au déchiffrement futur.
+    *   `0xD4` (**META_TAG**) : Contient les métadonnées et le "Contrat de Sécurité" (Geo-fencing, Fingerprint Lock).
+    *   `0xC3` (**DATA_CHUNK**) : Le payload principal (Titre + Contenu) concaténé et obfusqué.
+    *   `0xFF` (**EOF**) : Signal de fin de flux.
+
+#### Mécanisme de "Bit-Shuffling" (Obfuscation)
+Pour empêcher l'analyse statique ou la modification manuelle des fichiers, le Kernel applique une transformation binaire propriétaire lors de la compilation (`sivaraShuffle` / `sivaraUnshuffle`) :
+*   **Rotation de Bits :** `((byte << 2) | (byte >> 6))` pour décaler la structure binaire.
+*   **XOR Dynamique :** Application d'une clé dérivée de la position du byte (`seed + index`), rendant chaque octet dépendant de sa position.
+
+#### Le cycle de vie "Compile/Decompile" (VM)
+1.  **Compilation (Export) :**
+    *   Le client envoie les données brutes et le contexte de sécurité (Coordonnées GPS, ID Matériel).
+    *   Le Kernel génère le bytecode SBP, injecte les règles dans le bloc `META`, applique le *Shuffling* et retourne le binaire `.sivara`.
+2.  **Exécution (Import) :**
+    *   Le fichier est uploadé au Kernel.
+    *   La VM lit les instructions SBP séquentiellement.
+    *   **Validation des Contrats Intelligents :** Avant de traiter l'instruction `DATA_CHUNK`, la VM exécute une vérification des conditions du bloc `META`.
+        *   *Exemple :* Si le contrat stipule `geofence: { lat: 45.5, lng: -73.5, radius: 10km }`, le Kernel vérifie l'IP de la requête. Si elle est hors zone, la VM déclenche une exception **Panic** et refuse de décompiler le reste du fichier.
+    *   Si valide, le contenu est "Unshuffled" et retourné au client pour déchiffrement AES local.
 
 ### 6. Centre d'Assistance Unifié - `help.sivara.ca`
 Une plateforme de support hybride combinant base de connaissances publique et système de billetterie sécurisé.
