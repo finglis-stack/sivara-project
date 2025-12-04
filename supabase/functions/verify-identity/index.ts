@@ -154,6 +154,10 @@ serve(async (req) => {
       - Administrative codes (like "INGF...") are NOT names.
       - Ignore small text. Focus on the big embossed areas.
 
+      SPECIFIC LAYOUT INSTRUCTIONS FOR RAMQ CARDS:
+      1. **Date of Birth (DOB)**: Located at the BOTTOM LEFT corner. Format is strictly "AA MM JJ" (Year Month Day, 2 digits each). Example: "05 11 02" means 2005-11-02. BE CAREFUL.
+      2. **Expiration Date**: Located BELOW THE PHOTO, towards the RIGHT side. Format is "AAAA MM" (Year Month). Example: "2029 11".
+
       TASK: Extract data and estimate visual age.
 
       RETURN JSON ONLY:
@@ -162,8 +166,8 @@ serve(async (req) => {
         "firstName": "string (Clean extraction, guess if ambiguous)",
         "lastName": "string",
         "documentNumber": "string (The RAMQ NAM or DL Number)",
-        "dateOfBirth": "YYYY-MM-DD (ISO Format)",
-        "expirationDate": "YYYY-MM-DD",
+        "dateOfBirth": "YYYY-MM-DD (ISO Format - Convert extracted YY MM DD to full date)",
+        "expirationDate": "YYYY-MM-DD (ISO Format - If only YYYY MM, assume last day of month)",
         "visualAgeEstimation": number (Estimate age of person in photo),
         "isExpired": boolean (Is expirationDate before ${todayDate}?),
         "isScreen": boolean (Is this a photo of a screen?),
