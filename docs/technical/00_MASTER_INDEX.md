@@ -1,31 +1,56 @@
-# SIVARA : ARCHITECTURE REFERENCE (MASTER INDEX)
-**CLASSIFICATION :** TOP SECRET / ENGINEERING ONLY
-**VOLUME TOTAL :** 4 TOMES (INITIAL)
-**DATE :** 2025
+# SIVARA : ENCYCLOPÉDIE TECHNIQUE (MASTER INDEX)
+**CLASSIFICATION :** ULTRA-SECRET / ENGINEERING EYES ONLY
+**VOLUME TOTAL :** 15 TOMES
+**STATUT :** DÉFINITIF
 
 ---
 
-## INTRODUCTION
-Ce référentiel contient l'analyse technique intégrale de l'écosystème Sivara. Il est conçu pour les ingénieurs principaux, les auditeurs de sécurité et les architectes système. Il ne contient aucune simplification.
+## SOMMAIRE DE L'ENCYCLOPÉDIE
 
-## SOMMAIRE DES VOLUMES
+### [TOME 1 : ARCHITECTURE FONDATIONNELLE](./01_ARCHITECTURE_FOUNDATION.md)
+*   **Sujet :** Philosophie du Monorepo, Configuration Vite, Arborescence et Standards.
 
-### [VOLUME 1 : L'HYPERVISEUR FRONTEND](./01_HYPERVISOR_FRONTEND.md)
-*   **Cible :** `src/App.tsx`, `src/main.tsx`, `vite.config.ts`
-*   **Contenu :** Analyse du routeur polymorphe, gestion de la mémoire, hacks de session cross-domain, et optimisation du bundle React.
+### [TOME 2 : LE NOYAU FRONTEND (KERNEL)](./02_FRONTEND_KERNEL.md)
+*   **Sujet :** `main.tsx`, Cycle de vie React 18, Time Slicing, Gestion des Erreurs Globale.
 
-### [VOLUME 2 : LE NOYAU CRYPTOGRAPHIQUE](./02_CRYPTOGRAPHY_CORE.md)
-*   **Cible :** `src/lib/encryption.ts`, `src/lib/sivara-vm.ts`
-*   **Contenu :** Implémentation AES-GCM, dérivation de clés PBKDF2, protocole binaire SBP, vecteurs d'attaque et mitigation.
+### [TOME 3 : LE ROUTEUR POLYMORPHE](./03_ROUTING_POLYMORPHISM.md)
+*   **Sujet :** `App.tsx`, Algorithme de détection de contexte, Deep Linking, Injection de Hash.
 
-### [VOLUME 3 : INFRASTRUCTURE EDGE & SERVERLESS](./03_EDGE_INFRASTRUCTURE.md)
-*   **Cible :** `supabase/functions/*`
-*   **Contenu :** Moteur de recherche aveugle "Titanium", Oracle financier Monte-Carlo, Pipeline de vérification d'identité IA.
+### [TOME 4 : SYSTÈME D'AUTHENTIFICATION](./04_AUTH_SECURITY.md)
+*   **Sujet :** `AuthContext`, Gestion des Cookies Cross-Domain, Protocoles de Déconnexion "Scorched Earth".
 
-### [VOLUME 4 : GOUVERNANCE DES DONNÉES](./04_DATABASE_SCHEMA.md)
-*   **Cible :** PostgreSQL, RLS Policies
-*   **Contenu :** Schéma relationnel complet, triggers d'automatisation, politiques de sécurité Row-Level, stratégies d'indexation.
+### [TOME 5 : DESIGN SYSTEM ATOMIQUE](./05_DESIGN_SYSTEM.md)
+*   **Sujet :** Tailwind, Shadcn/UI, Thème Variables CSS, Animations GPU (`tailwind.config.ts`).
+
+### [TOME 6 : CRYPTOGRAPHIE PRIMITIVE](./06_CRYPTO_PRIMITIVES.md)
+*   **Sujet :** `encryption.ts`, Web Crypto API, AES-GCM, PBKDF2, Gestion des vecteurs d'initialisation (IV).
+
+### [TOME 7 : MACHINE VIRTUELLE & PROTOCOLE SBP](./07_SIVARA_VM_PROTOCOL.md)
+*   **Sujet :** `sivara-kernel`, Format Binaire Propriétaire (`.sivara`), Obfuscation Bit-Shuffling, Smart Contracts.
+
+### [TOME 8 : MOTEUR DE RECHERCHE "TITANIUM"](./08_SEARCH_ENGINE_TITANIUM.md)
+*   **Sujet :** Indexation Aveugle, Tokenisation NLP, Hachage HMAC, Algorithme de Ranking Vectoriel.
+
+### [TOME 9 : ORACLE FINANCIER (DAAS)](./09_FINANCIAL_ORACLE.md)
+*   **Sujet :** Simulation Monte-Carlo, Modélisation de Churn, Calcul de ROI, Intégration Stripe.
+
+### [TOME 10 : GESTION D'INVENTAIRE MATÉRIEL](./10_HARDWARE_INVENTORY.md)
+*   **Sujet :** Algorithmes de sélection aléatoire ("Smart Diversity"), Gestion des SKUs, Logistique Géospatiale.
+
+### [TOME 11 : IDENTITÉ & BIOMÉTRIE (KYC)](./11_IDENTITY_BIOMETRICS.md)
+*   **Sujet :** Analyse Forensique IA (Gemini), Algorithmes de checksum (NAM/RAMQ), Fingerprinting.
+
+### [TOME 12 : CANAUX DE COMMUNICATION](./12_COMMUNICATION_CHANNELS.md)
+*   **Sujet :** Webhooks Email Entrants, Système de Tickets Support, Chiffrement des correspondances.
+
+### [TOME 13 : APPLICATIONS MÉTIER (DOCS & MAIL)](./13_APP_LOGIC.md)
+*   **Sujet :** Éditeurs Tiptap, Collaboration Temps Réel (Broadcast), Drag & Drop Filesystem.
+
+### [TOME 14 : GOUVERNANCE DES DONNÉES (SQL)](./14_DATABASE_GOVERNANCE.md)
+*   **Sujet :** Schéma PostgreSQL, Row Level Security (RLS), Triggers, Indexation GIN/B-Tree.
+
+### [TOME 15 : PONT MOBILE & NATIF](./15_MOBILE_BRIDGE.md)
+*   **Sujet :** Capacitor, Plugins Natifs, Gestion du File System Mobile, Compilation iOS/Android.
 
 ---
-**MAINTENANCE DU DOCUMENT**
-Toute modification du code source critique doit être reflétée dans ce corpus documentaire sous peine de révocation des accès git.
+**AVERTISSEMENT :** Ce corpus documente des mécanismes de sécurité critique. La diffusion non autorisée constitue une violation grave.
