@@ -1,260 +1,281 @@
-# SIVARA : DOCUMENTATION TECHNIQUE INTÉGRALE ET ANALYSE DU CODE SOURCE
-**TYPE DE DOCUMENT :** ANALYSE SYSTÈME COMPLETE (WHITE PAPER)
+# SIVARA OMNIBUS : ANALYSE SYSTÈME TOTALE
+**TYPE :** WHITE PAPER D'INGÉNIERIE (NIVEAU KERNEL)
 **ENTITÉ :** SIVARA CANADA INC.
-**ARCHITECTURE :** MONOLITHE DISTRIBUÉ / ZERO-KNOWLEDGE
+**ARCHITECTURE :** MONOLITHE DISTRIBUÉ / ZERO-KNOWLEDGE / EDGE-NATIVE
 **DATE :** 2025
 
 ---
 
-# PRÉAMBULE : ARCHITECTURE DE HAUT NIVEAU
+# TABLE DES MATIÈRES ET ARCHITECTURE
 
-Le projet Sivara n'est pas une simple application web. C'est un **écosystème multi-facettes** (Super-App) hébergé dans un monorepo unique, capable de muter son comportement selon le contexte d'exécution (Mobile Natif vs Web, Sous-domaine A vs Sous-domaine B).
-
-Le système repose sur trois piliers fondamentaux que nous allons disséquer :
-1.  **L'Hyperviseur Frontend (React/Vite) :** Un routeur polymorphe capable de servir 6 applications distinctes (`account`, `mail`, `docs`, `device`, `help`, `www`) depuis une seule base de code.
-2.  **Le Noyau Cryptographique (Web Crypto API) :** Une couche de chiffrement côté client (E2EE) qui garantit que le serveur (Supabase) ne voit jamais les données en clair ("Blind Storage").
-3.  **L'Infrastructure Edge (Deno) :** Des micro-services serverless qui agissent comme des passerelles sécurisées pour les opérations critiques (Paiement, IA, Manipulation de fichiers binaires).
+1.  **L'HYPERVISEUR FRONTEND (REACT/VITE)**
+    *   Analyse du Routage Contextuel (`App.tsx`)
+    *   Gestion de Session Cross-Domain (Injection de Hash)
+    *   Contexte d'Authentification (`AuthContext.tsx`)
+2.  **LE NOYAU CRYPTOGRAPHIQUE (ZERO-KNOWLEDGE)**
+    *   Implémentation Web Crypto API (`encryption.ts`)
+    *   Machine Virtuelle et Protocole Binaire SBP (`sivara-kernel`)
+3.  **L'INFRASTRUCTURE EDGE (SERVERLESS)**
+    *   Moteur d'Indexation Aveugle ("Titanium")
+    *   Vérification d'Identité Biométrique (IA & Algorithmes)
+    *   Passerelle de Paiement et Abonnements Matériels
+4.  **L'ORACLE FINANCIER (DAAS)**
+    *   Modélisation Monte-Carlo et Gestion des Risques
+    *   Logique de Rentabilité et Churn
+5.  **BASE DE DONNÉES ET SÉCURITÉ (POSTGRESQL)**
+    *   Schéma, RLS et Triggers
+6.  **INTERFACE MOBILE (CAPACITOR)**
+    *   Pont Natif et Deep Linking
 
 ---
 
-# LIVRE I : LE CŒUR DU SYSTÈME (CORE)
+# LIVRE I : L'HYPERVISEUR FRONTEND (REACT/VITE)
 
-Cette section analyse les fichiers fondateurs qui permettent à l'application de démarrer et de router les requêtes.
+L'application SIVARA n'est pas un site web classique. C'est une **Super-App** qui utilise une seule base de code pour servir 6 applications distinctes.
 
-## 1. L'Orchestration du Démarrage (`src/main.tsx`)
+## 1. Le Routeur Polymorphe (`src/App.tsx`)
 
-Ce fichier est le point d'entrée JavaScript.
-*   **Fonction `createRoot` :** Utilisation de l'API concurrente de React 18. Cela permet le "Time Slicing", essentiel pour que l'interface reste fluide pendant les opérations lourdes de chiffrement/déchiffrement AES qui bloquent normalement le thread principal.
-*   **Import CSS :** `import "./globals.css"`. Ce fichier charge Tailwind. L'ordre est critique : il doit être chargé avant tout composant pour que les variables CSS (`:root`) soient disponibles.
+Le fichier `src/App.tsx` contient le cerveau du routage. Il ne se contente pas de regarder l'URL, il analyse l'environnement d'exécution.
 
-## 2. Le Routeur Polymorphe (`src/App.tsx`)
+### 1.1. L'Algorithme de Détection (`useMemo`)
 
-C'est ici que réside l'intelligence de distribution. Le composant `AppRoutes` ne se contente pas de mapper des URL à des pages. Il détecte l'environnement.
+Le hook `useMemo` (lignes 40-90) calcule la variable `currentApp` qui détermine quelle interface charger. C'est un *Switch Layer 7* implémenté côté client.
 
-### 2.1. Analyse de la logique `currentApp`
-Le hook `useMemo` (lignes 42-85) détermine quelle "sous-application" charger.
-
-*   **Branche 1 : Mobile Natif (`Capacitor.isNativePlatform()`)**
-    *   Sur iOS/Android, l'application est servie localement (`capacitor://localhost`). Il n'y a pas de sous-domaines.
-    *   **Solution :** Le routeur ignore le `hostname` et regarde le paramètre URL `?app=`.
-    *   *Exemple :* `sivara://open?app=mail` ouvre l'interface Mail.
-    *   *Fallback :* Si aucun paramètre n'est présent, il renvoie `mobile-launcher` (le tableau de bord tactile type iOS).
-
-*   **Branche 2 : Développement Local (`localhost`)**
-    *   Pour permettre aux développeurs de travailler sur toutes les apps sans configurer de DNS local complexe (`/etc/hosts`), le code permet de forcer l'app via `?app=docs`, `?app=account`, etc.
-    *   Si aucun paramètre n'est fourni, il charge `DevPortal` (un menu de développement exclusif).
-
-*   **Branche 3 : Production (DNS Wildcard)**
-    *   C'est le comportement par défaut. Le code analyse le préfixe du `hostname`.
-    *   `docs.sivara.ca` -> Charge l'application `docs`.
-    *   `account.sivara.ca` -> Charge l'application `account`.
-    *   `device.sivara.ca` -> Charge l'application `device`.
-    *   `www` ou racine -> Charge le moteur de recherche.
-
-### 2.2. Le Système de Session Cross-Domain
-Un problème majeur des architectures multi-domaines est le partage de la session (cookies).
-Dans `src/App.tsx`, un `useEffect` (lignes 230+) implémente une solution robuste : **L'injection de Hash**.
-
-1.  Lorsque l'utilisateur se connecte sur `account.sivara.ca`, Supabase redirige vers `docs.sivara.ca`.
-2.  Les cookies `SameSite=Lax` peuvent être bloqués ou lents à se propager.
-3.  La redirection inclut donc les tokens dans l'URL : `https://docs.sivara.ca/#access_token=XY...&refresh_token=ZB...`.
-4.  Le code React détecte ce hash au montage.
-5.  Il extrait les tokens via `URLSearchParams`.
-6.  Il force l'hydratation de la session locale via `supabase.auth.setSession()`.
-7.  Il nettoie l'URL via `window.history.replaceState` pour que l'utilisateur ne voie rien.
-
-## 3. Le Client Supabase (`src/integrations/supabase/client.ts`)
-
-Ce fichier initialise la connexion à la base de données. Une configuration spécifique est cruciale ici :
-
+#### A. La Priorité Native (Capacitor)
 ```typescript
-const isProd = hostname.includes('sivara.ca');
-const cookieDomain = isProd ? '.sivara.ca' : undefined;
+if (Capacitor.isNativePlatform()) {
+  if (appParam === 'docs') return 'docs';
+  // ...
+  return 'mobile-launcher';
+}
+```
+**Analyse Technique :**
+Sur iOS et Android, l'application est servie via le protocole `capacitor://` ou `file://`. Le concept de "sous-domaine" n'existe pas. Le routeur intercepte donc le paramètre de requête `?app=` pour simuler la navigation entre les modules.
+*   **Pourquoi ?** Cela permet de partager 100% du code JS entre le web et le mobile sans utiliser React Native. C'est du "Web Native".
+*   **Le Launcher :** Si aucun paramètre n'est fourni, l'application charge `MobileLanding`, un tableau de bord tactile conçu spécifiquement pour le mobile (pas de header desktop, gros boutons tactiles).
+
+#### B. La Détection de Production (DNS Wildcard)
+```typescript
+if (hostname.startsWith('docs.')) return 'docs';
+if (hostname.startsWith('account.')) return 'account';
+```
+**Analyse Technique :**
+L'infrastructure DNS (Vercel/Netlify) est configurée en Wildcard (`*.sivara.ca`). Tout le trafic arrive sur la même instance React.
+*   Le code analyse le préfixe du `window.location.hostname`.
+*   Cela permet une **isolation logique** totale pour l'utilisateur (il a l'impression de changer de site) tout en conservant un **état partagé** (AuthContext, Cache React Query) si on navigue via `window.history`.
+
+### 1.2. Le Hack de Session Cross-Domain (Injection de Hash)
+
+Comment partager une session entre `account.sivara.ca` et `docs.sivara.ca` si les cookies tiers sont bloqués (Safari ITP) ?
+
+**Le Code (Lignes 230-270) :**
+```typescript
+const hash = window.location.hash;
+if (hash && hash.includes('access_token')) {
+    // Parsing manuel
+    const params = new URLSearchParams(hash.substring(1));
+    const accessToken = params.get('access_token');
+    
+    // Injection forcée
+    await supabase.auth.setSession({ ... });
+    
+    // Nettoyage furtif
+    window.history.replaceState(null, '', window.location.pathname);
+}
 ```
 
-*   **Le point `.` avant le domaine :** C'est un détail technique vital. Il indique au navigateur que le cookie d'authentification doit être envoyé à `sivara.ca` ET à tous ses sous-domaines (`*.sivara.ca`). Sans ce point, le SSO (Single Sign-On) est impossible.
-*   **Stockage Personnalisé :** Le client utilise `js-cookie` au lieu du `localStorage` par défaut. Pourquoi ? Pour permettre (potentiellement) le SSR (Server-Side Rendering) dans le futur et pour une meilleure sécurité (les cookies HttpOnly sont plus sûrs que le LocalStorage contre les failles XSS, bien qu'ici nous utilisions des cookies JS pour la compatibilité client).
+**Explication du Mécanisme :**
+1.  L'utilisateur se logue sur `account`.
+2.  Le serveur redirige vers `docs` en ajoutant le token dans le fragment URL (`#access_token=...`). Le fragment n'est **jamais** envoyé au serveur HTTP, il reste dans le navigateur.
+3.  Le code React se réveille, détecte le hash, extrait le token, initialise la session Supabase, et supprime le hash de la barre d'adresse en moins de 100ms.
+4.  **Résultat :** Une authentification transparente et incassable, indépendante des politiques de cookies des navigateurs.
 
-## 4. Le Contexte d'Authentification (`src/contexts/AuthContext.tsx`)
+## 2. Le Contexte d'Authentification (`src/contexts/AuthContext.tsx`)
 
-Ce composant React (`AuthProvider`) enveloppe toute l'application.
+Ce fichier est le "Système Nerveux" de l'application.
 
-*   **État `loading` :** Il est initialisé à `true`. Tant que Supabase n'a pas confirmé si l'utilisateur est connecté ou non (via un appel réseau asynchrone `getSession`), l'application affiche un écran de chargement. Cela évite l'effet de scintillement ("Flash of Unauthenticated Content") où l'utilisateur voit brièvement la page de login avant d'être connecté.
-*   **Écouteur `onAuthStateChange` :** Il s'abonne aux événements du SDK Supabase.
-    *   `TOKEN_REFRESHED` : Met à jour le token en mémoire silencieusement.
-    *   `SIGNED_OUT` : Déclenche un nettoyage complet.
-*   **Fonction `signOut` Durcie :** Elle ne se contente pas d'appeler l'API. Elle force la suppression du cookie `sivara-auth-token` en définissant sa date d'expiration dans le passé (`Thu, 01 Jan 1970`). C'est une sécurité supplémentaire pour garantir la déconnexion sur les navigateurs capricieux.
+### 2.1. Gestion de l'État `loading`
+L'état `loading` est initialisé à `true`.
+*   **Pourquoi ?** Pour éviter le "Flash of Unauthenticated Content". L'application n'affiche **rien** (ou un loader) tant que Supabase n'a pas répondu (via `getSession` ou stockage local).
+*   C'est crucial pour la sécurité UX : on ne veut pas montrer le Dashboard Admin une milliseconde avant de rediriger vers le Login.
 
----
-
-# LIVRE II : CRYPTOGRAPHIE ET SÉCURITÉ (ZERO-KNOWLEDGE)
-
-Sivara se distingue par son approche de sécurité : le serveur est considéré comme non fiable ("Untrusted Server").
-
-## 5. Le Service de Chiffrement (`src/lib/encryption.ts`)
-
-Ce fichier est une wrapper autour de l'API **Web Crypto** native du navigateur.
-
-### 5.1. Initialisation (Key Derivation)
-La méthode `initialize(secret)` transforme un secret (ID utilisateur ou mot de passe) en une clé cryptographique robuste.
-*   **Algorithme :** PBKDF2 (Password-Based Key Derivation Function 2).
-*   **Hash :** SHA-512.
-*   **Itérations :** 100 000. Ce nombre élevé rend le calcul de la clé coûteux en CPU (environ 100-200ms). Cela rend les attaques par force brute (essayer des milliards de mots de passe) impossibles en un temps raisonnable.
-*   **Salt :** Un sel cryptographique est ajouté pour empêcher l'utilisation de "Rainbow Tables" (tables de hachage pré-calculées).
-
-### 5.2. Chiffrement (Encryption)
-La méthode `encrypt(plaintext)` utilise l'algorithme **AES-GCM** (Advanced Encryption Standard - Galois/Counter Mode).
-*   **Pourquoi GCM ?** C'est un mode "authentifié". Il chiffre les données ET génère une signature d'intégrité (Tag).
-*   **Intégrité des données :** Si un attaquant modifie un seul bit des données chiffrées dans la base de données, la vérification du Tag échouera lors du déchiffrement et la fonction lèvera une erreur. Cela empêche les attaques par "Bit-Flipping".
-*   **IV (Vecteur d'Initialisation) :** Un IV unique de 12 octets est généré aléatoirement pour chaque chiffrement. Ainsi, chiffrer deux fois le même texte ("Bonjour") produira deux résultats totalement différents en base de données.
-
-## 6. Le Format Binaire Propriétaire (`.sivara`) et la VM (`src/lib/sivara-vm.ts`)
-
-Sivara utilise un format de fichier personnalisé pour l'export de données.
-
-### 6.1. Le Kernel (`supabase/functions/sivara-kernel/index.ts`)
-Ce n'est pas une simple API, c'est une machine virtuelle binaire hébergée sur le Edge.
-
-*   **Structure du fichier SBP (Sivara Binary Protocol) :**
-    *   `HEADER` (4 bytes) : `0x53, 0x56, 0x52, 0x03` ("SVR3"). Signature magique.
-    *   `OP_CODES` : Le fichier est une suite d'instructions (`0xB2` pour définir l'IV, `0xD4` pour les métadonnées, `0xC3` pour les données).
-*   **Obfuscation (Bit Shuffling) :**
-    *   Fonction `sivaraShuffle` : Elle applique une rotation de bits (`<< 2 | >> 6`) et un XOR dynamique sur chaque octet.
-    *   **But :** Rendre le fichier illisible pour les outils d'analyse statistique standard (entropie). Même si on extrait la chaîne chiffrée AES, elle est "brouillée" au niveau binaire. Seul le Kernel possède l'algorithme de "Unshuffle".
-
-### 6.2. Les "Smart Contracts" de Sécurité
-Lors de la décompilation (`decompile`), le Kernel lit le bloc de métadonnées. Il contient un objet `security`.
-*   **Geofencing :** Si `security.geofence` est défini, le Kernel appelle une API de géolocalisation IP. Si l'IP du demandeur est hors du rayon autorisé (ex: 50km autour de Montréal), le Kernel refuse de renvoyer les données chiffrées.
-*   **Fingerprinting :** Il peut vérifier l'empreinte du navigateur (`visitorId`) pour restreindre l'ouverture à un appareil spécifique.
+### 2.2. La Déconnexion Durcie (`signOut`)
+La fonction `signOut` ne fait pas confiance à l'API `supabase.auth.signOut()`.
+```typescript
+document.cookie = 'sivara-auth-token=; path=/; domain=.sivara.ca; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+```
+**Analyse :**
+Elle force l'écrasement manuel du cookie au niveau du navigateur en définissant une date d'expiration dans le passé (Epoch 1970). Le paramètre `domain=.sivara.ca` (avec le point initial) assure que le cookie est tué sur **tous** les sous-domaines simultanément.
 
 ---
 
-# LIVRE III : LES APPLICATIONS ET MODULES MÉTIER
+# LIVRE II : LE NOYAU CRYPTOGRAPHIQUE (ZERO-KNOWLEDGE)
 
-Analysons maintenant le code spécifique à chaque "sous-application".
+C'est ici que Sivara se différencie d'un SaaS standard. Le serveur est considéré comme **hostile**.
 
-## 7. Sivara Docs (Le Coffre-fort)
+## 1. Le Service de Chiffrement (`src/lib/encryption.ts`)
 
-### 7.1. L'Éditeur (`src/pages/DocEditor.tsx`)
-*   **Moteur :** Utilise **Tiptap**, un éditeur "headless" basé sur ProseMirror.
-*   **Sauvegarde Sécurisée :**
-    *   Hook `useEditor` -> `onUpdate`.
-    *   Le contenu HTML est extrait (`editor.getHTML()`).
-    *   Il est passé à `encryptionService.encrypt()`.
-    *   Le résultat (chiffré) est envoyé à Supabase. Le serveur ne reçoit jamais le texte clair.
-*   **Collaboration Temps Réel (Broadcast) :**
-    *   Utilise `supabase.channel` pour émettre des événements éphémères (`cursor-pos`).
-    *   Ces données (position de la souris) ne sont pas stockées en base, elles transitent via WebSocket P2P (relayé par le serveur).
-    *   Pour le contenu, c'est un modèle "Last-Write-Wins" chiffré.
+Ce fichier est une wrapper autour de l'API native **Web Crypto** (`window.crypto.subtle`). Il n'utilise aucune librairie JS tierce pour la crypto pure (performance et sécurité).
 
-### 7.2. Le Système de Fichiers (`src/pages/Docs.tsx`)
-*   **Structure :** Une table plate `documents` avec une colonne `parent_id` (Adjacency List) pour simuler des dossiers.
-*   **Drag & Drop :** Implémenté avec `@dnd-kit`.
-    *   `useDraggable` sur les fichiers.
-    *   `useDroppable` sur les dossiers et le fil d'ariane (breadcrumbs).
-    *   Au "drop", une requête SQL met à jour le `parent_id` du document déplacé.
+### 1.1. Dérivation de Clé (PBKDF2)
+La méthode `initialize` transforme un secret (ID utilisateur ou mot de passe) en matériel cryptographique.
+*   **Algorithme :** `PBKDF2` (Password-Based Key Derivation Function 2).
+*   **Hash :** `SHA-512` (Le plus robuste actuellement).
+*   **Itérations :** `100 000`. Ce chiffre est choisi pour imposer un coût CPU d'environ 100ms par tentative. Cela rend les attaques par force brute (Brute Force) ou Rainbow Tables économiquement non viables pour un attaquant qui volerait la base de données.
+*   **Salt :** Utilise un sel statique dérivé de l'ID utilisateur si aucun sel n'est fourni, garantissant que deux utilisateurs avec le même mot de passe auront des clés maîtresses différentes.
 
-## 8. Sivara Device (Le Configurateur Matériel)
+### 1.2. Le Chiffrement Authentifié (AES-GCM)
+La méthode `encrypt` utilise **AES-256-GCM** (Galois/Counter Mode).
+*   **Pourquoi GCM ?** C'est un mode de chiffrement authentifié (AEAD). Il produit non seulement un texte chiffré, mais aussi un "Tag" d'authentification.
+*   **Protection contre la Malléabilité :** Si un attaquant (ou le serveur) modifie un seul bit du blob chiffré dans la base de données, la vérification du Tag échouera lors du déchiffrement (`Integrity check failed`). Cela empêche les attaques par "Bit-Flipping" qui pourraient corrompre les données de manière subtile.
+*   **IV (Vecteur d'Initialisation) :** Un IV unique de 12 octets est généré pour chaque opération (`crypto.getRandomValues`). Chiffrer deux fois le mot "Secret" produira deux blobs binaires totalement différents.
 
-### 8.1. L'Algorithme de Sélection (`src/pages/DeviceLanding.tsx`)
-La fonction `getSmartUnits` résout un problème d'inventaire complexe.
-*   **Problème :** Si on affiche simplement `SELECT * FROM units LIMIT 5`, tous les clients voient (et essaient d'acheter) le même ordinateur.
-*   **Solution :**
-    1.  Récupération de toutes les unités disponibles.
-    2.  Application d'un mélange aléatoire (Fisher-Yates Shuffle).
-    3.  Sélection intelligente : L'algo essaie de trouver 5 unités ayant des spécifications (RAM/SSD) *différentes* pour offrir de la variété à l'utilisateur.
-    4.  Résultat : Une répartition naturelle de la demande sur tout le stock.
+## 2. Le Kernel SIVARA (`supabase/functions/sivara-kernel/index.ts`)
 
-### 8.2. L'Oracle Financier (`src/components/OraclePanel.tsx`)
-Un outil de visualisation pour les administrateurs (`DeviceCustomerDetails.tsx`).
-*   **Simulation Monte-Carlo :** Le hook `useMemo` calcule 3 scénarios de rentabilité (Optimiste, Probable, Pessimiste) sur 24 mois.
-*   **Variables :** Il prend en compte l'inflation, la dépréciation du matériel, et surtout le **TrustScore** du client.
-*   **Impact du Risque :** Si le client a un faible TrustScore (issu de la vérification d'identité), la courbe "Probable" est pondérée vers le bas (risque de défaut de paiement), alertant l'admin visuellement via un graphique `Recharts`.
+Cette Edge Function est une machine virtuelle binaire qui gère le format de fichier propriétaire `.sivara`.
 
-### 8.3. Le Checkout (`src/pages/DeviceCheckout.tsx`)
-*   **Géolocalisation Google Maps :**
-    *   Charge le script Maps API dynamiquement.
-    *   Utilise `Places Autocomplete` pour l'adresse.
-    *   Utilise `Geometry Library` pour calculer la distance (à vol d'oiseau) entre l'entrepôt (Montréal) et le client.
-    *   Si distance < 35km -> Active l'option "Livraison Flash" (Coursier). Sinon -> "Postes Canada".
+### 2.1. Le Protocole SBP (Sivara Binary Protocol)
+Le fichier `.sivara` n'est pas du JSON. C'est un flux de bytes structuré.
+*   **Magic Header :** `0x53, 0x56, 0x52, 0x03` (ASCII "SVR3"). Permet d'identifier le fichier.
+*   **OpCodes :**
+    *   `0xB2` : Bloc IV (Initialization Vector).
+    *   `0xD4` : Bloc Méta-données (Contrats de sécurité).
+    *   `0xC3` : Bloc Données (Payload AES chiffré).
+    *   `0xFF` : Fin de fichier (EOF).
 
-## 9. Sivara ID (Vérification d'Identité)
+### 2.2. Obfuscation par "Bit-Shuffling"
+Avant d'écrire les données, le Kernel applique une transformation binaire propriétaire : `sivaraShuffle`.
+```typescript
+result[i] = ((buffer[i] << 2) | (buffer[i] >> 6)) ^ key;
+```
+1.  **Rotation de Bits :** Décale les bits de 2 positions vers la gauche (circulaire).
+2.  **XOR Dynamique :** Applique un OU Exclusif avec une clé dérivée de la position (`seed + i`).
+**Objectif :** Détruire l'entropie statistique du fichier. Un analyseur de fichiers standard ne verra que du bruit blanc, rendant l'identification du contenu (même chiffré) impossible sans connaître l'algorithme de "Unshuffle".
 
-### 9.1. L'Analyse IA (`supabase/functions/verify-identity/index.ts`)
-*   **Modèle :** Google Gemini 1.5 Flash (Vision).
-*   **Prompt Engineering :** Le prompt système est très strict. Il demande à l'IA d'agir comme un "expert forensique". Il demande explicitement de vérifier :
-    *   `isScreen` : Est-ce une photo d'un écran ? (Tentative de fraude courante).
-    *   `visualAgeEstimation` : L'âge apparent de la personne correspond-il à la date de naissance ?
-*   **Validation Algorithmique (RAMQ) :**
-    *   Le code ne fait pas confiance aveuglément à l'IA.
-    *   Il implémente l'algorithme de checksum du Numéro d'Assurance Maladie du Québec (Nom + Prénom + Date -> Code alphanumérique).
-    *   Si le numéro lu par l'OCR correspond au numéro calculé mathématiquement -> Le score de confiance augmente drastiquement.
+### 2.3. Les "Smart Contracts" de Sécurité
+Lors de la décompilation (`decompile`), le Kernel agit comme un gardien. Il lit le bloc `META_TAG` qui contient un objet JSON de sécurité.
+*   **Geofencing :** Si le fichier a été restreint géographiquement, le Kernel appelle une API de géolocalisation IP (`ipgeolocation.io`). Il calcule la distance géodésique entre l'IP du client et le centre autorisé. Si `distance > radius`, le Kernel lève une exception et **ne renvoie jamais** le payload chiffré.
+*   **Fingerprinting :** Il compare l'empreinte navigateur (`visitorId`) stockée dans le fichier avec celle du demandeur.
+**Conséquence :** Même si un attaquant vole le fichier `.sivara` et le mot de passe, il ne peut pas l'ouvrir s'il n'est pas physiquement au bon endroit ou sur la bonne machine.
 
 ---
 
-# LIVRE IV : BACKEND ET BASE DE DONNÉES
+# LIVRE III : L'INFRASTRUCTURE EDGE (SERVERLESS)
 
-## 10. Le Schéma de Données (PostgreSQL)
+Sivara délègue la logique critique à des fonctions Deno exécutées en bordure de réseau (Edge), proches de l'utilisateur.
 
-### 10.1. Table `profiles`
-*   Pivot central. Lié à `auth.users` via une clé étrangère.
-*   Contient les données publiques (Nom, Avatar).
-*   **Trigger `handle_new_user` :** Une fonction PL/PGSQL qui s'exécute automatiquement à chaque nouvelle inscription pour créer une ligne vide dans `profiles`. Sans ça, les `JOIN` échoueraient.
+## 1. Le Moteur de Recherche "Titanium" (`supabase/functions/search/index.ts`)
 
-### 10.2. Table `crawled_pages` (Moteur de Recherche)
-*   **Problème :** Comment rechercher dans du texte chiffré ?
-*   **Solution :** Colonne `blind_index` (Tableau de Textes).
-*   L'Edge Function `crawl-page` génère des tokens hachés (`HMAC-SHA256`) pour chaque mot clé du document (ex: "pomme" -> `x8f9...`).
-*   Ces hashs sont stockés dans `blind_index`.
-*   Lors de la recherche, on hache la requête utilisateur et on cherche le hash correspondant. Le contenu reste chiffré (`aes-256-gcm`).
+Comment rechercher dans des données chiffrées sans les déchiffrer ? C'est le défi du "Blind Indexing".
 
-### 10.3. Table `device_units`
-*   Utilisation du type `JSONB` pour la colonne `specific_specs`.
-*   Cela permet de stocker des configurations matérielles hétérogènes (ex: un Mac a "Unified Memory", un PC a "DDR5") sans créer 50 colonnes nullables. PostgreSQL permet d'indexer et de requêter efficacement ce JSON.
+### 1.1. Tokenisation et Hachage (Blind Index)
+Au moment de l'indexation (`crawl-page`), le texte est décomposé en tokens (mots).
+Chaque token subit une transformation irréversible : `HMAC-SHA256(SEARCH_KEY, token)`.
+*   Le mot "Pomme" devient `a94b8...`.
+*   La racine "Pomm" devient `b2c3d...` (Stemming).
+*   La phonétique "PM" devient `f5e6...` (Double Metaphone).
 
-## 11. Les Webhooks (`supabase/functions/stripe-webhook`)
+Ces hashs sont stockés dans la colonne `blind_index` (Array) de la base de données. Le serveur ne voit que des hashs.
 
-Ce fichier gère la logique métier critique asynchrone.
-*   **Sécurité :** Vérifie la signature cryptographique de Stripe (`stripe-signature`) pour s'assurer que la requête vient bien de leurs serveurs.
-*   **Idempotence :** Le code est conçu pour gérer le cas où Stripe envoie le même événement deux fois (ce qui arrive).
-*   **Logique Métier :**
-    *   Si `checkout.session.completed` avec metadata `type: device_rental` :
-    *   Met à jour le statut de l'unité de `reserved` à `sold`.
-    *   Assigne le `sold_to_user_id`.
-    *   Déclenche la préparation de la commande.
+### 1.2. Algorithme de Recherche (Retrieval)
+1.  L'utilisateur tape "Pomme".
+2.  L'Edge Function reçoit "Pomme", calcule les mêmes hashs (`a94b8...`, etc.) avec la `SEARCH_KEY` (qui n'est jamais envoyée au client).
+3.  Elle exécute une requête SQL `&&` (Array Overlap) pour trouver les documents contenant ces hashs.
+4.  **Scoring :** Elle pondère les résultats (Match Exact = 100pts, Phonétique = 50pts).
+5.  Elle déchiffre le titre/URL (AES) *uniquement* pour les résultats trouvés avant de les renvoyer.
 
----
+## 2. Vérification d'Identité (`supabase/functions/verify-identity/index.ts`)
 
-# LIVRE V : INFRASTRUCTURE MOBILE (CAPACITOR)
+Ce service est le pare-feu contre la fraude matérielle.
 
-## 12. Configuration Native
+### 2.1. Analyse Visuelle (Gemini Vision)
+Le code envoie les images brutes des pièces d'identité à l'API Google Gemini.
+**Prompt Engineering Critique :** Le prompt ne demande pas juste de lire. Il demande d'agir comme un expert forensique.
+*   Il demande de vérifier les "artefacts de compression" (signe de Photoshop).
+*   Il demande de vérifier si c'est une "photo d'écran" (Screen Detection).
+*   Il demande une "Visual Age Estimation" pour comparer avec la date de naissance.
 
-### 12.1. `capacitor.config.ts`
-*   `webDir: 'dist'` : Indique à Capacitor d'embarquer le dossier de build généré par Vite. L'application tourne donc en local sur le téléphone (file://), pas sur un serveur distant, ce qui améliore la vitesse et permet le fonctionnement hors-ligne partiel.
-
-### 12.2. Deep Linking
-Dans `App.tsx`, l'écouteur `CapacitorApp.addListener('appUrlOpen')` est essentiel.
-*   Quand l'utilisateur clique sur un lien de vérification d'email ou termine un paiement 3DSecure, il est redirigé vers l'app.
-*   L'OS ouvre l'app via le schéma `com.example.sivara://`.
-*   Le code React intercepte cette URL, parse les paramètres (`access_token`, `refresh_token`) et restaure la session Supabase, permettant une expérience fluide "Web-to-App".
+### 2.2. Algorithme de Validation NAM (Québec)
+Le code implémente l'algorithme officiel de checksum de la RAMQ (Régie de l'assurance maladie du Québec).
+*   Il prend le Nom, Prénom, Sexe et Date de Naissance extraits par l'IA.
+*   Il génère le code alphanumérique théorique (ex: `DUJP12345678`).
+*   Il compare avec le code lu sur la carte.
+*   Si ça matche : **TrustScore +60**. C'est une preuve mathématique de cohérence.
 
 ---
 
-# LIVRE VI : DÉPLOIEMENT ET OUTILLAGE
+# LIVRE IV : L'ORACLE FINANCIER (DAAS)
 
-## 13. Le Pipeline de Build (Vite)
+Le module "Device" n'est pas un simple e-commerce. C'est un produit financier de location (Leasing) géré par un moteur de risque.
 
-*   `vite.config.ts` : Utilise `@vitejs/plugin-react-swc` pour une compilation ultra-rapide (basée sur Rust).
-*   **Code Splitting :** Vite découpe automatiquement le bundle. Le code de l'éditeur (lourd) n'est chargé que lorsque l'utilisateur va sur `/docs`. Le code de la caméra n'est chargé que sur `/id`. Cela garantit un chargement initial instantané.
+## 1. Simulation Monte-Carlo (`src/components/OraclePanel.tsx`)
 
-## 14. Le Portail Développeur (`src/pages/DevPortal.tsx`)
+Dans le dashboard administrateur, le composant `OraclePanel` exécute une simulation financière complexe en temps réel.
 
-Une page cachée, accessible uniquement en `localhost`.
-*   Elle simule le routage DNS de production.
-*   Elle permet de "monter" les différentes applications (`Docs`, `Mail`) dans le navigateur sans avoir à déployer ou modifier les fichiers hosts. C'est un outil de productivité interne majeur.
+### 1.1. Les Variables Stochastiques
+*   **Inputs :** Coût du matériel, Prix de l'abonnement, Dépôt initial.
+*   **Risque (TrustScore) :** Le score issu de la vérification d'identité (0-100) est inversé pour devenir une probabilité de "Churn" (Défaut de paiement).
+*   **Volatilité :** Un curseur permet de simuler la variation de la valeur de revente du matériel sur le marché secondaire.
+
+### 1.2. La Projection des Flux (Cashflow)
+L'algorithme projette sur 24 mois :
+*   **Courbe Optimiste :** Le client paie tous les mois, le matériel garde sa valeur.
+*   **Courbe Probable :** Applique le taux de rétention basé sur le TrustScore. Chaque mois, la probabilité que le client continue de payer diminue légèrement (`retentionRate`).
+*   **Courbe Pessimiste :** Simule un "Crash" (arrêt des paiements et perte du matériel) à un mois critique calculé par l'IA.
+
+**Résultat :** L'admin voit instantanément le ROI (Retour sur Investissement) et le "Break Even Point" (le mois où le contrat devient rentable).
+
+---
+
+# LIVRE V : BASE DE DONNÉES (POSTGRESQL)
+
+## 1. Row Level Security (RLS)
+
+C'est la barrière de sécurité ultime. Même si le serveur Node.js est compromis, il ne peut pas lire les données sans le bon contexte utilisateur.
+
+### 1.1. Politique d'Accès aux Documents
+```sql
+CREATE POLICY "Access via document_access" ON documents
+FOR SELECT USING (
+  (owner_id = auth.uid()) OR 
+  (visibility = 'public') OR 
+  (EXISTS (SELECT 1 FROM document_access da WHERE da.document_id = id AND da.email = auth.email()))
+);
+```
+**Analyse :** Cette requête est injectée par le moteur Postgres dans *chaque* `SELECT` fait sur la table `documents`. Elle vérifie mathématiquement si l'utilisateur est le propriétaire OU s'il a été explicitement invité via la table de jointure `document_access`.
+
+## 2. Le Modèle de Données Hybride (`device_units`)
+
+La table `device_units` utilise une colonne `specific_specs` de type `JSONB`.
+*   **Pourquoi ?** Le parc informatique est hétérogène. Un MacBook a de la "Mémoire Unifiée", un PC a de la "DDR5". Un écran est "Retina" ou "OLED".
+*   Plutôt que de créer 50 colonnes nullables, on stocke un document JSON flexible. Postgres permet d'indexer ce JSON (`GIN Index`) pour faire des recherches ultra-rapides comme `specific_specs->>'ram_size' = '16'`.
+
+---
+
+# LIVRE VI : INTERFACES ET MICRO-INTERACTIONS
+
+## 1. L'Éditeur (`src/pages/DocEditor.tsx`)
+
+### 1.1. La Collaboration Temps Réel (Broadcast)
+L'éditeur utilise les **Channels Supabase** pour la collaboration.
+*   **Curseurs :** La position de la souris est envoyée via un événement `broadcast` éphémère (`cursor-pos`). Ces données ne sont **pas** stockées en base de données pour ne pas saturer le disque (haute fréquence).
+*   **Contenu :** Les mises à jour de contenu sont chiffrées *avant* d'être envoyées au canal. Les autres clients reçoivent le blob chiffré, le déchiffrent et mettent à jour leur éditeur localement.
+
+## 2. Le Configurateur Matériel (`src/pages/DeviceLanding.tsx`)
+
+### 2.1. Algorithme "Smart Diversity"
+Pour éviter que tous les clients ne cliquent sur le premier ordinateur de la liste (Race Condition), l'affichage est manipulé côté client.
+1.  L'API renvoie tout le stock disponible.
+2.  Le frontend applique un mélange aléatoire (`Fisher-Yates Shuffle`).
+3.  Il filtre pour afficher 5 unités avec des specs *différentes* (RAM/SSD) pour maximiser le choix.
+4.  **Résultat :** Une répartition naturelle de la charge sur l'inventaire.
+
+### 2.2. Réservation Atomique
+Lors du clic sur "Commander", le frontend appelle une fonction RPC `reserve_device`.
+Cette fonction SQL utilise une **Transaction**. Elle vérifie si le statut est `available` et le passe à `reserved` en une seule opération atomique. Cela empêche physiquement deux utilisateurs de réserver le même appareil à la milliseconde près.
 
 ---
 
 # CONCLUSION
 
-L'analyse intégrale du code source de Sivara révèle une ingénierie de haute précision. Ce n'est pas un assemblage de librairies, mais une architecture délibérée pour contourner les limitations du Web standard (sécurité, isolation, performance) et offrir une souveraineté numérique réelle. Chaque fonction, du "Bit-Shuffling" du Kernel à l'injection de Hash dans le routeur, sert cet objectif unique.
+Cette documentation prouve que Sivara est une architecture logicielle de haute précision. Chaque couche, du bit-shuffling binaire dans le Kernel à l'injection de hash dans le routeur React, est conçue pour servir un objectif unique : **La Souveraineté Numérique Totale** dans un environnement hostile (Zero-Trust).
