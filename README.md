@@ -117,6 +117,26 @@ Une forteresse de validation d'identité "Zero-Trust" requise pour l'accès aux 
     *   **Comparaison Identitaire Stricte :** Algorithme de normalisation (NFD/Unicode) comparant les données extraites de la pièce d'identité avec le profil sécurisé en base de données. Tolérance zéro sur les discordances d'identité.
     *   **Risk Scoring Dynamique :** Agrégation des signaux (âge, validité document, cohérence IP/Device) pour générer un score de risque bloquant instantanément les transactions suspectes avant l'accès aux passerelles de paiement.
 
+### 9. Sivara Text - Intelligence Rédactionnelle Personnalisée
+Au-delà de la simple correction orthographique, **Sivara Text** est un moteur cognitif local qui s'adapte au style unique de l'utilisateur.
+
+*   **Pourquoi ?**
+    Les correcteurs standards imposent une norme rigide. Sivara Text reconnaît que le langage est personnel. Si un utilisateur utilise un argot spécifique, un jargon technique ou une tournure de phrase particulière, le système ne doit pas le "corriger" indéfiniment, mais l'apprendre.
+
+*   **Comment ça fonctionne (Algorithme) :**
+    L'analyse se fait en temps réel lors de la frappe, orchestrée par un moteur hybride à trois niveaux :
+    1.  **Analyse Orthographique (LanguageTool) :** Fournit la base normative stricte.
+    2.  **Analyse Phonétique (French Soundex) :** Un algorithme propriétaire transforme les mots en "signatures sonores". Il permet de suggérer "Salut" même si l'utilisateur écrit "Salu" (faute que les correcteurs basés sur la distance pure ratent souvent).
+    3.  **Mémoire Neuronale Pondérée (User Memory) :**
+        *   À chaque fois que l'utilisateur sélectionne une correction manuelle, le système enregistre la paire `(faute -> choix)`.
+        *   **Formule de pondération :** `Score = Base + (log(Frequence + 1) * 30)`.
+        *   L'utilisation d'une courbe logarithmique permet au système d'apprendre très vite une nouvelle préférence (1 ou 2 utilisations suffisent pour surpasser la suggestion par défaut), tout en plafonnant pour éviter de dériver totalement.
+
+*   **Infrastructure de Synchronisation Sécurisée :**
+    *   **Priorité Locale (0 Latence) :** Le modèle d'apprentissage est chargé en RAM et persisté dans le `localStorage`. L'analyse est instantanée et fonctionne hors-ligne.
+    *   **Stockage Chiffré (Cloud) :** Pour permettre la continuité entre appareils, le modèle est synchronisé en base de données.
+    *   **Confidentialité Absolue :** Avant de quitter le navigateur, le JSON du modèle d'apprentissage est chiffré en **AES-256-GCM** avec la clé maître de l'utilisateur. Le serveur reçoit un blob illisible `text_preferences`. Sivara ne peut techniquement pas savoir quels mots vous utilisez ou quelles fautes vous faites.
+
 ---
 
 ## 🔬 Deep Dive : Architecture Moteur "Sivara Titanium"
