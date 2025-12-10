@@ -23,7 +23,7 @@ import {
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
   Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool,
-  MapPin, Laptop, KeyRound, ShieldCheck, Crosshair
+  MapPin, Laptop, KeyRound, ShieldCheck, Crosshair, BookType
 } from 'lucide-react';
 
 import {
@@ -43,6 +43,9 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { RealtimeChannel } from '@supabase/supabase-js';
+
+// --- NEW COMPONENT ---
+import { Lexibook } from '@/components/Lexibook';
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -114,6 +117,7 @@ const FONT_FAMILIES = [
   { name: 'Merriweather', value: 'Merriweather, serif' },
   { name: 'Lora', value: 'Lora, serif' },
   { name: 'Courier Prime', value: '"Courier Prime", monospace' },
+  { name: 'OpenDyslexic', value: 'OpenDyslexic, sans-serif' }, // Ajout police dyslexie
 ];
 const FONT_SIZES = ['12', '14', '16', '18', '20', '24', '30', '36', '48', '60', '72'];
 const AVAILABLE_ICONS = [
@@ -181,6 +185,9 @@ const DocEditor = () => {
   const mapObjRef = useRef<any>(null);
   const circleObjRef = useRef<any>(null);
 
+  // --- LEXIBOOK STATE ---
+  const [showLexibook, setShowLexibook] = useState(false);
+
   const titleRef = useRef(title);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const isUpdatingFromRemoteRef = useRef(false);
@@ -190,6 +197,22 @@ const DocEditor = () => {
   const myColorRef = useRef(CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)]);
 
   useEffect(() => { titleRef.current = title; }, [title]);
+
+  // Load persistence for Lexibook
+  useEffect(() => {
+      if (!id || !user) return;
+      const prefKey = `sivara-lexibook-${id}-${user.id}`;
+      const savedState = localStorage.getItem(prefKey);
+      if (savedState === 'true') setShowLexibook(true);
+  }, [id, user]);
+
+  const toggleLexibook = () => {
+      if (!id || !user) return;
+      const newState = !showLexibook;
+      setShowLexibook(newState);
+      localStorage.setItem(`sivara-lexibook-${id}-${user.id}`, String(newState));
+      if (newState) showSuccess("Lexibook activé");
+  };
 
   // Load Google Maps Script for Geofencing
   useEffect(() => {
@@ -672,6 +695,14 @@ const DocEditor = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F3F4F6] pt-[env(safe-area-inset-top)]">
+      
+      {/* LEXIBOOK COMPONENT */}
+      <Lexibook 
+        editor={editor} 
+        isOpen={showLexibook} 
+        onClose={() => toggleLexibook()} 
+      />
+
       <header className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
@@ -710,6 +741,17 @@ const DocEditor = () => {
 
               {isOwner && <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-2 h-8 sm:h-9 px-2 sm:px-4" onClick={() => setShowShareDialog(true)}><Share2 className="h-3 w-3 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Partager</span></Button>}
               
+              {/* BOUTON LEXIBOOK */}
+              <Button 
+                variant={showLexibook ? "secondary" : "ghost"} 
+                size="icon" 
+                onClick={toggleLexibook}
+                className={`h-8 w-8 ${showLexibook ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'}`}
+                title="Lexibook (Aide dyslexie)"
+              >
+                <BookType className="h-4 w-4" />
+              </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
