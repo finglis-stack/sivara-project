@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter
@@ -44,8 +44,8 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-// --- NEW COMPONENT ---
-import { Lexibook } from '@/components/Lexibook';
+// --- NEW COMPONENT: SIVARA TEXT ---
+import { SivaraText } from '@/components/SivaraText';
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -117,7 +117,7 @@ const FONT_FAMILIES = [
   { name: 'Merriweather', value: 'Merriweather, serif' },
   { name: 'Lora', value: 'Lora, serif' },
   { name: 'Courier Prime', value: '"Courier Prime", monospace' },
-  { name: 'OpenDyslexic', value: 'OpenDyslexic, sans-serif' }, // Ajout police dyslexie
+  { name: 'OpenDyslexic', value: 'OpenDyslexic, sans-serif' },
 ];
 const FONT_SIZES = ['12', '14', '16', '18', '20', '24', '30', '36', '48', '60', '72'];
 const AVAILABLE_ICONS = [
@@ -185,8 +185,8 @@ const DocEditor = () => {
   const mapObjRef = useRef<any>(null);
   const circleObjRef = useRef<any>(null);
 
-  // --- LEXIBOOK STATE ---
-  const [showLexibook, setShowLexibook] = useState(false);
+  // --- SIVARA TEXT STATE ---
+  const [showSivaraText, setShowSivaraText] = useState(false);
 
   const titleRef = useRef(title);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
@@ -198,20 +198,20 @@ const DocEditor = () => {
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
-  // Load persistence for Lexibook
+  // Load persistence for Sivara Text
   useEffect(() => {
       if (!id || !user) return;
-      const prefKey = `sivara-lexibook-${id}-${user.id}`;
+      const prefKey = `sivara-text-${id}-${user.id}`;
       const savedState = localStorage.getItem(prefKey);
-      if (savedState === 'true') setShowLexibook(true);
+      if (savedState === 'true') setShowSivaraText(true);
   }, [id, user]);
 
-  const toggleLexibook = () => {
+  const toggleSivaraText = () => {
       if (!id || !user) return;
-      const newState = !showLexibook;
-      setShowLexibook(newState);
-      localStorage.setItem(`sivara-lexibook-${id}-${user.id}`, String(newState));
-      if (newState) showSuccess("Lexibook activé");
+      const newState = !showSivaraText;
+      setShowSivaraText(newState);
+      localStorage.setItem(`sivara-text-${id}-${user.id}`, String(newState));
+      if (newState) showSuccess("Sivara Text activé");
   };
 
   // Load Google Maps Script for Geofencing
@@ -233,13 +233,11 @@ const DocEditor = () => {
       }
   }, [showExportDialog, restrictGeo]);
 
-  // Sync Radius Slider -> Map Circle (FIX: Mise à jour en temps réel)
   useEffect(() => {
       if (circleObjRef.current && geoRadius.length > 0) {
           const currentMapRadius = circleObjRef.current.getRadius();
-          const targetRadius = geoRadius[0] * 1000; // km to m
+          const targetRadius = geoRadius[0] * 1000; 
           
-          // On met à jour seulement si la différence est significative pour éviter les boucles
           if (Math.abs(currentMapRadius - targetRadius) > 100) {
               circleObjRef.current.setRadius(targetRadius);
           }
@@ -251,7 +249,6 @@ const DocEditor = () => {
       
       let initialPos = { lat: 45.5017, lng: -73.5673 }; // Default MTL
 
-      // Fetch Real Internet Position
       try {
           const { data, error } = await supabase.functions.invoke('sivara-kernel', {
               body: { action: 'locate_me' }
@@ -272,7 +269,6 @@ const DocEditor = () => {
       });
       mapObjRef.current = map;
 
-      // Marker position IP
       new window.google.maps.Marker({
           position: initialPos,
           map: map,
@@ -334,7 +330,7 @@ const DocEditor = () => {
       Placeholder.configure({ placeholder: 'Commencez à écrire...' }),
     ],
     content: '',
-    editable: false, // Start as readonly until permission verified
+    editable: false, 
     editorProps: {
       attributes: {
         class: 'prose prose-lg max-w-none outline-none focus:outline-none min-h-[90vh] bg-white py-8 px-4 sm:px-12 md:px-16 shadow-sm mb-8 rounded-lg',
@@ -345,7 +341,6 @@ const DocEditor = () => {
       contentRef.current = html;
       
       if (!isUpdatingFromRemoteRef.current) {
-        // BROADCAST SÉCURISÉ
         const broadcastSecurely = async () => {
             if (channelRef.current && user) {
                 try {
@@ -367,21 +362,16 @@ const DocEditor = () => {
     },
   });
 
-  // --- PERMISSION EFFECT ---
-  // Force l'état de l'éditeur quand la permission change
   useEffect(() => {
     if (editor && !isLoading) {
-      console.log(`[Permissions] Mise à jour de l'éditeur. Permission: ${permission}`);
       editor.setEditable(permission === 'write');
     }
   }, [editor, permission, isLoading]);
 
-  // --- INIT ---
   useEffect(() => {
     if (!id || authLoading) return;
     
     const init = async () => {
-      // Fonts setup
       if (!window.document.getElementById('sivara-google-fonts')) {
         const link = window.document.createElement('link');
         link.id = 'sivara-google-fonts';
@@ -390,7 +380,6 @@ const DocEditor = () => {
         window.document.head.appendChild(link);
       }
 
-      // User Profile setup
       if (user) {
         const { data } = await supabase.from('profiles').select('avatar_url').eq('id', user.id).single();
         setUserProfile(data);
@@ -405,7 +394,6 @@ const DocEditor = () => {
 
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
   
-  // Sync Realtime only when everything is ready (including profile)
   useEffect(() => { 
       if (id && user && !isLoading && !decryptionError) { 
           setTimeout(() => setupRealtime(), 500);
@@ -606,7 +594,6 @@ const DocEditor = () => {
     window.location.href = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`; 
   };
 
-  // --- HANDLE EXPORT PROPRIÉTAIRE (SIVARA KERNEL) ---
   const handleExportSivara = async () => {
     if (!document || !user) return;
     setIsExporting(true);
@@ -616,7 +603,6 @@ const DocEditor = () => {
         let iv = document.encryption_iv;
         let salt = null;
 
-        // Mode Mot de passe
         if (exportPassword) {
             const saltValue = crypto.randomUUID();
             await encryptionService.initialize(exportPassword, saltValue);
@@ -629,24 +615,20 @@ const DocEditor = () => {
             await encryptionService.initialize(user.id);
         }
 
-        // --- CONTEXTE DE SÉCURITÉ ---
         const securityContext: any = {};
 
-        // 1. Device Fingerprint
         if (restrictDevice) {
             const fp = await FingerprintJS.load();
             const result = await fp.get();
             securityContext.allowed_fingerprints = [result.visitorId];
         }
 
-        // 2. User Access
         if (restrictUsers) {
             const allowedEmails = accessList.map(a => a.email.toLowerCase());
             allowedEmails.push(user.email!.toLowerCase());
             securityContext.allowed_emails = allowedEmails;
         }
 
-        // 3. Geofencing
         if (restrictGeo && geoCenter) {
             securityContext.geofence = {
                 lat: geoCenter.lat,
@@ -655,7 +637,6 @@ const DocEditor = () => {
             };
         }
 
-        // Payload pour le Kernel SIVARA
         const payload = {
             encrypted_title: encryptedTitle,
             encrypted_content: encryptedContent,
@@ -664,7 +645,7 @@ const DocEditor = () => {
             icon: document.icon || 'FileText',
             color: document.color || '#3B82F6',
             salt: salt,
-            security: securityContext // Le Kernel va sceller ces règles dans le binaire
+            security: securityContext
         };
 
         const blob = await sivaraVM.compile(payload);
@@ -696,11 +677,12 @@ const DocEditor = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#F3F4F6] pt-[env(safe-area-inset-top)]">
       
-      {/* LEXIBOOK COMPONENT */}
-      <Lexibook 
+      {/* SIVARA TEXT COMPONENT (REMPLACE LEXIBOOK) */}
+      <SivaraText 
         editor={editor} 
-        isOpen={showLexibook} 
-        onClose={() => toggleLexibook()} 
+        isOpen={showSivaraText} 
+        onClose={() => toggleSivaraText()} 
+        userId={user!.id}
       />
 
       <header className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
@@ -741,15 +723,15 @@ const DocEditor = () => {
 
               {isOwner && <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-2 h-8 sm:h-9 px-2 sm:px-4" onClick={() => setShowShareDialog(true)}><Share2 className="h-3 w-3 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Partager</span></Button>}
               
-              {/* BOUTON LEXIBOOK */}
+              {/* BOUTON SIVARA TEXT */}
               <Button 
-                variant={showLexibook ? "secondary" : "ghost"} 
+                variant={showSivaraText ? "secondary" : "ghost"} 
                 size="icon" 
-                onClick={toggleLexibook}
-                className={`h-8 w-8 ${showLexibook ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'}`}
-                title="Lexibook (Aide dyslexie)"
+                onClick={toggleSivaraText}
+                className={`h-8 w-8 ${showSivaraText ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'}`}
+                title="Sivara Text (Assistant Intelligent)"
               >
-                <BookType className="h-4 w-4" />
+                <Type className="h-4 w-4" />
               </Button>
 
               <DropdownMenu>
