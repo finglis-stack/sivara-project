@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Editor } from '@tiptap/react';
 import { 
   BookType, X, Move, Maximize2, Minimize2, 
-  Search, Sparkles, Volume2, Type 
+  Search, Sparkles, Volume2, Type, BookOpen
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,7 @@ interface LexibookProps {
 
 interface WordSuggestion {
   word: string;
-  score?: number;
-  tags?: string[]; // adj, n, v, etc.
-  defs?: string[];
+  type?: string;
 }
 
 export const Lexibook = ({ editor, onClose, isOpen }: LexibookProps) => {
@@ -35,7 +33,6 @@ export const Lexibook = ({ editor, onClose, isOpen }: LexibookProps) => {
   const [currentWord, setCurrentWord] = useState('');
   const [suggestions, setSuggestions] = useState<WordSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
-  const [synonyms, setSynonyms] = useState<string[]>([]);
 
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -71,34 +68,35 @@ export const Lexibook = ({ editor, onClose, isOpen }: LexibookProps) => {
     };
   }, [isDragging]);
 
-  // --- API CALLS ---
+  // --- API CALLS (DICTIONNAIRE FRANÇAIS) ---
   const fetchSuggestions = async (word: string) => {
     setLoading(true);
     setSuggestions([]);
-    setSynonyms([]);
 
     try {
-      // 1. "Sounds Like" (Phonétique)
-      const resSound = await fetch(`https://api.datamuse.com/words?sl=${word}&max=8`);
-      const dataSound = await resSound.json();
-
-      // 2. "Spelled Like" (Correction orthographique proche)
-      const resSpell = await fetch(`https://api.datamuse.com/words?sp=${word}&max=5`);
-      const dataSpell = await resSpell.json();
-
-      // Fusionner et dédoublonner
-      const combined = [...dataSound, ...dataSpell];
-      const unique = Array.from(new Map(combined.map(item => [item.word, item])).values());
+      // Utilisation de l'API OpenSearch de Wiktionnaire Français
+      // Cela retourne les mots existants qui commencent par ou ressemblent à l'entrée
+      const response = await fetch(
+        `https://fr.wiktionary.org/w/api.php?action=opensearch&search=${word}&limit=10&namespace=0&format=json&origin=*`
+      );
       
-      setSuggestions(unique.slice(0, 8));
-
-      // 3. Synonymes (Bonus)
-      const resSyn = await fetch(`https://api.datamuse.com/words?rel_syn=${word}&max=5`);
-      const dataSyn = await resSyn.json();
-      setSynonyms(dataSyn.map((d: any) => d.word));
+      const data = await response.json();
+      // data format: [search_term, [suggestions], [descriptions], [links]]
+      
+      if (data && data[1]) {
+        const foundWords = data[1].map((w: string) => ({ word: w }));
+        // Filtrer pour éviter de proposer exactement ce que l'utilisateur a déjà tapé s'il cherche une correction
+        const filtered = foundWords.filter((w: any) => w.word.toLowerCase() !== word.toLowerCase());
+        
+        // Si le mot exact existe (c'est un mot valide), on le met en premier pour confirmer
+        const exactMatch = foundWords.find((w: any) => w.word.toLowerCase() === word.toLowerCase());
+        
+        // On combine : mots proches orthographiquement
+        setSuggestions(filtered.length > 0 ? filtered : foundWords);
+      }
 
     } catch (e) {
-      console.error("Lexibook API error", e);
+      console.error("Lexibook Dictionary error", e);
     } finally {
       setLoading(false);
     }
@@ -111,32 +109,6 @@ export const Lexibook = ({ editor, onClose, isOpen }: LexibookProps) => {
   };
 
   // --- WORD DETECTION ---
-  useEffect(() => {
-    if (!editor || !isOpen) return;
-
-    const updateSelection = () => {
-      const { from, to } = editor.state.selection;
-      
-      // Si sélection, prendre le texte
-      if (from !== to) {
-        const text = editor.state.doc.textBetween(from, to, ' ');
-        if (text && text.trim().length > 1) analyzeWord(text.trim());
-        return;
-      }
-
-      // Sinon, on pourrait essayer de détecter le mot sous le curseur
-      // Pour cette version, on se concentre sur la sélection explicite ou l'analyse périodique
-    };
-
-    editor.on('selectionUpdate', updateSelection);
-    editor.on('update', updateSelection);
-
-    return () => {
-      editor.off('selectionUpdate', updateSelection);
-      editor.off('update', updateSelection);
-    };
-  }, [editor, isOpen, currentWord]); // Added currentWord dependency for analyzeWord check
-
   // Détection manuelle plus robuste (Polling)
   const analyzeCurrentSelection = () => {
     if (!editor) return;
@@ -151,15 +123,16 @@ export const Lexibook = ({ editor, onClose, isOpen }: LexibookProps) => {
         const before = $pos.parent.textBetween(0, $pos.parentOffset, ' ');
         const after = $pos.parent.textBetween($pos.parentOffset, $pos.parent.content.size, ' ');
         
-        const lastWordPart = before.split(/\s+/).pop() || '';
-        const firstWordPart = after.split(/\s+/).shift() || '';
+        // Regex pour capturer le mot complet (incluant accents français)
+        const lastWordPart = before.split(/[\s'’.,;!?]+/).pop() || '';
+        const firstWordPart = after.split(/[\s'’.,;!?]+/).shift() || '';
         text = lastWordPart + firstWordPart;
     }
 
-    // Nettoyage ponctuation basique
+    // Nettoyage ponctuation résiduelle
     text = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
     
-    if (text && text !== currentWord) {
+    if (text && text.length > 1 && text !== currentWord) {
         analyzeWord(text);
     }
   };
@@ -167,23 +140,35 @@ export const Lexibook = ({ editor, onClose, isOpen }: LexibookProps) => {
   // Trigger l'analyse régulièrement si le curseur bouge
   useEffect(() => {
       if (!editor || !isOpen) return;
-      const interval = setInterval(analyzeCurrentSelection, 1000); // Debounce manuel 1s
+      const interval = setInterval(analyzeCurrentSelection, 800); // Debounce
       return () => clearInterval(interval);
   }, [editor, isOpen, currentWord]);
 
   const replaceWord = (newWord: string) => {
     if (!editor) return;
-    // Le plus sûr pour éviter de casser la structure du doc crypté :
-    // On remplace uniquement la sélection active ou on insère.
-    editor.chain().focus().insertContent(newWord + ' ').run();
-  };
+    
+    // Logique de remplacement intelligente
+    const { from, to } = editor.state.selection;
+    const $pos = editor.state.selection.$from;
+    
+    if (from === to && currentWord) {
+        // Si pas de sélection, on remplace le mot détecté autour du curseur
+        const textBefore = $pos.parent.textBetween(0, $pos.parentOffset, ' ');
+        // On cherche la position de début du mot courant
+        const offset = textBefore.lastIndexOf(currentWord.substring(0, Math.min(currentWord.length, textBefore.length)));
+        
+        if (offset !== -1) {
+            const startPos = $pos.start() + offset;
+            // On supprime le mot détecté (approximatif) et on insère le nouveau
+            // Note: C'est une heuristique, pour être parfait il faudrait des nodes
+            // Mais pour de l'aide à la rédaction c'est souvent suffisant
+            editor.commands.insertContentAt({ from: startPos, to: startPos + currentWord.length }, newWord);
+            return;
+        }
+    }
 
-  const translateTag = (tag: string) => {
-      if (tag === 'n') return 'Nom';
-      if (tag === 'v') return 'Verbe';
-      if (tag === 'adj') return 'Adj';
-      if (tag === 'adv') return 'Adv';
-      return 'Mot';
+    // Fallback: Remplacement standard de la sélection
+    editor.chain().focus().insertContent(newWord).run();
   };
 
   if (!isOpen) return null;
@@ -228,10 +213,10 @@ export const Lexibook = ({ editor, onClose, isOpen }: LexibookProps) => {
           {/* Current Word Display */}
           <div className="p-4 border-b border-gray-100 bg-gray-50/50">
             <div className="text-xs text-gray-400 font-medium mb-1 flex items-center gap-1">
-                <Search className="h-3 w-3" /> Mot détecté
+                <Search className="h-3 w-3" /> Mot analysé
             </div>
             <div className="text-xl font-bold text-gray-900 truncate">
-                {currentWord || <span className="text-gray-300 italic">Sélectionnez un mot...</span>}
+                {currentWord || <span className="text-gray-300 italic">...</span>}
             </div>
           </div>
 
@@ -244,59 +229,32 @@ export const Lexibook = ({ editor, onClose, isOpen }: LexibookProps) => {
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {/* Corrections Phonétiques */}
+                    {/* Corrections Orthographiques */}
                     <div>
                         <h4 className="text-xs font-bold text-indigo-300 uppercase mb-2 flex items-center gap-1">
-                            <Volume2 className="h-3 w-3" /> Phonétique & Orthographe
+                            <BookOpen className="h-3 w-3" /> Dictionnaire
                         </h4>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-col gap-2">
                             {suggestions.map((s, i) => (
                                 <button
                                     key={i}
                                     onClick={() => replaceWord(s.word)}
-                                    className="px-3 py-1.5 bg-white border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 text-gray-700 rounded-lg text-sm transition-all shadow-sm active:scale-95 flex items-center gap-2 group"
+                                    className="w-full text-left px-3 py-2 bg-white border border-gray-100 hover:border-indigo-300 hover:bg-indigo-50 text-gray-700 rounded-lg text-sm transition-all shadow-sm active:scale-95 flex items-center justify-between group"
                                 >
-                                    {s.word}
-                                    {s.tags && s.tags[0] && (
-                                        <span className="text-[9px] text-gray-300 group-hover:text-indigo-300 uppercase">{translateTag(s.tags[0])}</span>
-                                    )}
+                                    <span className="font-medium">{s.word}</span>
+                                    <span className="opacity-0 group-hover:opacity-100 text-indigo-400 text-xs">Utiliser</span>
                                 </button>
                             ))}
                             {suggestions.length === 0 && currentWord && (
-                                <span className="text-xs text-gray-400 italic">Aucune suggestion trouvée.</span>
+                                <div className="text-center py-4">
+                                    <p className="text-xs text-gray-400 italic">Aucune suggestion trouvée.</p>
+                                </div>
                             )}
                         </div>
                     </div>
-
-                    {/* Synonymes */}
-                    {synonyms.length > 0 && (
-                        <div>
-                            <h4 className="text-xs font-bold text-emerald-300 uppercase mb-2 flex items-center gap-1">
-                                <Sparkles className="h-3 w-3" /> Synonymes
-                            </h4>
-                            <div className="flex flex-col gap-1">
-                                {synonyms.map((syn, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => replaceWord(syn)}
-                                        className="text-left px-3 py-1.5 hover:bg-gray-50 rounded-md text-sm text-gray-600 hover:text-gray-900 transition-colors w-full flex items-center gap-2"
-                                    >
-                                        <Type className="h-3 w-3 text-gray-300" />
-                                        {syn}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
             )}
           </ScrollArea>
-
-          {/* Footer Info */}
-          <div className="p-2 border-t border-gray-100 bg-gray-50 text-[10px] text-center text-gray-400 flex justify-between px-4">
-             <span>Mode Dyslexie Actif</span>
-             <span>Sivara Intelligence</span>
-          </div>
         </div>
       )}
       
