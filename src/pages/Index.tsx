@@ -5,7 +5,7 @@ import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
 import UserMenu from '@/components/UserMenu';
 import { showError } from '@/utils/toast';
-import { Settings, Globe, Zap, Shield } from 'lucide-react';
+import { Settings, Sparkles, Globe, Zap, Shield } from 'lucide-react';
 
 interface SearchResultType {
   id: string;
@@ -134,7 +134,7 @@ const Index = () => {
   // Vue de gestion (Crawl Manager)
   if (showManage) {
     return (
-      <div className="min-h-screen bg-white font-sans">
+      <div className="min-h-screen bg-[#FAFAFA] font-sans">
         <div className="container mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-8">
             <div 
@@ -158,7 +158,7 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white font-sans selection:bg-yellow-400 selection:text-black">
+    <div className="min-h-screen bg-[#FAFAFA] font-sans selection:bg-yellow-400 selection:text-black">
       {/* Header conditionnel : Blanc sur l'accueil et les résultats */}
       {hasSearched && (
         <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
@@ -191,17 +191,24 @@ const Index = () => {
       <div className={hasSearched ? "pt-24" : ""}>
         {!hasSearched ? (
           // === LANDING PAGE ===
-          <div className="relative min-h-screen w-full overflow-hidden flex flex-col bg-white">
-             {/* Background Animé : Carrés Jaunes */}
+          <div className="relative min-h-screen w-full overflow-hidden flex flex-col bg-[#FAFAFA]">
+             {/* Background Animé : Carrés Jaunes & Bleus */}
              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[15%] left-[5%] w-32 h-32 bg-gradient-to-tr from-yellow-300/20 to-yellow-100/30 rounded-[2rem] rotate-12 animate-float-square blur-[2px]"></div>
-                <div className="absolute top-[65%] right-[8%] w-48 h-48 bg-gradient-to-bl from-yellow-400/10 to-transparent rounded-[3rem] -rotate-6 animate-float-square-reverse blur-sm"></div>
-                <div className="absolute bottom-[10%] left-[20%] w-20 h-20 bg-yellow-200/20 rounded-2xl rotate-45 animate-float-square animation-delay-2000"></div>
-                <div className="absolute top-[30%] right-[25%] w-16 h-16 bg-yellow-300/10 rounded-xl rotate-[15deg] animate-float-square-reverse animation-delay-1000"></div>
+                {/* Carré Jaune Vif */}
+                <div className="absolute top-[15%] left-[5%] w-32 h-32 bg-gradient-to-tr from-yellow-400/40 to-yellow-300/30 rounded-[2rem] rotate-12 animate-float-square blur-[1px]"></div>
+                
+                {/* Carré Bleu Doux */}
+                <div className="absolute top-[65%] right-[8%] w-48 h-48 bg-gradient-to-bl from-blue-500/20 to-blue-400/10 rounded-[3rem] -rotate-6 animate-float-square-reverse blur-sm"></div>
+                
+                {/* Petit Carré Jaune */}
+                <div className="absolute bottom-[10%] left-[20%] w-20 h-20 bg-yellow-400/30 rounded-2xl rotate-45 animate-float-square animation-delay-2000"></div>
+                
+                {/* Petit Carré Bleu */}
+                <div className="absolute top-[30%] right-[25%] w-16 h-16 bg-blue-400/20 rounded-xl rotate-[15deg] animate-float-square-reverse animation-delay-1000"></div>
              </div>
 
              {/* Navbar Landing */}
-            <nav className="absolute top-0 w-full z-50 bg-white/80 backdrop-blur-sm border-b border-transparent">
+            <nav className="absolute top-0 w-full z-50 bg-[#FAFAFA]/80 backdrop-blur-sm border-b border-transparent">
               <div className="container mx-auto px-6 h-20 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <img src="/sivara-logo.png" alt="Logo" className="w-10 h-10 object-contain drop-shadow-sm" />
@@ -223,13 +230,11 @@ const Index = () => {
             <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-5xl mx-auto mt-10">
               <div className="w-full max-w-3xl space-y-8 text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
                 
-                {/* Pastille supprimée ici */}
-
                 <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-gray-900 leading-[1.1]">
                   Explorez le web <br/>
                   <span 
                     ref={gradientRef}
-                    className="text-transparent bg-clip-text bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-600 bg-[length:300%_300%] transition-[background-position] duration-100 ease-out"
+                    className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-yellow-500 to-blue-600 bg-[length:200%_auto] transition-[background-position] duration-100 ease-out"
                   >
                     autrement.
                   </span>
@@ -251,7 +256,7 @@ const Index = () => {
                     <button 
                       key={tag}
                       onClick={() => handleSearch(tag)}
-                      className="px-4 py-1.5 rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-100 text-gray-600 text-sm transition-all"
+                      className="px-4 py-1.5 rounded-full bg-white hover:bg-gray-100 border border-gray-100 text-gray-600 text-sm transition-all shadow-sm"
                     >
                       {tag}
                     </button>
