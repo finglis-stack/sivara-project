@@ -61,36 +61,13 @@ const Index = () => {
   
   const gradientRef = useRef<HTMLSpanElement>(null);
 
-  // Animation dynamique "Sivara Yellow"
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!gradientRef.current) return;
-      
-      const rect = gradientRef.current.getBoundingClientRect();
-      // Centre de l'élément
-      const elemX = rect.left + rect.width / 2;
-      const elemY = rect.top + rect.height / 2;
-      
-      // Distance de la souris
-      const dist = Math.sqrt(Math.pow(e.clientX - elemX, 2) + Math.pow(e.clientY - elemY, 2));
-      const threshold = 250; // Rayon d'activation en pixels
-
-      if (dist < threshold) {
-          // Si proche : le dégradé suit la souris
-          // On calcule la position relative (0% à 100%)
-          // On inverse un peu pour l'effet "reflet"
-          const x = ((e.clientX - rect.left) / rect.width) * 100;
-          const y = ((e.clientY - rect.top) / rect.height) * 100;
-          
-          gradientRef.current.style.backgroundPosition = `${x}% ${y}%`;
-          gradientRef.current.style.transition = 'none'; // Réactivité immédiate
-      } else {
-          // Si loin : retour au centre (Jaune foncé au milieu)
-          gradientRef.current.style.backgroundPosition = '50% 50%';
-          gradientRef.current.style.transition = 'background-position 0.8s ease-out'; // Retour fluide
-      }
+      const x = (e.clientX / window.innerWidth) * 100;
+      const y = (e.clientY / window.innerHeight) * 100;
+      gradientRef.current.style.backgroundPosition = `${x}% ${y}%`;
     };
-    
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
@@ -144,22 +121,31 @@ const Index = () => {
       let docSearchPromise = Promise.resolve(null);
       
       if (session?.access_token) {
-          docSearchPromise = fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-docs', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ query }),
-          })
-          .then(res => {
-              if (!res.ok) throw new Error("Doc search failed");
-              return res.json();
-          })
-          .catch(err => {
-              console.warn("Erreur recherche docs:", err);
-              return null;
-          });
+          // Check Profile Preference first
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('search_documents_enabled')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profile?.search_documents_enabled !== false) {
+              docSearchPromise = fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-docs', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({ query }),
+              })
+              .then(res => {
+                  if (!res.ok) throw new Error("Doc search failed");
+                  return res.json();
+              })
+              .catch(err => {
+                  console.warn("Erreur recherche docs:", err);
+                  return null;
+              });
+          }
       }
 
       const [webResponse, docData] = await Promise.all([webSearchPromise, docSearchPromise]);
@@ -175,7 +161,8 @@ const Index = () => {
       }
 
       if (docData && docData.results && docData.results.length > 0) {
-          setDocResults(docData.results);
+          // Soft limit of 5 (Frontend enforcement)
+          setDocResults(docData.results.slice(0, 5));
       }
 
     } catch (error) {

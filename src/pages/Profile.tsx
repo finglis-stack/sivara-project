@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink, RefreshCw, Globe, Laptop } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink, RefreshCw, Globe, Laptop, Search, FileText } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import {
   Dialog,
@@ -24,6 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { Switch } from '@/components/ui/switch';
 
 interface Profile {
   first_name: string;
@@ -36,6 +37,7 @@ interface Profile {
   is_pro?: boolean;
   subscription_status?: string;
   subscription_end_date?: string | null;
+  search_documents_enabled?: boolean;
 }
 
 const countryCodes = [
@@ -75,6 +77,7 @@ const Profile = () => {
     created_at: '',
     avatar_url: null,
     is_pro: false,
+    search_documents_enabled: true,
   });
 
   const fetchProfile = async () => {
@@ -88,7 +91,9 @@ const Profile = () => {
       if (error) throw error;
 
       if (data) {
-        setProfile(data);
+        // On s'assure que la valeur par défaut est true si null
+        const searchEnabled = data.search_documents_enabled !== false;
+        setProfile({ ...data, search_documents_enabled: searchEnabled });
       }
     } catch (error: any) {
       console.error('Error fetching profile:', error);
@@ -178,6 +183,7 @@ const Profile = () => {
           last_name: profile.last_name,
           phone_country_code: profile.phone_country_code,
           phone_number: profile.phone_number,
+          search_documents_enabled: profile.search_documents_enabled,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
@@ -397,6 +403,31 @@ const Profile = () => {
               </div>
             </button>
           </div>
+        </div>
+
+        {/* NOUVELLE SECTION PREFERENCES */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-6">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+                <Search className="h-5 w-5 sm:h-6 sm:w-6 text-gray-700" />
+                <h2 className="text-xl sm:text-2xl font-light text-gray-900">Préférences</h2>
+            </div>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="space-y-1">
+                        <Label htmlFor="searchDocs" className="font-medium flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-gray-500" /> Moteur de recherche
+                        </Label>
+                        <p className="text-xs text-gray-500 max-w-[250px] sm:max-w-md">
+                            Autoriser le moteur de recherche Sivara à afficher vos documents personnels (chiffrés) dans les résultats.
+                        </p>
+                    </div>
+                    <Switch 
+                        id="searchDocs" 
+                        checked={profile.search_documents_enabled} 
+                        onCheckedChange={(checked) => setProfile({ ...profile, search_documents_enabled: checked })} 
+                    />
+                </div>
+            </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
