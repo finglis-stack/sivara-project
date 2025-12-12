@@ -15,8 +15,8 @@ class TitaniumTokenizer {
   static normalize(text: string): string {
     if (!text) return "";
     return text.toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève les accents (é -> e)
-      .replace(/[^a-z0-9\s]/g, " ") // Enlève la ponctuation
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+      .replace(/[^a-z0-9\s]/g, " ") 
       .replace(/\s+/g, " ").trim();
   }
 
@@ -95,7 +95,6 @@ serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-        console.log("Auth failed or no user");
         return new Response(JSON.stringify({ results: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -104,47 +103,37 @@ serve(async (req) => {
         return new Response(JSON.stringify({ results: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 1. Préparation de la requête
+    // 1. Préparation
     const normQuery = TitaniumTokenizer.normalize(query);
     const queryTokens = normQuery.split(' ').filter(w => w.length > 0);
-    
-    // Si la requête est vide après nettoyage, on arrête
-    if (queryTokens.length === 0) {
-        return new Response(JSON.stringify({ results: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
     const queryPhonetics = queryTokens.map(w => TitaniumTokenizer.getPhoneticFingerprint(w));
 
-    // 2. Initialisation Crypto
+    // 2. Crypto Init
     const cryptoService = new ServerEncryption();
     await cryptoService.initialize(user.id);
 
-    // 3. Récupération des docs
+    // 3. Récupération docs (+ icon, color, cover_url)
     const { data: docs, error: dbError } = await supabase
         .from('documents')
-        .select('id, title, content, encryption_iv, updated_at, type')
+        .select('id, title, content, encryption_iv, updated_at, type, icon, color, cover_url')
         .eq('owner_id', user.id)
         .order('updated_at', { ascending: false })
         .limit(100);
 
     if (dbError) throw dbError;
 
-    // 4. Analyse en mémoire (Edge)
+    // 4. Analyse
     const results = [];
 
     for (const doc of docs || []) {
-        // --- MATCH TITRE ---
         const decryptedTitle = await cryptoService.decrypt(doc.title, doc.encryption_iv);
         
+        // --- MATCH TITRE ---
         if (decryptedTitle) {
-            // Normalisation CRITIQUE : "Dictée" -> "dictee"
             const normTitle = TitaniumTokenizer.normalize(decryptedTitle);
             const titleWords = normTitle.split(' ');
             const titlePhonetics = new Set(titleWords.map(w => TitaniumTokenizer.getPhoneticFingerprint(w)));
 
-            // Vérifie si un des tokens de la recherche matche
-            // On utilise .some() pour être plus permissif (au moins un mot trouvé), ou .every() pour strict.
-            // Pour l'UX, .every() est souvent mieux pour éviter le bruit, mais on va assouplir la phonétique.
             const isTitleMatch = queryTokens.every((qToken, idx) => {
                 const qCode = queryPhonetics[idx];
                 return normTitle.includes(qToken) || (qCode && titlePhonetics.has(qCode));
@@ -156,9 +145,13 @@ serve(async (req) => {
                     title: decryptedTitle,
                     snippet: "Titre correspondant",
                     type: doc.type,
-                    updated_at: doc.updated_at
+                    updated_at: doc.updated_at,
+                    // Nouveaux champs pour le design
+                    icon: doc.icon,
+                    color: doc.color,
+                    cover_url: doc.cover_url
                 });
-                continue; 
+                continue;
             }
         }
 
@@ -168,20 +161,38 @@ serve(async (req) => {
              if (decryptedContent) {
                  const normContent = TitaniumTokenizer.normalize(decryptedContent);
                  
-                 // Recherche textuelle simple sur le contenu normalisé
-                 // Ex: "dictee" dans "voici ma dictee import" -> TRUE
+                 let isContentMatch = false;
                  if (normContent.includes(normQuery)) {
-                     const index = decryptedContent.toLowerCase().indexOf(queryTokens[0]); // Pour l'affichage snippet
+                     isContentMatch = true;
+                 } else {
+                     if (queryTokens.length <= 2) {
+                         const contentWords = normContent.split(' ');
+                         const contentPhonetics = new Set(contentWords.slice(0, 500).map(w => TitaniumTokenizer.getPhoneticFingerprint(w)));
+                         
+                         isContentMatch = queryTokens.every((qToken, idx) => {
+                             const qCode = queryPhonetics[idx];
+                             return qCode && contentPhonetics.has(qCode);
+                         });
+                     }
+                 }
+
+                 if (isContentMatch) {
+                     const index = decryptedContent.toLowerCase().indexOf(queryTokens[0]);
                      const start = Math.max(0, index - 30);
                      const end = Math.min(decryptedContent.length, index + 100);
-                     const snippet = "..." + decryptedContent.substring(start, end) + "...";
+                     let snippet = "..." + decryptedContent.substring(start, end) + "...";
+                     if (index === -1) snippet = "Contenu trouvé (Phonétique)";
 
                      results.push({
                         id: doc.id,
                         title: decryptedTitle || "Document sans titre",
                         snippet: snippet,
                         type: doc.type,
-                        updated_at: doc.updated_at
+                        updated_at: doc.updated_at,
+                        // Nouveaux champs
+                        icon: doc.icon,
+                        color: doc.color,
+                        cover_url: doc.cover_url
                     });
                  }
              }
@@ -191,7 +202,6 @@ serve(async (req) => {
     return new Response(JSON.stringify({ results: results.slice(0, 5) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error("Search Docs Error:", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })

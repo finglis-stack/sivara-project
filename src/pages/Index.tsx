@@ -5,7 +5,11 @@ import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
 import UserMenu from '@/components/UserMenu';
 import { showError } from '@/utils/toast';
-import { Settings, Globe, Zap, Shield, FileText, ArrowRight, Folder } from 'lucide-react';
+import { 
+  Settings, Globe, Zap, Shield, FileText, ArrowRight, Folder,
+  Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
+  Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
@@ -28,6 +32,9 @@ interface DocResultType {
   snippet: string;
   type: 'file' | 'folder';
   updated_at: string;
+  icon?: string;
+  color?: string;
+  cover_url?: string;
 }
 
 interface GroupedResult {
@@ -35,6 +42,13 @@ interface GroupedResult {
   relatedResults: SearchResultType[];
   isMainDomain: boolean;
 }
+
+// Mapping des icônes disponibles (doit correspondre à Docs.tsx)
+const ICON_MAP: any = {
+  FileText, Briefcase, FolderOpen, BookOpen, Lightbulb, Target,
+  TrendingUp, UsersIcon, Calendar, CheckSquare, MessageSquare, 
+  Mail, Globe, Settings, Heart, Zap, Award, BarChart, Folder
+};
 
 const Index = () => {
   const navigate = useNavigate();
@@ -89,11 +103,10 @@ const Index = () => {
     try {
       setIsSearching(true);
       setHasSearched(true);
-      setDocResults([]); 
+      setDocResults([]);
 
       console.log('Searching for:', query);
 
-      // 1. WEB SEARCH
       const webSearchPromise = fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search', {
         method: 'POST',
         headers: {
@@ -103,8 +116,6 @@ const Index = () => {
         body: JSON.stringify({ query, page: 1, limit: 50 }),
       });
 
-      // 2. DOC SEARCH (SECURE)
-      // On rafraichit la session pour être sûr d'avoir un token valide
       const { data: { session } } = await supabase.auth.getSession();
       
       let docSearchPromise = Promise.resolve(null);
@@ -114,7 +125,7 @@ const Index = () => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`, // Authentification avec le token utilisateur
+              'Authorization': `Bearer ${session.access_token}`,
             },
             body: JSON.stringify({ query }),
           })
@@ -123,14 +134,11 @@ const Index = () => {
               return res.json();
           })
           .catch(err => {
-              console.warn("Erreur recherche docs (peut-être session expirée):", err);
+              console.warn("Erreur recherche docs:", err);
               return null;
           });
-      } else {
-          console.log("Aucune session active pour la recherche de documents.");
       }
 
-      // 3. EXECUTION PARALLELE
       const [webResponse, docData] = await Promise.all([webSearchPromise, docSearchPromise]);
       const webData = await webResponse.json();
       
@@ -143,11 +151,8 @@ const Index = () => {
         setTotalResults(webData.total || 0);
       }
 
-      // Traitement résultats Docs
       if (docData && docData.results && docData.results.length > 0) {
           setDocResults(docData.results);
-      } else {
-          console.log("Aucun document trouvé pour cette requête.");
       }
 
     } catch (error) {
@@ -284,26 +289,64 @@ const Index = () => {
                       </div>
                       
                       <div className="grid gap-3">
-                          {docResults.map((doc) => (
-                              <Card 
-                                  key={doc.id} 
-                                  className="group hover:border-blue-400 transition-all cursor-pointer border-l-4 border-l-blue-500 shadow-sm hover:shadow-md"
-                                  onClick={() => openDoc(doc.id)}
-                              >
-                                  <div className="p-4 flex items-center justify-between">
-                                      <div className="flex items-center gap-4">
-                                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${doc.type === 'folder' ? 'bg-yellow-50 text-yellow-600' : 'bg-blue-50 text-blue-600'}`}>
-                                              {doc.type === 'folder' ? <Folder className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
-                                          </div>
-                                          <div>
-                                              <h3 className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{doc.title}</h3>
-                                              <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">{doc.snippet}</p>
-                                          </div>
+                          {docResults.map((doc) => {
+                              // Résolution dynamique de l'icône
+                              const IconComponent = ICON_MAP[doc.icon || ''] || (doc.type === 'folder' ? Folder : FileText);
+                              
+                              if (doc.type === 'folder') {
+                                return (
+                                  <Card 
+                                      key={doc.id} 
+                                      className="group hover:scale-[1.01] transition-all cursor-pointer shadow-lg hover:shadow-xl relative overflow-hidden border-0"
+                                      onClick={() => openDoc(doc.id)}
+                                  >
+                                      {/* BACKGROUND IMAGE & OVERLAY */}
+                                      <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110" 
+                                           style={{ backgroundImage: `url(${doc.cover_url || '/default-cover.jpg'})` }}>
                                       </div>
-                                      <ArrowRight className="h-4 w-4 text-gray-300 group-hover:text-blue-600 transform group-hover:translate-x-1 transition-all" />
-                                  </div>
-                              </Card>
-                          ))}
+                                      <div className="absolute inset-0 bg-black/70 group-hover:bg-black/60 transition-colors"></div>
+                                      
+                                      <div className="p-5 flex items-center justify-between relative z-10">
+                                          <div className="flex items-center gap-4">
+                                              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/10 backdrop-blur-sm border border-white/20">
+                                                  <Folder className="h-5 w-5 text-white" />
+                                              </div>
+                                              <div>
+                                                  <h3 className="font-thin text-lg text-white group-hover:underline decoration-white/50 underline-offset-4 transition-all">{doc.title}</h3>
+                                                  <p className="text-xs text-white/60 mt-0.5 font-light">Dossier sécurisé</p>
+                                              </div>
+                                          </div>
+                                          <ArrowRight className="h-4 w-4 text-white/50 group-hover:text-white transform group-hover:translate-x-1 transition-all" />
+                                      </div>
+                                  </Card>
+                                );
+                              } else {
+                                return (
+                                  <Card 
+                                      key={doc.id} 
+                                      className="group hover:border-blue-400 transition-all cursor-pointer border-l-4 shadow-sm hover:shadow-md"
+                                      style={{ borderLeftColor: doc.color || '#3B82F6' }}
+                                      onClick={() => openDoc(doc.id)}
+                                  >
+                                      <div className="p-4 flex items-center justify-between">
+                                          <div className="flex items-center gap-4">
+                                              <div 
+                                                className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm"
+                                                style={{ backgroundColor: doc.color || '#3B82F6' }}
+                                              >
+                                                  <IconComponent className="h-5 w-5" />
+                                              </div>
+                                              <div className="overflow-hidden">
+                                                  <h3 className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors truncate">{doc.title}</h3>
+                                                  <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">{doc.snippet}</p>
+                                              </div>
+                                          </div>
+                                          <ArrowRight className="h-4 w-4 text-gray-300 group-hover:text-blue-600 transform group-hover:translate-x-1 transition-all shrink-0" />
+                                      </div>
+                                  </Card>
+                                );
+                              }
+                          })}
                       </div>
                   </div>
               )}
