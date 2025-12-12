@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import SearchBar from '@/components/SearchBar';
 import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
 import UserMenu from '@/components/UserMenu';
 import { showError } from '@/utils/toast';
-import { Settings, Sparkles, Globe, Zap, Shield } from 'lucide-react';
+import { Settings, Globe, Zap, Shield } from 'lucide-react';
 
 interface SearchResultType {
   id: string;
@@ -30,6 +30,26 @@ const Index = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
   const [showManage, setShowManage] = useState(false);
+  
+  // Ref pour le texte dynamique
+  const gradientRef = useRef<HTMLSpanElement>(null);
+
+  // Effet de souris pour le dégradé
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!gradientRef.current) return;
+      
+      // Calcul de la position relative de la souris en pourcentage
+      const x = (e.clientX / window.innerWidth) * 100;
+      const y = (e.clientY / window.innerHeight) * 100;
+      
+      // Application directe pour performance (évite re-render)
+      gradientRef.current.style.backgroundPosition = `${x}% ${y}%`;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   const groupResultsByDomain = (results: SearchResultType[]): GroupedResult[] => {
     if (results.length === 0) return [];
@@ -203,14 +223,16 @@ const Index = () => {
             <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-5xl mx-auto mt-10">
               <div className="w-full max-w-3xl space-y-8 text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
                 
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-yellow-50 border border-yellow-100 text-yellow-800 text-sm font-medium shadow-sm mb-4">
-                  <Sparkles className="w-3.5 h-3.5 text-yellow-600" />
-                  <span>L'information, pure et simple</span>
-                </div>
+                {/* Pastille supprimée ici */}
 
                 <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-gray-900 leading-[1.1]">
                   Explorez le web <br/>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 to-orange-500">autrement.</span>
+                  <span 
+                    ref={gradientRef}
+                    className="text-transparent bg-clip-text bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-600 bg-[length:300%_300%] transition-[background-position] duration-100 ease-out"
+                  >
+                    autrement.
+                  </span>
                 </h1>
                 
                 <p className="text-lg md:text-xl text-gray-500 font-light max-w-xl mx-auto leading-relaxed mb-8">
