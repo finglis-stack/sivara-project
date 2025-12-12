@@ -51,6 +51,7 @@ serve(async (req) => {
 
     let customerId = profile?.stripe_customer_id
 
+    // Vérification que le customer existe toujours côté Stripe
     if (customerId) {
         try {
             const existingCustomer = await stripe.customers.retrieve(customerId);
@@ -58,6 +59,7 @@ serve(async (req) => {
         } catch (e) { customerId = null; }
     }
 
+    // Création du customer si inexistant
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
@@ -74,13 +76,14 @@ serve(async (req) => {
       await serviceClient.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
     }
 
-    // --- DEVICE CHECKOUT (INTEGRATED & 16 MONTHS CAP) ---
+    // ==========================================
+    // ACTION 1 : SIVARA BOOK (DEVICE RENTAL)
+    // ==========================================
     if (action === 'create_device_checkout') {
       console.log(`[Stripe API] Creating checkout for Unit ID: ${unitId}`);
 
       if (!unitId) throw new Error("Unit ID manquant dans la requête");
 
-      // 1. Récupérer le prix réel depuis la DB
       const serviceClient = createClient(
         // @ts-ignore
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -90,35 +93,20 @@ serve(async (req) => {
 
       const { data: unit, error: dbError } = await serviceClient
         .from('device_units')
-        .select(`
-            *, 
-            product:device_products (name)
-        `)
+        .select(`*, product:device_products (name)`)
         .eq('id', unitId)
         .single();
         
-      if (dbError) {
-          console.error("[Stripe API] DB Error fetching unit:", dbError);
-          throw new Error(`Erreur DB: ${dbError.message}`);
-      }
+      if (dbError || !unit) throw new Error("Unité introuvable");
 
-      if (!unit) {
-          console.error(`[Stripe API] Unit not found for ID: ${unitId}`);
-          throw new Error("Unité introuvable dans la base de données");
-      }
-
-      console.log(`[Stripe API] Unit found: ${unit.serial_number}, Price: ${unit.unit_price}`);
-
-      // 2. Calculs Financiers (16 Mois, 20% Dépôt)
+      // Calculs Financiers (16 Mois, 20% Dépôt)
       const price = unit.unit_price;
-      const taxRate = 0.14975; // Taxes QC
+      const taxRate = 0.14975;
       const totalWithTax = price * (1 + taxRate);
-      
-      const upfront = totalWithTax * 0.20; // 20% Dépôt
+      const upfront = totalWithTax * 0.20; 
       const remainder = totalWithTax - upfront;
-      const monthly = remainder / 16; // 16 mois
+      const monthly = remainder / 16;
 
-      // 3. Configuration de l'arrêt automatique (16 mois)
       const now = new Date();
       const endDate = new Date(now.setMonth(now.getMonth() + 16));
       const cancelAt = Math.floor(endDate.getTime() / 1000);
@@ -126,26 +114,22 @@ serve(async (req) => {
       // @ts-ignore
       const productName = unit.product?.name || 'Sivara Device';
 
-      // 4. Création du PRODUIT Stripe (Necessaire pour subscription.create)
+      // Création Produit & Prix Stripe à la volée
       const stripeProduct = await stripe.products.create({
         name: `Abonnement - ${productName}`,
-        description: `S/N: ${unit.serial_number} - ${unit.specific_specs?.ram_size}GB/${unit.specific_specs?.storage}GB`,
-        metadata: {
-            unit_id: unitId,
-            serial_number: unit.serial_number
-        }
+        description: `S/N: ${unit.serial_number}`,
+        metadata: { unit_id: unitId, serial_number: unit.serial_number }
       });
 
-      // 5. Création de l'Invoice Item pour le Dépôt
+      // Invoice Item (Dépôt initial)
       await stripe.invoiceItems.create({
         customer: customerId,
         amount: Math.round(upfront * 100),
         currency: 'cad',
-        description: `Frais d'activation & Mise en service - ${productName} (S/N: ${unit.serial_number})`,
+        description: `Dépôt initial - ${productName}`,
       });
 
-      // 6. Création de l'abonnement
-      // IMPORTANT: On utilise price_data avec le product ID créé ci-dessus
+      // Abonnement
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{
@@ -163,24 +147,63 @@ serve(async (req) => {
         metadata: {
             type: 'device_rental',
             unit_id: unitId,
-            supabase_user_id: user.id,
-            real_order: 'true'
+            supabase_user_id: user.id
         }
       });
 
-      // On réserve l'unité
       await serviceClient.from('device_units').update({ status: 'reserved' }).eq('id', unitId);
 
       // @ts-ignore
       const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
 
-      return new Response(
-          JSON.stringify({ 
-              clientSecret, 
-              subscriptionId: subscription.id 
-          }), 
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ clientSecret, subscriptionId: subscription.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ==========================================
+    // ACTION 2 : SIVARA PRO (ABONNEMENT CLASSIQUE)
+    // ==========================================
+    if (action === 'create_subscription_intent') {
+      // Vérification éligibilité essai gratuit
+      const isTrialAllowed = requestedTrial && !profile?.has_used_trial;
+      
+      console.log(`[Stripe API] Creating Pro Sub. Trial allowed: ${isTrialAllowed}`);
+
+      const subscription = await stripe.subscriptions.create({
+          customer: customerId,
+          items: [{ price: priceId }],
+          payment_behavior: 'default_incomplete',
+          payment_settings: { save_default_payment_method: 'on_subscription' },
+          // IMPORTANT: On demande explicitement les deux intents possibles
+          expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
+          trial_period_days: isTrialAllowed ? 14 : undefined,
+      });
+
+      let clientSecret;
+      
+      if (isTrialAllowed) {
+          // CAS ESSAI GRATUIT : On utilise le SetupIntent (0$)
+          // @ts-ignore
+          clientSecret = subscription.pending_setup_intent?.client_secret;
+      } else {
+          // CAS PAIEMENT : On utilise le PaymentIntent
+          // @ts-ignore
+          clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
+      }
+      
+      if (!clientSecret) {
+          console.error("ERREUR CRITIQUE: Aucun secret généré", subscription);
+          throw new Error("Impossible de générer le secret de paiement.");
+      }
+
+      return new Response(JSON.stringify({ clientSecret, isTrialActive: isTrialAllowed || false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ==========================================
+    // ACTION 3 : PORTAIL CLIENT & CONFIG & SYNC
+    // ==========================================
+    if (action === 'create_portal') {
+      const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: `${req.headers.get('origin')}/profile` })
+      return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (action === 'get_config') {
@@ -199,46 +222,6 @@ serve(async (req) => {
         const service = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
         await service.from('profiles').update({ is_pro: isPro, subscription_status: status, subscription_end_date: endDate }).eq('id', user.id);
         return new Response(JSON.stringify({ success: true, isPro }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // --- CORRECTION MAJEURE: GESTION DU MODE ESSAI GRATUIT ---
-    if (action === 'create_subscription_intent') {
-      const isTrialAllowed = requestedTrial && !profile?.has_used_trial;
-      
-      const subscription = await stripe.subscriptions.create({
-          customer: customerId,
-          items: [{ price: priceId }],
-          payment_behavior: 'default_incomplete',
-          payment_settings: { save_default_payment_method: 'on_subscription' },
-          // IMPORTANT: On expand aussi le pending_setup_intent pour les essais gratuits
-          expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
-          trial_period_days: isTrialAllowed ? 14 : undefined,
-      });
-
-      let clientSecret;
-      
-      if (isTrialAllowed) {
-          // Pour un essai gratuit, on utilise le SetupIntent (0$)
-          // @ts-ignore
-          clientSecret = subscription.pending_setup_intent?.client_secret;
-      } else {
-          // Pour un paiement immédiat, on utilise le PaymentIntent
-          // @ts-ignore
-          clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
-      }
-      
-      // Fallback si jamais
-      if (!clientSecret) {
-          console.error("ERREUR CRITIQUE: Aucun secret généré", subscription);
-          throw new Error("Impossible de générer le secret de paiement.");
-      }
-
-      return new Response(JSON.stringify({ clientSecret, isTrialActive: isTrialAllowed || false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-    }
-
-    if (action === 'create_portal') {
-      const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: `${req.headers.get('origin')}/profile` })
-      return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     throw new Error(`Action inconnue: ${action}`)
