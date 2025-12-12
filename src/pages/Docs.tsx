@@ -199,6 +199,17 @@ const Docs = () => {
     })
   );
 
+  // --- HELPER: CONTRASTE COULEUR ---
+  const getIconTextColor = (bgColor: string) => { 
+    if (!bgColor) return '#FFFFFF';
+    const hex = bgColor.replace('#', ''); 
+    const r = parseInt(hex.substr(0, 2), 16); 
+    const g = parseInt(hex.substr(2, 2), 16); 
+    const b = parseInt(hex.substr(4, 2), 16); 
+    // Formule de luminosité YIQ
+    return ((r * 299 + g * 587 + b * 114) / 1000) > 155 ? '#1F2937' : '#FFFFFF'; 
+  };
+
   // --- INITIALIZATION ---
 
   const fetchProfile = async () => {
@@ -304,6 +315,7 @@ const Docs = () => {
     try {
       const title = type === 'folder' ? 'Nouveau dossier' : 'Document sans titre';
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(title);
+      // On initialise le contenu aussi
       const { encrypted: encryptedContent } = await encryptionService.encrypt('', iv);
 
       const { data, error } = await supabase
@@ -336,11 +348,27 @@ const Docs = () => {
 
   const handleRename = async () => {
     if (!user || !newTitle.trim()) return;
+    
+    // CORRECTION CRITIQUE : Il faut aussi ré-encrypter le contenu avec le nouvel IV
+    // Sinon le contenu devient illisible car l'IV de la row a changé
+    const docToRename = documents.find(d => d.id === renameDialog.docId);
+    if (!docToRename) return;
+
     try {
+      // 1. Chiffrement du nouveau titre -> Génère un nouvel IV
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(newTitle);
+      
+      // 2. Chiffrement du contenu existant avec le MÊME nouvel IV
+      const contentToEncrypt = docToRename.decryptedContent || ''; 
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(contentToEncrypt, iv);
+
       const { error } = await supabase
         .from('documents')
-        .update({ title: encryptedTitle, encryption_iv: iv })
+        .update({ 
+            title: encryptedTitle, 
+            content: encryptedContent, // Update content too!
+            encryption_iv: iv 
+        })
         .eq('id', renameDialog.docId);
       
       if (error) throw error;
@@ -348,6 +376,7 @@ const Docs = () => {
       setRenameDialog({ isOpen: false, docId: '', currentTitle: '' });
       fetchDocuments();
     } catch (e) {
+      console.error(e);
       showError('Erreur lors du renommage');
     }
   };
@@ -428,26 +457,14 @@ const Docs = () => {
     try {
         setIsImporting(true);
 
-        // 1. DÉCHIFFREMENT INITIAL (Local)
-        // On doit toujours utiliser la lib crypto locale pour déchiffrer ce qui vient du kernel
-        // MAIS ici le kernel nous renvoie du JSON qui contient déjà les IVs et payloads chiffrés avec la logique d'origine
-        
-        // Wait, le Kernel renvoie le JSON { encrypted_title, iv... }
-        // Le Kernel a fait le "Unshuffle" binaire. 
-        // Maintenant on doit déchiffrer le contenu AES avec la bonne clé.
-
         if (data.header === 'SIVARA_SECURE_DOC_V2' && password && data.salt) {
-            // Mode Mot de passe (V2)
             await encryptionService.initialize(password, data.salt);
         } else if (data.header === 'SIVARA_SECURE_DOC_V1' || data.header === 'SIVARA_SECURE_DOC_V2') {
-            // Mode Legacy/Propriétaire (V1) ou tentative sans mot de passe
-            // Ici, data.owner_id est présent dans le JSON renvoyé par le Kernel
             await encryptionService.initialize(data.owner_id);
         } else {
             throw new Error("Format non supporté");
         }
         
-        // Tentative de déchiffrement du contenu original (AES)
         let decryptedTitle = '';
         let decryptedContent = '';
         
@@ -455,7 +472,6 @@ const Docs = () => {
             decryptedTitle = await encryptionService.decrypt(data.encrypted_title, data.iv);
             decryptedContent = data.encrypted_content ? await encryptionService.decrypt(data.encrypted_content, data.iv) : '';
         } catch (decryptError) {
-            // Si échec, c'est probablement le mauvais mot de passe ou la mauvaise clé propriétaire
             if (data.header === 'SIVARA_SECURE_DOC_V2' && !password) {
                 setImportPasswordDialog({ isOpen: true, fileData: data });
                 setIsImporting(false);
@@ -464,13 +480,11 @@ const Docs = () => {
             throw new Error("Clé de déchiffrement invalide.");
         }
 
-        // 3. RECHIFFREMENT (Clé de l'utilisateur actuel)
         await encryptionService.initialize(user.id);
         
         const { encrypted: newEncTitle, iv: newIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
         const { encrypted: newEncContent } = await encryptionService.encrypt(decryptedContent, newIv);
 
-        // 4. CRÉATION DU NOUVEAU DOCUMENT
         const { error: insertError } = await supabase
             .from('documents')
             .insert({
@@ -509,15 +523,12 @@ const Docs = () => {
 
     try {
         setIsImporting(true);
-        // On envoie le fichier binaire au Kernel pour qu'il le décompile en JSON
         const data = await sivaraVM.decompile(file);
         
-        // Si c'est un V2 (protégé par mot de passe), on ouvre le dialogue
         if (data.header === 'SIVARA_SECURE_DOC_V2') {
             setImportPasswordDialog({ isOpen: true, fileData: data });
-            setIsImporting(false); // On arrête le loading le temps du dialogue
+            setIsImporting(false);
         } else {
-            // Sinon on tente l'import direct
             await processImport(data);
         }
     } catch (err: any) {
@@ -530,7 +541,6 @@ const Docs = () => {
 
   const enterFolder = (folder: DecryptedDocument) => {
     setCurrentFolderId(folder.id);
-    // Met à jour l'URL sans recharger pour partager le lien
     setSearchParams({ folder: folder.id });
     setBreadcrumbs(prev => [...prev, { id: folder.id, name: folder.decryptedTitle }]);
   };
@@ -632,7 +642,7 @@ const Docs = () => {
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="min-h-screen bg-gray-50 flex flex-col pt-[env(safe-area-inset-top)]">
-        {/* ... (Header - Keep existing) ... */}
+        {/* ... (Header) ... */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
           <div className="container mx-auto px-4 lg:px-6 py-4">
             <div className="flex items-center justify-between">
@@ -759,7 +769,11 @@ const Docs = () => {
              </div>
           ) : (
             <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" : "flex flex-col gap-2"}>
-              {filteredDocuments.map((doc) => (
+              {filteredDocuments.map((doc) => {
+                // Dynamically resolve icon
+                const IconComponent = AVAILABLE_ICONS.find(i => i.name === doc.icon)?.icon || (doc.type === 'folder' ? Folder : FileText);
+                
+                return (
                 <DraggableItem 
                   key={doc.id} 
                   doc={doc} 
@@ -778,8 +792,15 @@ const Docs = () => {
                          
                          <div className={`p-4 flex flex-col h-full justify-between z-10 ${doc.type === 'folder' ? 'pt-4' : ''}`}>
                             <div className="flex justify-between items-start">
-                                <div className={`h-10 w-10 rounded-lg flex items-center justify-center shadow-sm ${doc.type === 'folder' ? 'bg-white/10 backdrop-blur-md border border-white/20' : ''}`} style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}>
-                                   {doc.type === 'folder' ? <Folder className="h-5 w-5 text-white" /> : <FileText className="h-5 w-5 text-white" />}
+                                <div 
+                                    className={`h-10 w-10 rounded-lg flex items-center justify-center shadow-sm ${doc.type === 'folder' ? 'bg-white/10 backdrop-blur-md border border-white/20' : ''}`} 
+                                    style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}
+                                >
+                                   {/* CORRECTION ICONE CONTRASTE */}
+                                   <IconComponent 
+                                      className="h-5 w-5" 
+                                      style={{ color: doc.type === 'folder' ? '#FFFFFF' : getIconTextColor(doc.color || '#3B82F6') }} 
+                                   />
                                 </div>
                                 <div className="flex gap-1">
                                    <button onClick={(e) => toggleStar(e, doc)} className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 ${doc.is_starred ? 'opacity-100 text-amber-500' : 'text-gray-400'}`}>
@@ -807,8 +828,16 @@ const Docs = () => {
                       </Card>
                    ) : (
                       <div className="flex items-center p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer group">
-                         <div className={`h-10 w-10 rounded flex items-center justify-center mr-4 ${doc.type === 'folder' ? 'bg-gray-100' : ''}`} style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}>
-                            {doc.type === 'folder' ? <img src={doc.cover_url || DEFAULT_COVER} className="h-full w-full object-cover rounded" /> : <FileText className="h-5 w-5 text-white" />}
+                         <div 
+                            className={`h-10 w-10 rounded flex items-center justify-center mr-4 ${doc.type === 'folder' ? 'bg-gray-100' : ''}`} 
+                            style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}
+                         >
+                            {doc.type === 'folder' ? <img src={doc.cover_url || DEFAULT_COVER} className="h-full w-full object-cover rounded" /> : (
+                                <IconComponent 
+                                    className="h-5 w-5" 
+                                    style={{ color: getIconTextColor(doc.color || '#3B82F6') }} 
+                                />
+                            )}
                          </div>
                          <div className="flex-1 min-w-0">
                             <h3 className="font-medium text-gray-900 truncate flex items-center gap-2">
@@ -833,7 +862,7 @@ const Docs = () => {
                       </div>
                    )}
                 </DraggableItem>
-              ))}
+              )})}
             </div>
           )}
         </div>
