@@ -61,13 +61,36 @@ const Index = () => {
   
   const gradientRef = useRef<HTMLSpanElement>(null);
 
+  // Animation dynamique "Sivara Yellow"
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!gradientRef.current) return;
-      const x = (e.clientX / window.innerWidth) * 100;
-      const y = (e.clientY / window.innerHeight) * 100;
-      gradientRef.current.style.backgroundPosition = `${x}% ${y}%`;
+      
+      const rect = gradientRef.current.getBoundingClientRect();
+      // Centre de l'élément
+      const elemX = rect.left + rect.width / 2;
+      const elemY = rect.top + rect.height / 2;
+      
+      // Distance de la souris
+      const dist = Math.sqrt(Math.pow(e.clientX - elemX, 2) + Math.pow(e.clientY - elemY, 2));
+      const threshold = 250; // Rayon d'activation en pixels
+
+      if (dist < threshold) {
+          // Si proche : le dégradé suit la souris
+          // On calcule la position relative (0% à 100%)
+          // On inverse un peu pour l'effet "reflet"
+          const x = ((e.clientX - rect.left) / rect.width) * 100;
+          const y = ((e.clientY - rect.top) / rect.height) * 100;
+          
+          gradientRef.current.style.backgroundPosition = `${x}% ${y}%`;
+          gradientRef.current.style.transition = 'none'; // Réactivité immédiate
+      } else {
+          // Si loin : retour au centre (Jaune foncé au milieu)
+          gradientRef.current.style.backgroundPosition = '50% 50%';
+          gradientRef.current.style.transition = 'background-position 0.8s ease-out'; // Retour fluide
+      }
     };
+    
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
@@ -262,7 +285,12 @@ const Index = () => {
               <div className="w-full max-w-3xl space-y-8 text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
                 <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-gray-900 leading-[1.1]">
                   Explorez le web <br/>
-                  <span ref={gradientRef} className="text-transparent bg-clip-text bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-600 bg-[length:300%_300%] transition-[background-position] duration-100 ease-out">autrement.</span>
+                  <span 
+                    ref={gradientRef} 
+                    className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-600 to-yellow-200 bg-[length:200%_auto] bg-center"
+                  >
+                    autrement.
+                  </span>
                 </h1>
                 <p className="text-lg md:text-xl text-gray-500 font-light max-w-xl mx-auto leading-relaxed mb-8">Un moteur de recherche respectueux, rapide et précis. Trouvez ce qui compte vraiment, sans le bruit.</p>
                 <div className="w-full transform transition-all duration-300 hover:scale-[1.01] shadow-xl rounded-full">
@@ -298,7 +326,6 @@ const Index = () => {
                           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
                               <FileText className="h-4 w-4" /> Vos Documents
                           </h2>
-                          {/* Pastille "Personnel & Chiffré" supprimée comme demandé */}
                       </div>
                       
                       <div className="grid gap-3">
