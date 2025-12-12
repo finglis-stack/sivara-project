@@ -10,12 +10,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// --- MOTEUR LINGUISTIQUE (VERSION LITE) ---
+// --- MOTEUR LINGUISTIQUE ---
 class TitaniumTokenizer {
   static normalize(text: string): string {
+    if (!text) return "";
     return text.toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
-      .replace(/[^a-z0-9\s]/g, " ") 
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève les accents (é -> e)
+      .replace(/[^a-z0-9\s]/g, " ") // Enlève la ponctuation
       .replace(/\s+/g, " ").trim();
   }
 
@@ -94,6 +95,7 @@ serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
+        console.log("Auth failed or no user");
         return new Response(JSON.stringify({ results: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -102,16 +104,22 @@ serve(async (req) => {
         return new Response(JSON.stringify({ results: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 1. Préparation de la requête (Phonétique)
+    // 1. Préparation de la requête
     const normQuery = TitaniumTokenizer.normalize(query);
-    const queryTokens = normQuery.split(' ').filter(w => w.length > 1);
+    const queryTokens = normQuery.split(' ').filter(w => w.length > 0);
+    
+    // Si la requête est vide après nettoyage, on arrête
+    if (queryTokens.length === 0) {
+        return new Response(JSON.stringify({ results: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const queryPhonetics = queryTokens.map(w => TitaniumTokenizer.getPhoneticFingerprint(w));
 
     // 2. Initialisation Crypto
     const cryptoService = new ServerEncryption();
     await cryptoService.initialize(user.id);
 
-    // 3. Récupération des docs (Max 100 récents pour perf)
+    // 3. Récupération des docs
     const { data: docs, error: dbError } = await supabase
         .from('documents')
         .select('id, title, content, encryption_iv, updated_at, type')
@@ -121,21 +129,24 @@ serve(async (req) => {
 
     if (dbError) throw dbError;
 
-    // 4. Analyse en mémoire (Déchiffrement + Matching Phonétique)
+    // 4. Analyse en mémoire (Edge)
     const results = [];
 
     for (const doc of docs || []) {
         // --- MATCH TITRE ---
         const decryptedTitle = await cryptoService.decrypt(doc.title, doc.encryption_iv);
+        
         if (decryptedTitle) {
+            // Normalisation CRITIQUE : "Dictée" -> "dictee"
             const normTitle = TitaniumTokenizer.normalize(decryptedTitle);
             const titleWords = normTitle.split(' ');
             const titlePhonetics = new Set(titleWords.map(w => TitaniumTokenizer.getPhoneticFingerprint(w)));
 
-            // Vérifie si TOUS les mots de la requête matchent (soit texte partiel, soit phonétique exacte)
+            // Vérifie si un des tokens de la recherche matche
+            // On utilise .some() pour être plus permissif (au moins un mot trouvé), ou .every() pour strict.
+            // Pour l'UX, .every() est souvent mieux pour éviter le bruit, mais on va assouplir la phonétique.
             const isTitleMatch = queryTokens.every((qToken, idx) => {
                 const qCode = queryPhonetics[idx];
-                // Match flou textuel OU Match phonétique exact
                 return normTitle.includes(qToken) || (qCode && titlePhonetics.has(qCode));
             });
 
@@ -147,45 +158,23 @@ serve(async (req) => {
                     type: doc.type,
                     updated_at: doc.updated_at
                 });
-                continue; // On passe au doc suivant si titre trouvé
+                continue; 
             }
         }
 
-        // --- MATCH CONTENU (Seulement si fichier) ---
+        // --- MATCH CONTENU ---
         if (doc.type === 'file' && doc.content) {
              const decryptedContent = await cryptoService.decrypt(doc.content, doc.encryption_iv);
              if (decryptedContent) {
                  const normContent = TitaniumTokenizer.normalize(decryptedContent);
                  
-                 // Pour le contenu, on est plus strict pour la perf : on check d'abord le texte brut
-                 // Si pas trouvé, on check la phonétique sur un échantillon ou on skip pour économiser le CPU
-                 // Ici on fait une recherche textuelle simple ET phonétique sur les mots clés
-                 
-                 let isContentMatch = false;
-                 // Optimisation: On génère les phonétiques du contenu uniquement si le texte brut échoue
+                 // Recherche textuelle simple sur le contenu normalisé
+                 // Ex: "dictee" dans "voici ma dictee import" -> TRUE
                  if (normContent.includes(normQuery)) {
-                     isContentMatch = true;
-                 } else {
-                     // Check phonétique basique (si le query est court)
-                     if (queryTokens.length <= 2) {
-                         const contentWords = normContent.split(' ');
-                         // On ne scanne que les 500 premiers mots pour la perf
-                         const contentPhonetics = new Set(contentWords.slice(0, 500).map(w => TitaniumTokenizer.getPhoneticFingerprint(w)));
-                         
-                         isContentMatch = queryTokens.every((qToken, idx) => {
-                             const qCode = queryPhonetics[idx];
-                             return qCode && contentPhonetics.has(qCode);
-                         });
-                     }
-                 }
-
-                 if (isContentMatch) {
-                     // Snippet
-                     const index = decryptedContent.toLowerCase().indexOf(queryTokens[0]);
+                     const index = decryptedContent.toLowerCase().indexOf(queryTokens[0]); // Pour l'affichage snippet
                      const start = Math.max(0, index - 30);
                      const end = Math.min(decryptedContent.length, index + 100);
-                     let snippet = "..." + decryptedContent.substring(start, end) + "...";
-                     if (index === -1) snippet = "Contenu correspondant (Phonétique)";
+                     const snippet = "..." + decryptedContent.substring(start, end) + "...";
 
                      results.push({
                         id: doc.id,

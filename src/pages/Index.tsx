@@ -39,16 +39,14 @@ interface GroupedResult {
 const Index = () => {
   const navigate = useNavigate();
   const [results, setResults] = useState<SearchResultType[]>([]);
-  const [docResults, setDocResults] = useState<DocResultType[]>([]); // New state for docs
+  const [docResults, setDocResults] = useState<DocResultType[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
   const [showManage, setShowManage] = useState(false);
   
-  // Ref pour le texte dynamique
   const gradientRef = useRef<HTMLSpanElement>(null);
 
-  // Effet de souris pour le dégradé
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!gradientRef.current) return;
@@ -91,11 +89,11 @@ const Index = () => {
     try {
       setIsSearching(true);
       setHasSearched(true);
-      setDocResults([]); // Reset docs
+      setDocResults([]); 
 
       console.log('Searching for:', query);
 
-      // 1. Lance les deux recherches en parallèle
+      // 1. WEB SEARCH
       const webSearchPromise = fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search', {
         method: 'POST',
         headers: {
@@ -105,25 +103,34 @@ const Index = () => {
         body: JSON.stringify({ query, page: 1, limit: 50 }),
       });
 
-      // Appel sécurisé qui utilisera le cookie de session automatiquement via le client Supabase si dispo,
-      // mais ici on utilise fetch direct, donc on doit potentiellement gérer l'auth manuellement.
-      // Cependant, pour simplifier et utiliser la session courante du navigateur :
+      // 2. DOC SEARCH (SECURE)
+      // On rafraichit la session pour être sûr d'avoir un token valide
       const { data: { session } } = await supabase.auth.getSession();
       
       let docSearchPromise = Promise.resolve(null);
       
-      if (session) {
+      if (session?.access_token) {
           docSearchPromise = fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-docs', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`, // Authentification utilisateur
+              'Authorization': `Bearer ${session.access_token}`, // Authentification avec le token utilisateur
             },
             body: JSON.stringify({ query }),
-          }).then(res => res.json()).catch(() => null);
+          })
+          .then(res => {
+              if (!res.ok) throw new Error("Doc search failed");
+              return res.json();
+          })
+          .catch(err => {
+              console.warn("Erreur recherche docs (peut-être session expirée):", err);
+              return null;
+          });
+      } else {
+          console.log("Aucune session active pour la recherche de documents.");
       }
 
-      // 2. Attendre les résultats
+      // 3. EXECUTION PARALLELE
       const [webResponse, docData] = await Promise.all([webSearchPromise, docSearchPromise]);
       const webData = await webResponse.json();
       
@@ -139,6 +146,8 @@ const Index = () => {
       // Traitement résultats Docs
       if (docData && docData.results && docData.results.length > 0) {
           setDocResults(docData.results);
+      } else {
+          console.log("Aucun document trouvé pour cette requête.");
       }
 
     } catch (error) {
@@ -153,9 +162,7 @@ const Index = () => {
 
   const groupedResults = groupResultsByDomain(results);
 
-  // Helper pour ouvrir un doc
   const openDoc = (docId: string) => {
-      // Redirection cross-app vers Docs
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       if (isLocal) {
           window.location.href = `/?app=docs&path=/${docId}`;
