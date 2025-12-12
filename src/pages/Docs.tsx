@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptionService } from '@/lib/encryption';
@@ -157,6 +157,7 @@ const DroppableBreadcrumb = ({ folder, isActive, onClick }: { folder: FolderPath
 const Docs = () => {
   const navigate = useNavigate();
   const { user, loading, signOut } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   // State Data
   const [documents, setDocuments] = useState<DecryptedDocument[]>([]);
@@ -216,6 +217,29 @@ const Docs = () => {
     }
   };
 
+  // --- LOGIQUE D'OUVERTURE DE DOSSIER VIA URL ---
+  useEffect(() => {
+      const folderParam = searchParams.get('folder');
+      if (folderParam && folderParam !== currentFolderId) {
+          const loadFolderDetails = async () => {
+              if (!user) return;
+              await encryptionService.initialize(user.id);
+              const { data } = await supabase.from('documents').select('id, title, encryption_iv').eq('id', folderParam).single();
+              if (data) {
+                  try {
+                      const title = await encryptionService.decrypt(data.title, data.encryption_iv);
+                      // TODO: Idéalement reconstruire tout le chemin parent
+                      setBreadcrumbs([{ id: null, name: 'Accueil' }, { id: data.id, name: title }]);
+                      setCurrentFolderId(data.id);
+                  } catch (e) {
+                      setCurrentFolderId(data.id);
+                  }
+              }
+          };
+          loadFolderDetails();
+      }
+  }, [searchParams, user]);
+
   const fetchDocuments = async () => {
     if (!user) return;
     setIsLoadingDocs(true);
@@ -266,7 +290,13 @@ const Docs = () => {
   // --- ACTIONS ---
 
   const handleNavigate = (id: string) => {
-    navigate(`/${id}?app=docs`);
+    // Si c'est en local, on ajoute app=docs
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocal) {
+        navigate(`/${id}?app=docs`);
+    } else {
+        window.location.href = `https://docs.sivara.ca/${id}`;
+    }
   };
 
   const createItem = async (type: 'file' | 'folder') => {
@@ -500,6 +530,8 @@ const Docs = () => {
 
   const enterFolder = (folder: DecryptedDocument) => {
     setCurrentFolderId(folder.id);
+    // Met à jour l'URL sans recharger pour partager le lien
+    setSearchParams({ folder: folder.id });
     setBreadcrumbs(prev => [...prev, { id: folder.id, name: folder.decryptedTitle }]);
   };
 
@@ -507,6 +539,8 @@ const Docs = () => {
     const target = breadcrumbs[index];
     setCurrentFolderId(target.id);
     setBreadcrumbs(prev => prev.slice(0, index + 1));
+    if (target.id) setSearchParams({ folder: target.id });
+    else setSearchParams({});
   };
 
   const handleSignOut = async () => {
@@ -736,22 +770,23 @@ const Docs = () => {
                    {viewMode === 'grid' ? (
                       <Card className="relative h-60 overflow-hidden hover:shadow-md transition-shadow cursor-pointer border-gray-200 flex flex-col group bg-white">
                          {doc.type === 'folder' ? (
-                             <div className="absolute inset-0 h-24 w-full bg-gray-100">
-                                 <img src={doc.cover_url || DEFAULT_COVER} alt="Cover" className="w-full h-full object-cover" />
+                             <div className="absolute inset-0 w-full h-full bg-black/80">
+                                 <img src={doc.cover_url || DEFAULT_COVER} alt="Cover" className="w-full h-full object-cover opacity-50" />
+                                 <div className="absolute inset-0 bg-black/40"></div>
                              </div>
                          ) : null}
                          
-                         <div className={`p-4 flex flex-col h-full justify-between z-10 ${doc.type === 'folder' ? 'pt-20' : ''}`}>
+                         <div className={`p-4 flex flex-col h-full justify-between z-10 ${doc.type === 'folder' ? 'pt-4' : ''}`}>
                             <div className="flex justify-between items-start">
-                                <div className={`h-10 w-10 rounded-lg flex items-center justify-center shadow-sm ${doc.type === 'folder' ? 'bg-white ring-1 ring-gray-100' : ''}`} style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}>
-                                   {doc.type === 'folder' ? <Folder className="h-5 w-5 text-gray-500" /> : <FileText className="h-5 w-5 text-white" />}
+                                <div className={`h-10 w-10 rounded-lg flex items-center justify-center shadow-sm ${doc.type === 'folder' ? 'bg-white/10 backdrop-blur-md border border-white/20' : ''}`} style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}>
+                                   {doc.type === 'folder' ? <Folder className="h-5 w-5 text-white" /> : <FileText className="h-5 w-5 text-white" />}
                                 </div>
                                 <div className="flex gap-1">
                                    <button onClick={(e) => toggleStar(e, doc)} className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 ${doc.is_starred ? 'opacity-100 text-amber-500' : 'text-gray-400'}`}>
                                       <Star className={`h-4 w-4 ${doc.is_starred ? 'fill-current' : ''}`} />
                                    </button>
                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}><Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100"><MoreVertical className="h-3 w-3" /></Button></DropdownMenuTrigger>
+                                      <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}><Button variant="ghost" size="icon" className={`h-6 w-6 opacity-0 group-hover:opacity-100 ${doc.type === 'folder' ? 'text-white hover:text-white hover:bg-white/20' : ''}`}><MoreVertical className="h-3 w-3" /></Button></DropdownMenuTrigger>
                                       <DropdownMenuContent align="end">
                                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openRenameDialog(doc); }}><Edit2 className="mr-2 h-4 w-4" /> Renommer</DropdownMenuItem>
                                          <DropdownMenuItem onClick={(e) => toggleStar(e, doc)}>{doc.is_starred ? <><StarOff className="mr-2 h-4 w-4" /> Retirer favoris</> : <><Star className="mr-2 h-4 w-4" /> Ajouter favoris</>}</DropdownMenuItem>
@@ -762,9 +797,9 @@ const Docs = () => {
                                    </DropdownMenu>
                                 </div>
                             </div>
-                            <div className="mt-2">
-                                <h3 className="font-medium text-gray-900 truncate mb-1" title={doc.decryptedTitle}>{doc.decryptedTitle}</h3>
-                                <p className="text-xs text-gray-500">
+                            <div className="mt-auto">
+                                <h3 className={`font-medium truncate mb-1 text-lg ${doc.type === 'folder' ? 'text-white font-light tracking-wide' : 'text-gray-900'}`} title={doc.decryptedTitle}>{doc.decryptedTitle}</h3>
+                                <p className={`text-xs ${doc.type === 'folder' ? 'text-white/60 font-light' : 'text-gray-500'}`}>
                                    {doc.type === 'folder' ? 'Dossier' : new Date(doc.updated_at).toLocaleDateString()}
                                 </p>
                             </div>

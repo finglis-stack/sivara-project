@@ -167,12 +167,25 @@ const Index = () => {
 
   const groupedResults = groupResultsByDomain(results);
 
-  const openDoc = (docId: string) => {
+  const openDoc = (doc: DocResultType) => {
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      if (isLocal) {
-          window.location.href = `/?app=docs&path=/${docId}`;
+      
+      // LOGIQUE DE REDIRECTION INTELLIGENTE
+      if (doc.type === 'folder') {
+          // Si c'est un DOSSIER -> On va sur l'index de Docs avec le paramètre ?folder=
+          // Cela permet à Docs.tsx d'ouvrir le dossier au lieu d'essayer d'éditer le fichier
+          if (isLocal) {
+              window.location.href = `/?app=docs&folder=${doc.id}`;
+          } else {
+              window.location.href = `https://docs.sivara.ca/?folder=${doc.id}`;
+          }
       } else {
-          window.location.href = `https://docs.sivara.ca/${docId}`;
+          // Si c'est un FICHIER -> On va sur le chemin /ID pour ouvrir l'éditeur
+          if (isLocal) {
+              window.location.href = `/${doc.id}?app=docs`;
+          } else {
+              window.location.href = `https://docs.sivara.ca/${doc.id}`;
+          }
       }
   };
 
@@ -285,7 +298,7 @@ const Index = () => {
                           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
                               <FileText className="h-4 w-4" /> Vos Documents
                           </h2>
-                          <Badge variant="outline" className="text-blue-600 bg-blue-50 border-blue-100">Personnel & Chiffré</Badge>
+                          {/* Pastille "Personnel & Chiffré" supprimée comme demandé */}
                       </div>
                       
                       <div className="grid gap-3">
@@ -298,7 +311,7 @@ const Index = () => {
                                   <Card 
                                       key={doc.id} 
                                       className="group hover:scale-[1.01] transition-all cursor-pointer shadow-lg hover:shadow-xl relative overflow-hidden border-0"
-                                      onClick={() => openDoc(doc.id)}
+                                      onClick={() => openDoc(doc)}
                                   >
                                       {/* BACKGROUND IMAGE & OVERLAY */}
                                       <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110" 
@@ -326,7 +339,7 @@ const Index = () => {
                                       key={doc.id} 
                                       className="group hover:border-blue-400 transition-all cursor-pointer border-l-4 shadow-sm hover:shadow-md"
                                       style={{ borderLeftColor: doc.color || '#3B82F6' }}
-                                      onClick={() => openDoc(doc.id)}
+                                      onClick={() => openDoc(doc)}
                                   >
                                       <div className="p-4 flex items-center justify-between">
                                           <div className="flex items-center gap-4">
