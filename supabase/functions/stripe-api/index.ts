@@ -183,7 +183,6 @@ serve(async (req) => {
       )
     }
 
-    // ... (Reste des actions inchangées) ...
     if (action === 'get_config') {
         // @ts-ignore
         const publishableKey = Deno.env.get('STRIPE_PUBLISHABLE_KEY');
@@ -202,18 +201,38 @@ serve(async (req) => {
         return new Response(JSON.stringify({ success: true, isPro }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // --- CORRECTION MAJEURE: GESTION DU MODE ESSAI GRATUIT ---
     if (action === 'create_subscription_intent') {
       const isTrialAllowed = requestedTrial && !profile?.has_used_trial;
+      
       const subscription = await stripe.subscriptions.create({
           customer: customerId,
           items: [{ price: priceId }],
           payment_behavior: 'default_incomplete',
           payment_settings: { save_default_payment_method: 'on_subscription' },
-          expand: ['latest_invoice.payment_intent'],
+          // IMPORTANT: On expand aussi le pending_setup_intent pour les essais gratuits
+          expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
           trial_period_days: isTrialAllowed ? 14 : undefined,
       });
-      // @ts-ignore
-      const clientSecret = subscription.latest_invoice.payment_intent?.client_secret;
+
+      let clientSecret;
+      
+      if (isTrialAllowed) {
+          // Pour un essai gratuit, on utilise le SetupIntent (0$)
+          // @ts-ignore
+          clientSecret = subscription.pending_setup_intent?.client_secret;
+      } else {
+          // Pour un paiement immédiat, on utilise le PaymentIntent
+          // @ts-ignore
+          clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
+      }
+      
+      // Fallback si jamais
+      if (!clientSecret) {
+          console.error("ERREUR CRITIQUE: Aucun secret généré", subscription);
+          throw new Error("Impossible de générer le secret de paiement.");
+      }
+
       return new Response(JSON.stringify({ clientSecret, isTrialActive: isTrialAllowed || false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
