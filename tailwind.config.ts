@@ -85,6 +85,18 @@ export default {
         "wave-undulate-slow": {
             "0%, 100%": { transform: "rotate(-15deg) translateY(0) scale(1)" },
             "50%": { transform: "rotate(-18deg) translateY(30px) scale(1.05)" },
+        },
+        "float-square": {
+            "0%, 100%": { transform: "translateY(0) rotate(0deg)" },
+            "50%": { transform: "translateY(-30px) rotate(10deg)" },
+        },
+        "float-square-reverse": {
+            "0%, 100%": { transform: "translateY(0) rotate(0deg)" },
+            "50%": { transform: "translateY(40px) rotate(-10deg)" },
+        },
+        "drift-slow": {
+            "0%": { transform: "translate(0, 0)" },
+            "100%": { transform: "translate(20px, 40px)" },
         }
       },
       animation: {
@@ -92,6 +104,8 @@ export default {
         "accordion-up": "accordion-up 0.2s ease-out",
         "wave-undulate": "wave-undulate 8s ease-in-out infinite",
         "wave-undulate-slow": "wave-undulate-slow 12s ease-in-out infinite",
+        "float-square": "float-square 8s ease-in-out infinite",
+        "float-square-reverse": "float-square-reverse 10s ease-in-out infinite",
       },
     },
   },
