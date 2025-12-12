@@ -147,7 +147,8 @@ serve(async (req) => {
         metadata: {
             type: 'device_rental',
             unit_id: unitId,
-            supabase_user_id: user.id
+            supabase_user_id: user.id,
+            real_order: 'true'
         }
       });
 
@@ -163,37 +164,72 @@ serve(async (req) => {
     // ACTION 2 : SIVARA PRO (ABONNEMENT CLASSIQUE)
     // ==========================================
     if (action === 'create_subscription_intent') {
-      // Vérification éligibilité essai gratuit
+      // 1. Check Anti-Doublon
+      // On cherche les souscriptions existantes pour éviter d'en créer 10 d'un coup
+      const existingSubscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: 'all',
+        limit: 5
+      });
+
+      // On cherche une souscription "incomplete" (en attente de paiement) ou "active" qui correspondrait à une tentative récente
+      const pendingSub = existingSubscriptions.data.find((sub: any) => 
+        (sub.status === 'incomplete' || sub.status === 'active' || sub.status === 'trialing') &&
+        // On vérifie que ce n'est pas une location d'appareil
+        sub.metadata?.type !== 'device_rental'
+      );
+
+      // SI TROUVÉ : On recycle !
+      if (pendingSub) {
+          console.log(`[Stripe API] Abonnement existant trouvé (${pendingSub.id}), réutilisation.`);
+          
+          // On récupère le clientSecret associé
+          let clientSecret;
+          const subDetails = await stripe.subscriptions.retrieve(pendingSub.id, {
+             expand: ['latest_invoice.payment_intent', 'pending_setup_intent']
+          });
+
+          // @ts-ignore
+          if (subDetails.pending_setup_intent) {
+              // @ts-ignore
+              clientSecret = subDetails.pending_setup_intent.client_secret;
+          // @ts-ignore
+          } else if (subDetails.latest_invoice?.payment_intent) {
+              // @ts-ignore
+              clientSecret = subDetails.latest_invoice.payment_intent.client_secret;
+          }
+
+          if (clientSecret) {
+             const isTrial = subDetails.status === 'trialing' || (subDetails.trial_end && subDetails.trial_end > Date.now()/1000);
+             return new Response(JSON.stringify({ clientSecret, isTrialActive: isTrial }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          // Si pas de secret trouvé (cas rare), on continue pour en recréer un
+      }
+
+      // 2. Création (Si aucun doublon trouvé)
       const isTrialAllowed = requestedTrial && !profile?.has_used_trial;
-      
-      console.log(`[Stripe API] Creating Pro Sub. Trial allowed: ${isTrialAllowed}`);
+      console.log(`[Stripe API] Création nouvel abonnement Pro. Trial allowed: ${isTrialAllowed}`);
 
       const subscription = await stripe.subscriptions.create({
           customer: customerId,
           items: [{ price: priceId }],
           payment_behavior: 'default_incomplete',
           payment_settings: { save_default_payment_method: 'on_subscription' },
-          // IMPORTANT: On demande explicitement les deux intents possibles
           expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
           trial_period_days: isTrialAllowed ? 14 : undefined,
+          metadata: { type: 'pro_subscription' } // Tag pour différencier
       });
 
       let clientSecret;
-      
       if (isTrialAllowed) {
-          // CAS ESSAI GRATUIT : On utilise le SetupIntent (0$)
           // @ts-ignore
           clientSecret = subscription.pending_setup_intent?.client_secret;
       } else {
-          // CAS PAIEMENT : On utilise le PaymentIntent
           // @ts-ignore
           clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
       }
       
-      if (!clientSecret) {
-          console.error("ERREUR CRITIQUE: Aucun secret généré", subscription);
-          throw new Error("Impossible de générer le secret de paiement.");
-      }
+      if (!clientSecret) throw new Error("Impossible de générer le secret de paiement.");
 
       return new Response(JSON.stringify({ clientSecret, isTrialActive: isTrialAllowed || false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }

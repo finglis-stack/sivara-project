@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -120,6 +120,9 @@ const Checkout = () => {
   const [confirmedIsTrial, setConfirmedIsTrial] = useState<boolean>(requestedTrial);
   const [isDowngraded, setIsDowngraded] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // SECUTIY: Anti-Double Init
+  const initializationRef = useRef(false);
 
   useEffect(() => {
     if (!user) {
@@ -128,6 +131,10 @@ const Checkout = () => {
     }
 
     const initPayment = async () => {
+      // Si déjà lancé, on arrête tout de suite
+      if (initializationRef.current) return;
+      initializationRef.current = true;
+
       try {
         setStripePromise(loadStripe(STRIPE_PUBLISHABLE_KEY));
 
@@ -165,6 +172,7 @@ const Checkout = () => {
         console.error(e);
         setErrorMessage(e.message || "Erreur inconnue");
         showError(e.message || "Impossible d'initialiser le paiement.");
+        initializationRef.current = false; // Reset en cas d'erreur pour permettre retry
       }
     };
 
