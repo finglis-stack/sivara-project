@@ -27,7 +27,10 @@ import {
   FileText, Plus, Search, Clock, Star, MoreVertical, Trash2, 
   Download, Share2, Copy, Loader2, Grid3x3, List, ArrowLeft, 
   FolderPlus, Folder, ChevronRight, Home, MoveUp, Edit2, 
-  Image as ImageIcon, Palette, UserCircle, StarOff, Upload, FileJson, Lock
+  Image as ImageIcon, Palette, UserCircle, StarOff, Upload, FileJson, Lock,
+  // Ajout des icônes manquantes pour correspondre à l'éditeur
+  Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
+  Calendar, CheckSquare, MessageSquare, Mail, Globe, Settings, Heart, Zap, Award, BarChart
 } from 'lucide-react';
 
 // DND Imports
@@ -80,11 +83,26 @@ interface Profile {
 // --- CONSTANTS ---
 const DEFAULT_COVER = '/default-cover.jpg';
 
+// Liste synchronisée avec DocEditor.tsx
 const AVAILABLE_ICONS = [
-  { name: 'Folder', icon: Folder }, { name: 'Star', icon: Star },
-  { name: 'Heart', icon: Home }, { name: 'Briefcase', icon: FolderPlus },
-  { name: 'Globe', icon: Search }, { name: 'Zap', icon: Clock }
+  { name: 'FileText', icon: FileText }, { name: 'Briefcase', icon: Briefcase },
+  { name: 'FolderOpen', icon: FolderOpen }, { name: 'BookOpen', icon: BookOpen },
+  { name: 'Lightbulb', icon: Lightbulb }, { name: 'Target', icon: Target },
+  { name: 'TrendingUp', icon: TrendingUp }, { name: 'UsersIcon', icon: UsersIcon },
+  { name: 'Calendar', icon: Calendar }, { name: 'CheckSquare', icon: CheckSquare },
+  { name: 'MessageSquare', icon: MessageSquare }, { name: 'Mail', icon: Mail },
+  { name: 'Globe', icon: Globe }, { name: 'Settings', icon: Settings },
+  { name: 'Heart', icon: Heart }, { name: 'Zap', icon: Zap },
+  { name: 'Award', icon: Award }, { name: 'BarChart', icon: BarChart },
+  // Icônes spécifiques aux dossiers ou legacy
+  { name: 'Folder', icon: Folder }, 
+  { name: 'Star', icon: Star },
+  { name: 'Home', icon: Home },
+  { name: 'FolderPlus', icon: FolderPlus },
+  { name: 'Search', icon: Search },
+  { name: 'Clock', icon: Clock }
 ];
+
 const COLOR_PALETTE = [
   '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#6B7280', '#000000'
 ];
