@@ -11,36 +11,47 @@ const corsHeaders = {
 // @ts-ignore
 const IP_GEO_KEY = Deno.env.get('IPGEOLOCATION_API_KEY');
 
-// --- SIVARA BINARY PROTOCOL (SBP) v4.0 ---
+// --- SIVARA BINARY PROTOCOL (SBP) v4.1 ---
 const OP_CODES = {
   MAGIC: 0x53, // 'S'
   HEADER: 0xA1,
   IV_BLOCK: 0xB2,
   DATA_CHUNK: 0xC3,
   META_TAG: 0xD4,
-  GHOST_BLOCK: 0x1F, // Leurre
-  VM_EXEC: 0xE5,     // NOUVEAU: Smart Contract Block
+  GHOST_BLOCK: 0x1F,
+  VM_EXEC: 0xE5,
   EOF: 0xFF
 };
 
 // --- VM INSTRUCTION SET (Sivara Assembly) ---
 const VM_OPS = {
-  PUSH_CONST: 0x10, // Pousse une valeur (4 bytes) sur la stack
-  GET_ENV: 0x20,    // Récupère une variable d'environnement (1 byte ID)
-  EQ: 0x30,         // Egalité (a == b)
-  GT: 0x31,         // Plus grand que (a > b)
-  LT: 0x32,         // Plus petit que (a < b)
-  AND: 0x33,        // ET Logique
-  OR: 0x34,         // OU Logique
-  ASSERT: 0x40,     // Vérifie si TRUE, sinon CRASH (Security Panic)
-  HALT: 0x00        // Fin du programme
+  PUSH_CONST: 0x10, // Pousse une valeur (4 bytes)
+  GET_ENV: 0x20,    // Récupère une variable d'environnement
+  
+  // Comparaisons
+  EQ: 0x30,         // ==
+  GT: 0x31,         // >
+  LT: 0x32,         // <
+  
+  // Logique
+  AND: 0x33,        // &&
+  OR: 0x34,         // ||
+  
+  // Mathématiques (NOUVEAU)
+  ADD: 0x50,        // +
+  SUB: 0x51,        // -
+  ABS: 0x52,        // Valeur Absolue
+  
+  // Sécurité
+  ASSERT: 0x40,     // Panic si faux
+  HALT: 0x00        // Stop
 };
 
 // IDs pour GET_ENV
 const ENV_VARS = {
   TIMESTAMP: 0x01,
-  GEO_LAT: 0x02,
-  GEO_LNG: 0x03,
+  GEO_LAT: 0x02, // Multiplié par 10000 pour précision Int
+  GEO_LNG: 0x03, // Multiplié par 10000 pour précision Int
   USER_ID_HASH: 0x04
 };
 
@@ -80,7 +91,7 @@ const executeVM = (bytecode: Uint8Array, context: any) => {
   const view = new DataView(bytecode.buffer, bytecode.byteOffset, bytecode.byteLength);
   let pc = 0; // Program Counter
 
-  console.log("[VM] Démarrage exécution Smart Contract...");
+  console.log(`[VM] Start. Context: Lat=${context.lat}, Lng=${context.lng}`);
 
   while (pc < bytecode.length) {
     const op = bytecode[pc++];
@@ -95,35 +106,59 @@ const executeVM = (bytecode: Uint8Array, context: any) => {
       case VM_OPS.GET_ENV:
         const envId = bytecode[pc++];
         if (envId === ENV_VARS.TIMESTAMP) stack.push(Math.floor(Date.now() / 1000));
-        else if (envId === ENV_VARS.GEO_LAT) stack.push(Math.round((context.lat || 0) * 10000)); // Int precision
+        else if (envId === ENV_VARS.GEO_LAT) stack.push(Math.round((context.lat || 0) * 10000));
         else if (envId === ENV_VARS.GEO_LNG) stack.push(Math.round((context.lng || 0) * 10000));
         else stack.push(0);
         break;
 
+      // --- MATHS ---
+      case VM_OPS.ADD:
+        const bAdd = stack.pop()!; const aAdd = stack.pop()!;
+        stack.push(aAdd + bAdd);
+        break;
+      case VM_OPS.SUB:
+        const bSub = stack.pop()!; const aSub = stack.pop()!;
+        stack.push(aSub - bSub); // Attention ordre: a - b
+        break;
+      case VM_OPS.ABS:
+        const aAbs = stack.pop()!;
+        stack.push(Math.abs(aAbs));
+        break;
+
+      // --- COMPARAISONS ---
       case VM_OPS.EQ:
         const bEq = stack.pop(); const aEq = stack.pop();
         stack.push(aEq === bEq ? 1 : 0);
         break;
-      
       case VM_OPS.GT:
-        const bGt = stack.pop(); const aGt = stack.pop();
-        stack.push(aGt! > bGt! ? 1 : 0);
+        const bGt = stack.pop()!; const aGt = stack.pop()!;
+        stack.push(aGt > bGt ? 1 : 0);
+        break;
+      case VM_OPS.LT:
+        const bLt = stack.pop()!; const aLt = stack.pop()!;
+        stack.push(aLt < bLt ? 1 : 0);
         break;
 
-      case VM_OPS.LT:
-        const bLt = stack.pop(); const aLt = stack.pop();
-        stack.push(aLt! < bLt! ? 1 : 0);
+      // --- LOGIQUE ---
+      case VM_OPS.AND:
+        const bAnd = stack.pop(); const aAnd = stack.pop();
+        stack.push((aAnd === 1 && bAnd === 1) ? 1 : 0);
+        break;
+      case VM_OPS.OR:
+        const bOr = stack.pop(); const aOr = stack.pop();
+        stack.push((aOr === 1 || bOr === 1) ? 1 : 0);
         break;
 
       case VM_OPS.ASSERT:
         const check = stack.pop();
         if (check !== 1) {
+          console.error("[VM] ASSERT FAILED. Stack dump:", stack);
           throw new Error("SIVARA_VM_PANIC: Security Assertion Failed. Access Denied.");
         }
         break;
 
       case VM_OPS.HALT:
-        return; // Fin normale
+        return;
 
       default:
         console.warn(`[VM] Opcode inconnu: 0x${op.toString(16)}`);
@@ -155,7 +190,7 @@ serve(async (req) => {
     if (action === 'compile') {
       const { encrypted_title, encrypted_content, iv, owner_id, icon, color, salt, security } = payload;
       
-      const metaJson = JSON.stringify({ owner_id, icon, color, salt, v: 4.0, security: security || {} });
+      const metaJson = JSON.stringify({ owner_id, icon, color, salt, v: 4.1, security: security || {} });
       const ivBuf = new Uint8Array(atob(iv).split('').map(c => c.charCodeAt(0)));
       const metaBuf = strToBuf(metaJson);
       const titleBuf = strToBuf(encrypted_title);
@@ -167,27 +202,40 @@ serve(async (req) => {
       parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x03]));
 
       // 2. VM SMART CONTRACT GENERATION
-      // Si on a une geofence, on génère le bytecode pour la vérifier
       if (security && security.geofence) {
           const { lat, lng, radius_km } = security.geofence;
-          const latInt = Math.round(lat * 10000);
-          // Note: C'est une vérification simplifiée (Box) pour l'exemple VM
-          // Une vraie vérification trigonométrique demanderait plus d'opcodes mathématiques
           
+          // Conversion en Entiers (x10000) pour la VM
+          const targetLat = Math.round(lat * 10000);
+          const targetLng = Math.round(lng * 10000);
+          
+          // Approximation Bounding Box : 1 degre lat ~= 111km
+          // Delta Lat/Lng autorisé = (Radius / 111) * 10000
+          const delta = Math.round((radius_km / 111) * 10000);
+
           const vmBuilder: number[] = [];
           
-          // LOGIQUE: ASSERT(ABS(ENV_LAT - TARGET_LAT) < RADIUS_DELTA)
-          // Pour simplifier ici, on va juste vérifier si on est "au nord de" ou "au sud de" pour la démo technique
-          // Dans un vrai cas, on implémenterait la formule de distance Haversine en Assembly SBP
+          // LOGIQUE: (ABS(ENV_LAT - TARGET_LAT) < DELTA) && (ABS(ENV_LNG - TARGET_LNG) < DELTA)
           
-          // Exemple simple : Time Lock (Expiration dans 24h pour la démo)
-          // PUSH_ENV(TIMESTAMP) -> PUSH_CONST(NOW + 24h) -> LT -> ASSERT
-          const expiry = Math.floor(Date.now() / 1000) + 86400; // 24h
-          
-          vmBuilder.push(VM_OPS.GET_ENV, ENV_VARS.TIMESTAMP);
-          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([expiry]).buffer));
-          vmBuilder.push(VM_OPS.LT); // TIMESTAMP < EXPIRY
-          vmBuilder.push(VM_OPS.ASSERT);
+          // --- CHECK LATITUDE ---
+          vmBuilder.push(VM_OPS.GET_ENV, ENV_VARS.GEO_LAT);
+          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([targetLat]).buffer));
+          vmBuilder.push(VM_OPS.SUB);
+          vmBuilder.push(VM_OPS.ABS);
+          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([delta]).buffer));
+          vmBuilder.push(VM_OPS.LT); // Resultat A (sur la stack)
+
+          // --- CHECK LONGITUDE ---
+          vmBuilder.push(VM_OPS.GET_ENV, ENV_VARS.GEO_LNG);
+          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([targetLng]).buffer));
+          vmBuilder.push(VM_OPS.SUB);
+          vmBuilder.push(VM_OPS.ABS);
+          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([delta]).buffer));
+          vmBuilder.push(VM_OPS.LT); // Resultat B (sur la stack)
+
+          // --- COMBINAISON ---
+          vmBuilder.push(VM_OPS.AND); // A && B
+          vmBuilder.push(VM_OPS.ASSERT); // Crash si faux
           vmBuilder.push(VM_OPS.HALT);
 
           const vmBytecode = new Uint8Array(vmBuilder);
@@ -234,7 +282,6 @@ serve(async (req) => {
       parts.push(...generateGhostBlock());
       parts.push(new Uint8Array([OP_CODES.EOF]));
 
-      // Assemblage final
       const totalLength = parts.reduce((acc, p) => acc + p.length, 0);
       const finalBuffer = new Uint8Array(totalLength);
       let offset = 0;
@@ -265,13 +312,20 @@ serve(async (req) => {
       const result: any = { header: 'SIVARA_SECURE_DOC_V2' };
       let metaData: any = {};
 
-      // Contexte d'exécution pour la VM (IP, Geo, Time)
+      // Contexte d'exécution pour la VM
       const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
       let geoContext = { lat: 0, lng: 0 };
       
-      // On récupère la geo seulement si nécessaire (optimisation)
-      // Pour l'instant on met des valeurs par défaut, la VM décidera si elle en a besoin
-      // Dans une version prod, on ferait l'appel API ici si un flag VM est détecté
+      // Récupération Geo IP pour le contexte VM
+      if (IP_GEO_KEY) {
+          try {
+              const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
+              const geoData = await geoRes.json();
+              if (geoData.latitude) {
+                  geoContext = { lat: parseFloat(geoData.latitude), lng: parseFloat(geoData.longitude) };
+              }
+          } catch (e) { console.warn("Geo lookup failed", e); }
+      }
 
       while (cursor < bytes.length) {
         const opcode = bytes[cursor++];
