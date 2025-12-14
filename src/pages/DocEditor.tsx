@@ -7,7 +7,7 @@ import { sivaraVM } from '@/lib/sivara-vm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
-import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
+import { useEditor, EditorContent } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
@@ -893,30 +893,6 @@ const DocEditor = () => {
         ))}
 
         <div className="max-w-[21cm] w-full mx-auto py-4 sm:py-8">
-          {editor && (
-            <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }} shouldShow={({ editor }) => editor.isActive('image')}>
-                <div className="bg-white border border-gray-200 shadow-xl rounded-lg p-1 flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAlignment('left')}><AlignLeft className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAlignment('center')}><AlignCenter className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAlignment('right')}><AlignRight className="h-4 w-4" /></Button>
-                    <div className="w-px h-4 bg-gray-200 mx-1"></div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSize('50%')}><Minimize className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSize('100%')}><Maximize className="h-4 w-4" /></Button>
-                    <div className="w-px h-4 bg-gray-200 mx-1"></div>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><Wand2 className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            <DropdownMenuItem onClick={() => setFilter('none')}>Normal</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setFilter('grayscale(100%)')}>Noir & Blanc</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setFilter('sepia(100%)')}>Sépia</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setFilter('blur(2px)')}>Flou</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowImageDialog(true)}><RefreshCcw className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => editor.chain().focus().deleteSelection().run()}><Trash2 className="h-4 w-4" /></Button>
-                </div>
-            </BubbleMenu>
-          )}
           <EditorContent editor={editor} />
         </div>
       </div>
