@@ -95,6 +95,8 @@ export const ImageNodeView = (props: NodeViewProps) => {
     position: 'relative' as const,
     marginTop: '1rem',
     marginBottom: '1rem',
+    // Important pour le drag & drop Tiptap
+    userSelect: 'none' as const,
   };
 
   const imgStyle = {
@@ -108,7 +110,7 @@ export const ImageNodeView = (props: NodeViewProps) => {
   };
 
   return (
-    <NodeViewWrapper style={wrapperStyle} className="group">
+    <NodeViewWrapper style={wrapperStyle} className="group image-node-view">
       <div 
         className="relative inline-block"
         onMouseEnter={() => setIsHovered(true)}
@@ -121,6 +123,7 @@ export const ImageNodeView = (props: NodeViewProps) => {
           alt={node.attrs.alt}
           style={imgStyle}
           className="block"
+          draggable="false" // EMPÊCHE LA DUPLICATION NATIVE
           onClick={() => props.updateAttributes({})} // Force selection logic
         />
 

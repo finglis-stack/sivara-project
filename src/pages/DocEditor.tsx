@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
-import { Extension } from '@tiptap/core';
+import { Extension, mergeAttributes } from '@tiptap/core';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
 import { Placeholder } from '@tiptap/extension-placeholder';
@@ -72,16 +72,48 @@ const FontSize = Extension.create({
   },
 });
 
-// Extension Image Avancée avec Node View
+// Extension Image Avancée avec Node View et Persistance
 const AdvancedImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
-      width: { default: '100%' },
-      style: { default: '' }, 
-      textAlign: { default: 'center' }, // Ajout de l'alignement dans les attributs du noeud
+      width: {
+        default: '100%',
+        renderHTML: (attributes) => {
+          return {
+            width: attributes.width,
+            style: `width: ${attributes.width}`
+          };
+        },
+        parseHTML: (element) => element.style.width || element.getAttribute('width'),
+      },
+      style: {
+        default: '',
+        renderHTML: (attributes) => {
+          return {
+            style: attributes.style // Pour les filtres CSS (blur, grayscale, etc.)
+          };
+        },
+        parseHTML: (element) => element.getAttribute('style'),
+      },
+      textAlign: {
+        default: 'center',
+        renderHTML: (attributes) => {
+          return {
+            'data-text-align': attributes.textAlign,
+            style: `text-align: ${attributes.textAlign}`
+          };
+        },
+        parseHTML: (element) => element.getAttribute('data-text-align') || element.style.textAlign,
+      },
     };
   },
+  
+  // Important pour que le HTML généré contienne les bons wrappers pour l'alignement
+  renderHTML({ HTMLAttributes }) {
+    return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
+  },
+
   addNodeView() {
     return ReactNodeViewRenderer(ImageNodeView);
   },
@@ -352,7 +384,7 @@ const DocEditor = () => {
   const editor = useEditor({
     extensions: [
       StarterKit, Underline, TextStyle, FontFamily, FontSize, AdvancedImage,
-      TextAlign.configure({ types: ['heading', 'paragraph'] }), // Image gérée par NodeView
+      TextAlign.configure({ types: ['heading', 'paragraph', 'image'] }),
       Placeholder.configure({ placeholder: 'Commencez à écrire...' }),
     ],
     content: '',
