@@ -7,7 +7,7 @@ import { sivaraVM } from '@/lib/sivara-vm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
@@ -47,8 +47,9 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-// --- NEW COMPONENT: SIVARA TEXT ---
+// --- NEW COMPONENTS ---
 import { SivaraText } from '@/components/SivaraText';
+import { ImageNodeView } from '@/components/ImageNodeView';
 
 // --- CUSTOM EXTENSIONS ---
 const FontSize = Extension.create({
@@ -71,14 +72,18 @@ const FontSize = Extension.create({
   },
 });
 
-const CustomImage = Image.extend({
+// Extension Image Avancée avec Node View
+const AdvancedImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
       width: { default: '100%' },
-      style: { default: '' }, // Pour les filtres CSS
-      class: { default: '' }, // Pour l'alignement
+      style: { default: '' }, 
+      textAlign: { default: 'center' }, // Ajout de l'alignement dans les attributs du noeud
     };
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageNodeView);
   },
 });
 
@@ -346,8 +351,8 @@ const DocEditor = () => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit, Underline, TextStyle, FontFamily, FontSize, CustomImage,
-      TextAlign.configure({ types: ['heading', 'paragraph', 'image'] }),
+      StarterKit, Underline, TextStyle, FontFamily, FontSize, AdvancedImage,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }), // Image gérée par NodeView
       Placeholder.configure({ placeholder: 'Commencez à écrire...' }),
     ],
     content: '',
@@ -749,30 +754,6 @@ const DocEditor = () => {
     } finally {
         setIsImageUploading(false);
     }
-  };
-
-  const setFilter = (filter: string) => {
-      if (!editor) return;
-      const currentStyle = editor.getAttributes('image').style || '';
-      // Simple regex replace or append
-      let newStyle = currentStyle;
-      if (newStyle.includes('filter:')) {
-          newStyle = newStyle.replace(/filter:[^;]+;?/, `filter: ${filter};`);
-      } else {
-          newStyle += `filter: ${filter};`;
-      }
-      editor.chain().focus().updateAttributes('image', { style: newStyle }).run();
-  };
-
-  const setAlignment = (align: 'left' | 'center' | 'right') => {
-      if (!editor) return;
-      // Tiptap Image doesn't support align out of the box easily without node view
-      // We use 'class' attribute or 'textAlign' extension if configured for image
-      editor.chain().focus().setTextAlign(align).run();
-  };
-
-  const setSize = (width: string) => {
-      editor?.chain().focus().updateAttributes('image', { width }).run();
   };
 
   if (isLoading || authLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
