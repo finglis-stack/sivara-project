@@ -46,39 +46,46 @@ L'architecture de facturation délègue la complexité transactionnelle à Strip
 *   **Edge Webhooks :** Un pipeline de webhooks sécurisé (`stripe-webhook`) intercepte les événements de paiement en temps réel pour mettre à jour les statuts `is_pro` via des fonctions serveur privilégiées.
 *   **Syncronisation Forcée :** Mécanisme de vérification à la demande permettant à l'utilisateur de forcer la réconciliation des états entre Stripe et la base de données en cas de latence des webhooks.
 
-### 5. Langage Propriétaire et Protocole SBP (.sivara)
-Au cœur de la portabilité sécurisée se trouve le **Sivara Binary Protocol (SBP)**, un langage de bas niveau interprété par le **Sivara Kernel** (Edge VM). Contrairement aux formats passifs (JSON, XML), un fichier `.sivara` est un programme exécutable par notre machine virtuelle.
+### 5. Langage Propriétaire "SivaraScript" et Kernel v5.0
+Au cœur de la portabilité sécurisée se trouve désormais **SivaraScript**, un langage de programmation Turing-complete propriétaire, interprété par le **Sivara Kernel** (Edge VM).
 
-#### Architecture du Langage SBP
-Le format repose sur une structure de **Bytecode** séquentiel définie par des OP_CODES stricts. Chaque segment du fichier est une instruction pour la VM.
+Contrairement aux formats passifs (JSON, XML), un fichier `.sivara` est un **programme exécutable**. Il ne se contente pas de stocker des données, il contient la logique algorithmique de sa propre sécurité.
 
-#### Structure Binaire (Hexdump)
+#### A. Le Langage SivaraScript (Syntaxe FR)
+Un langage de haut niveau, entièrement en français, permettant de définir des "Smart Contracts" cryptographiques complexes directement dans le fichier.
+*   **Variables & Mémoire :** Allocation dynamique (`soit x = ...`) et manipulation de registres mémoire (Heap).
+*   **Flux de Contrôle :** Structures conditionnelles complètes (`si ... alors ... sinon`) et sauts conditionnels.
+*   **Mathématiques & Logique :** Opérateurs arithmétiques et booléens (`ET`, `OU`, `abs`, `<`).
+*   **Introspection :** Accès aux variables d'environnement sécurisées (`env.geo.lat`, `env.temps`).
+
+**Exemple de Contrat (Geofencing) :**
+```sivara
+soit cible_lat = 455017
+soit rayon = 500
+
+si ( abs(env.geo.lat - cible_lat) < rayon ) alors (
+   exiger ( 1 )
+)
 ```
-[MAGIC: SVR3] [OP: IV] [LEN] [PAYLOAD] [OP: META] [LEN] [SHUFFLED_DATA] [OP: EOF]
+
+#### B. Architecture de la Machine Virtuelle (VM)
+Le code source est compilé à la volée en **Bytecode SBP (Sivara Binary Protocol)** avant d'être injecté dans le conteneur.
+*   **Stack-Based Architecture :** La VM utilise une pile d'opérandes pour les calculs, garantissant une exécution rapide et isolée.
+*   **Jeu d'Instructions Étendu (ISA) :**
+    *   `0x60` (**STORE**) / `0x61` (**LOAD**) : Gestion de la mémoire vive.
+    *   `0x70` (**JMP**) / `0x71` (**JMP_IF_FALSE**) : Gestion des branchements et boucles.
+    *   `0x40` (**ASSERT**) : Instruction critique de sécurité. Si la pile ne contient pas `1` (VRAI), la VM déclenche un **Kernel Panic** et détruit les clés de déchiffrement en mémoire.
+
+#### C. Structure du Conteneur (.sivara)
 ```
+[MAGIC: SVR3] [OP: VM_EXEC] [LEN] [BYTECODE] [OP: IV] ... [OP: DATA] ... [OP: EOF]
+```
+Le bloc `VM_EXEC` est exécuté **avant** toute tentative de lecture du bloc `DATA`. Si le script ne se termine pas proprement, le contenu reste mathématiquement inaccessible (chiffré et obfusqué).
 
-*   **Magic Bytes (`0x53 0x56 0x52 0x03`) :** Signature numérique ("SVR3") validant l'intégrité et la version du conteneur.
-*   **Jeu d'Instructions (Opcodes) :**
-    *   `0xB2` (**IV_BLOCK**) : Définit le vecteur d'initialisation cryptographique nécessaire au déchiffrement futur.
-    *   `0xD4` (**META_TAG**) : Contient les métadonnées et le "Contrat de Sécurité" (Geo-fencing, Fingerprint Lock).
-    *   `0xC3` (**DATA_CHUNK**) : Le payload principal (Titre + Contenu) concaténé et obfusqué.
-    *   `0xFF` (**EOF**) : Signal de fin de flux.
-
-#### Mécanisme de "Bit-Shuffling" (Obfuscation)
-Pour empêcher l'analyse statique ou la modification manuelle des fichiers, le Kernel applique une transformation binaire propriétaire lors de la compilation (`sivaraShuffle` / `sivaraUnshuffle`) :
+#### D. Mécanisme de "Bit-Shuffling" (Obfuscation)
+Pour empêcher l'analyse statique, le Kernel applique une transformation binaire propriétaire :
 *   **Rotation de Bits :** `((byte << 2) | (byte >> 6))` pour décaler la structure binaire.
-*   **XOR Dynamique :** Application d'une clé dérivée de la position du byte (`seed + index`), rendant chaque octet dépendant de sa position.
-
-#### Le cycle de vie "Compile/Decompile" (VM)
-1.  **Compilation (Export) :**
-    *   Le client envoie les données brutes et le contexte de sécurité (Coordonnées GPS, ID Matériel).
-    *   Le Kernel génère le bytecode SBP, injecte les règles dans le bloc `META`, applique le *Shuffling* et retourne le binaire `.sivara`.
-2.  **Exécution (Import) :**
-    *   Le fichier est uploadé au Kernel.
-    *   La VM lit les instructions SBP séquentiellement.
-    *   **Validation des Contrats Intelligents :** Avant de traiter l'instruction `DATA_CHUNK`, la VM exécute une vérification des conditions du bloc `META`.
-        *   *Exemple :* Si le contrat stipule `geofence: { lat: 45.5, lng: -73.5, radius: 10km }`, le Kernel vérifie l'IP de la requête. Si elle est hors zone, la VM déclenche une exception **Panic** et refuse de décompiler le reste du fichier.
-    *   Si valide, le contenu est "Unshuffled" et retourné au client pour déchiffrement AES local.
+*   **XOR Dynamique :** Application d'une clé dérivée de la position du byte (`seed + index`).
 
 ### 6. Centre d'Assistance Unifié - `help.sivara.ca`
 Une plateforme de support hybride combinant base de connaissances publique et système de billetterie sécurisé.
