@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
-import { Extension, mergeAttributes } from '@tiptap/core';
+import { Extension } from '@tiptap/core';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
 import { Placeholder } from '@tiptap/extension-placeholder';
@@ -72,48 +72,16 @@ const FontSize = Extension.create({
   },
 });
 
-// Extension Image Avancée avec Node View et Persistance
+// Extension Image Avancée avec Node View
 const AdvancedImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
-      width: {
-        default: '100%',
-        renderHTML: (attributes) => {
-          return {
-            width: attributes.width,
-            style: `width: ${attributes.width}`
-          };
-        },
-        parseHTML: (element) => element.style.width || element.getAttribute('width'),
-      },
-      style: {
-        default: '',
-        renderHTML: (attributes) => {
-          return {
-            style: attributes.style // Pour les filtres CSS (blur, grayscale, etc.)
-          };
-        },
-        parseHTML: (element) => element.getAttribute('style'),
-      },
-      textAlign: {
-        default: 'center',
-        renderHTML: (attributes) => {
-          return {
-            'data-text-align': attributes.textAlign,
-            style: `text-align: ${attributes.textAlign}`
-          };
-        },
-        parseHTML: (element) => element.getAttribute('data-text-align') || element.style.textAlign,
-      },
+      width: { default: '100%' },
+      style: { default: '' }, 
+      textAlign: { default: 'center' }, // Ajout de l'alignement dans les attributs du noeud
     };
   },
-  
-  // Important pour que le HTML généré contienne les bons wrappers pour l'alignement
-  renderHTML({ HTMLAttributes }) {
-    return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
-  },
-
   addNodeView() {
     return ReactNodeViewRenderer(ImageNodeView);
   },
@@ -253,6 +221,9 @@ const DocEditor = () => {
   const contentRef = useRef('');
   const myColorRef = useRef(CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)]);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  
+  // --- FIX: PREVENT RELOAD ON TAB SWITCH ---
+  const isLoadedRef = useRef(false);
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
@@ -429,6 +400,13 @@ const DocEditor = () => {
   useEffect(() => {
     if (!id || authLoading) return;
     
+    // --- FIX: PREVENT RELOAD ON TAB SWITCH ---
+    // Si on a déjà chargé le document pour cet ID, on ne le recharge pas
+    // sauf si l'ID change (navigation vers un autre doc)
+    if (isLoadedRef.current && document?.id === id) {
+        return;
+    }
+
     const init = async () => {
       if (!window.document.getElementById('sivara-google-fonts')) {
         const link = window.document.createElement('link');
@@ -444,11 +422,12 @@ const DocEditor = () => {
       }
 
       await fetchDocumentAndInitCrypto();
+      isLoadedRef.current = true; // Marquer comme chargé
     };
     init();
     
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
-  }, [id, user, editor, authLoading]);
+  }, [id, user, editor, authLoading]); // On garde les dépendances mais on bloque avec la ref
 
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
   

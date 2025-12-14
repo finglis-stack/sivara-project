@@ -24,7 +24,10 @@ export const ImageNodeView = (props: NodeViewProps) => {
 
   // --- GESTION DU REDIMENSIONNEMENT ---
   const onMouseDown = (e: React.MouseEvent) => {
+    // On empêche le drag and drop QUAND on redimensionne
     e.preventDefault();
+    e.stopPropagation();
+    
     if (!imageRef.current) return;
     setIsResizing(true);
     resizeRef.current = {
@@ -41,7 +44,6 @@ export const ImageNodeView = (props: NodeViewProps) => {
     const diffX = currentX - resizeRef.current.startX;
     const newWidth = Math.max(100, resizeRef.current.startWidth + diffX);
     
-    // On met à jour le style directement pour la fluidité
     imageRef.current.style.width = `${newWidth}px`;
   }, []);
 
@@ -50,7 +52,6 @@ export const ImageNodeView = (props: NodeViewProps) => {
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('mouseup', onMouseUp);
     
-    // On sauvegarde la taille finale dans Tiptap
     if (imageRef.current) {
       updateAttributes({ width: imageRef.current.style.width });
     }
@@ -69,7 +70,6 @@ export const ImageNodeView = (props: NodeViewProps) => {
         const fileExt = file.name.split('.').pop();
         const fileName = `${user.id}/${Date.now()}.${fileExt}`;
         
-        // Upload vers Supabase
         const { error: uploadError } = await supabase.storage
             .from('doc-assets')
             .upload(fileName, file);
@@ -78,7 +78,6 @@ export const ImageNodeView = (props: NodeViewProps) => {
 
         const { data: { publicUrl } } = supabase.storage.from('doc-assets').getPublicUrl(fileName);
         
-        // Mise à jour de la source
         updateAttributes({ src: publicUrl });
         showSuccess("Image remplacée");
     } catch (err: any) {
@@ -95,8 +94,7 @@ export const ImageNodeView = (props: NodeViewProps) => {
     position: 'relative' as const,
     marginTop: '1rem',
     marginBottom: '1rem',
-    // Important pour le drag & drop Tiptap
-    userSelect: 'none' as const,
+    lineHeight: '0', // Fix pour éviter les espaces fantômes
   };
 
   const imgStyle = {
@@ -106,7 +104,8 @@ export const ImageNodeView = (props: NodeViewProps) => {
     transition: isResizing ? 'none' : 'all 0.2s ease',
     filter: node.attrs.style?.includes('filter:') ? node.attrs.style.split('filter:')[1].split(';')[0] : 'none',
     boxShadow: props.selected ? '0 0 0 3px #3b82f6' : 'none',
-    cursor: 'default'
+    display: 'inline-block',
+    verticalAlign: 'middle'
   };
 
   return (
@@ -116,27 +115,26 @@ export const ImageNodeView = (props: NodeViewProps) => {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* L'IMAGE */}
+        {/* L'IMAGE - data-drag-handle permet à Tiptap de savoir qu'on peut la grabber ici */}
         <img 
           ref={imageRef}
           src={node.attrs.src} 
           alt={node.attrs.alt}
           style={imgStyle}
-          className="block"
-          draggable="false" // EMPÊCHE LA DUPLICATION NATIVE
+          data-drag-handle 
           onClick={() => props.updateAttributes({})} // Force selection logic
         />
 
         {/* OVERLAY DE CHARGEMENT */}
         {isUploading && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg pointer-events-none">
                 <Loader2 className="h-8 w-8 text-white animate-spin" />
             </div>
         )}
 
-        {/* BARRE D'OUTILS FLOTTANTE (Visible si sélectionné ou hover) */}
+        {/* BARRE D'OUTILS FLOTTANTE */}
         {(props.selected || isHovered) && !isResizing && (
-          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-white border border-gray-200 shadow-xl rounded-lg p-1 flex items-center gap-1 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-white border border-gray-200 shadow-xl rounded-lg p-1 flex items-center gap-1 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200 select-none" contentEditable={false}>
             
             {/* Alignement */}
             <div className="flex bg-gray-100 rounded p-0.5">
@@ -177,7 +175,7 @@ export const ImageNodeView = (props: NodeViewProps) => {
           </div>
         )}
 
-        {/* POIGNÉE DE REDIMENSIONNEMENT (Coin bas droit) */}
+        {/* POIGNÉE DE REDIMENSIONNEMENT */}
         {(props.selected || isHovered) && (
             <div 
                 className="absolute bottom-2 right-2 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-nwse-resize shadow-md z-40 hover:scale-125 transition-transform"
@@ -185,7 +183,6 @@ export const ImageNodeView = (props: NodeViewProps) => {
             />
         )}
 
-        {/* Input caché pour le remplacement */}
         <input 
             type="file" 
             ref={fileInputRef} 
