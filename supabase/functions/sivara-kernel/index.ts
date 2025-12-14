@@ -11,13 +11,14 @@ const corsHeaders = {
 // @ts-ignore
 const IP_GEO_KEY = Deno.env.get('IPGEOLOCATION_API_KEY');
 
-// --- SIVARA BINARY PROTOCOL (SBP) ---
+// --- SIVARA BINARY PROTOCOL (SBP) v3.1 ---
 const OP_CODES = {
   MAGIC: 0x53, // 'S'
   HEADER: 0xA1,
   IV_BLOCK: 0xB2,
   DATA_CHUNK: 0xC3,
   META_TAG: 0xD4,
+  GHOST_BLOCK: 0x1F, // NOUVEAU: Bloc Fantôme (Polymorphisme)
   EOF: 0xFF
 };
 
@@ -38,6 +39,22 @@ const sivaraUnshuffle = (buffer: Uint8Array, seed: number): Uint8Array => {
     result[i] = (val >> 2) | (val << 6);
   }
   return result;
+};
+
+// Générateur de bruit cryptographique (Leurre)
+const generateGhostBlock = (): Uint8Array[] => {
+  // Taille aléatoire entre 64 octets et 1KB pour varier la signature du fichier
+  const size = Math.floor(Math.random() * 1024) + 64;
+  const noise = crypto.getRandomValues(new Uint8Array(size));
+  
+  const lenBuffer = new Uint8Array(4);
+  new DataView(lenBuffer.buffer).setUint32(0, size);
+
+  return [
+    new Uint8Array([OP_CODES.GHOST_BLOCK]),
+    lenBuffer,
+    noise
+  ];
 };
 
 const strToBuf = (str: string) => new TextEncoder().encode(str);
@@ -77,12 +94,12 @@ serve(async (req) => {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // --- COMPILATION ---
+    // --- COMPILATION (AVEC POLYMORPHISME) ---
     if (action === 'compile') {
       const { encrypted_title, encrypted_content, iv, owner_id, icon, color, salt, security } = payload;
       
       const metaJson = JSON.stringify({ 
-          owner_id, icon, color, salt, v: 3,
+          owner_id, icon, color, salt, v: 3.1, // Version bump
           security: security || {} 
       });
       
@@ -96,10 +113,16 @@ serve(async (req) => {
       // MAGIC "SVR3"
       parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x03]));
 
+      // Injection aléatoire de bruit au début (1 chance sur 2)
+      if (Math.random() > 0.5) parts.push(...generateGhostBlock());
+
       // IV
       parts.push(new Uint8Array([OP_CODES.IV_BLOCK]));
       parts.push(new Uint8Array([ivBuf.length]));
       parts.push(ivBuf);
+
+      // Injection systématique de bruit entre IV et META pour casser la séquence
+      parts.push(...generateGhostBlock());
 
       // META
       const shuffledMeta = sivaraShuffle(metaBuf, 0xAA);
@@ -109,6 +132,9 @@ serve(async (req) => {
       parts.push(new Uint8Array([OP_CODES.META_TAG]));
       parts.push(metaLen);
       parts.push(shuffledMeta);
+
+      // Injection aléatoire de bruit avant la DATA
+      if (Math.random() > 0.3) parts.push(...generateGhostBlock());
 
       // DATA
       const combinedPayload = new Uint8Array(titleBuf.length + 1 + contentBuf.length);
@@ -123,6 +149,9 @@ serve(async (req) => {
       parts.push(new Uint8Array([OP_CODES.DATA_CHUNK]));
       parts.push(payloadLen);
       parts.push(shuffledPayload);
+
+      // Injection finale de bruit (Padding de fin)
+      parts.push(...generateGhostBlock());
 
       // EOF
       parts.push(new Uint8Array([OP_CODES.EOF]));
@@ -147,7 +176,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ file: base64Output }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // --- DÉCOMPILATION ---
+    // --- DÉCOMPILATION (IGNORER LES FANTÔMES) ---
     if (action === 'decompile') {
       const binaryString = atob(fileData);
       const bytes = new Uint8Array(binaryString.length);
@@ -167,6 +196,15 @@ serve(async (req) => {
       while (cursor < bytes.length) {
         const opcode = bytes[cursor++];
         if (opcode === OP_CODES.EOF) break;
+
+        // --- GESTION DES BLOCS FANTÔMES ---
+        if (opcode === OP_CODES.GHOST_BLOCK) {
+            // On lit la taille et on saute par dessus
+            const len = view.getUint32(cursor);
+            cursor += 4 + len;
+            // Le VM ignore silencieusement ce bloc
+            continue;
+        }
 
         if (opcode === OP_CODES.IV_BLOCK) {
           const len = bytes[cursor++];
