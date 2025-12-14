@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
-import { Extension } from '@tiptap/core';
+import { Extension, mergeAttributes } from '@tiptap/core';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
 import { Placeholder } from '@tiptap/extension-placeholder';
@@ -72,16 +72,59 @@ const FontSize = Extension.create({
   },
 });
 
-// Extension Image Avancée avec Node View
+// --- EXTENSION IMAGE ROBUSTE (FIX PERSISTANCE) ---
 const AdvancedImage = Image.extend({
+  // On surcharge addAttributes pour s'assurer que Tiptap sait lire/écrire nos données
   addAttributes() {
     return {
-      ...this.parent?.(),
-      width: { default: '100%' },
-      style: { default: '' }, 
-      textAlign: { default: 'center' }, // Ajout de l'alignement dans les attributs du noeud
+      src: {
+        default: null,
+      },
+      alt: {
+        default: null,
+      },
+      width: {
+        default: '100%',
+        // Lecture: on regarde le style width ou l'attribut width
+        parseHTML: (element) => element.style.width || element.getAttribute('width'),
+        // Ecriture: on ne fait rien ici, c'est géré dans renderHTML global
+      },
+      style: {
+        default: '',
+        // Lecture: on récupère tout le style inline
+        parseHTML: (element) => element.getAttribute('style'),
+      },
+      textAlign: {
+        default: 'center',
+        // Lecture: on regarde le style text-align ou data-align
+        parseHTML: (element) => element.style.textAlign || element.getAttribute('data-align'),
+      },
     };
   },
+
+  // C'est ICI que la magie opère pour la sauvegarde
+  renderHTML({ HTMLAttributes }) {
+    const { style, width, textAlign, ...rest } = HTMLAttributes;
+
+    // On construit une chaîne CSS complète et valide
+    const styles = [
+      style, // Les filtres (blur, grayscale...)
+      width ? `width: ${width}` : '', // La taille
+      textAlign ? `text-align: ${textAlign}` : '', // L'alignement interne
+      'display: block', // Force le block pour que les marges auto fonctionnent
+      // Gestion des marges pour l'alignement visuel
+      textAlign === 'center' ? 'margin-left: auto; margin-right: auto;' : '',
+      textAlign === 'right' ? 'margin-left: auto; margin-right: 0;' : '',
+      textAlign === 'left' ? 'margin-right: auto; margin-left: 0;' : '',
+    ].filter(Boolean).join('; ');
+
+    // On retourne une balise <img> standard avec tout dans l'attribut style
+    return ['img', mergeAttributes(this.options.HTMLAttributes, rest, { 
+      style: styles,
+      'data-align': textAlign // Backup pour le parsing
+    })];
+  },
+
   addNodeView() {
     return ReactNodeViewRenderer(ImageNodeView);
   },
@@ -355,7 +398,7 @@ const DocEditor = () => {
   const editor = useEditor({
     extensions: [
       StarterKit, Underline, TextStyle, FontFamily, FontSize, AdvancedImage,
-      TextAlign.configure({ types: ['heading', 'paragraph', 'image'] }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }), // Image gérée par NodeView
       Placeholder.configure({ placeholder: 'Commencez à écrire...' }),
     ],
     content: '',
