@@ -11,7 +11,7 @@ const corsHeaders = {
 // @ts-ignore
 const IP_GEO_KEY = Deno.env.get('IPGEOLOCATION_API_KEY');
 
-// --- SIVARA BINARY PROTOCOL (SBP) v4.2 ---
+// --- SIVARA BINARY PROTOCOL (SBP) v5.0 ---
 const OP_CODES = {
   MAGIC: 0x53, // 'S'
   HEADER: 0xA1,
@@ -25,12 +25,30 @@ const OP_CODES = {
 
 // --- VM INSTRUCTION SET (Sivara Assembly) ---
 const VM_OPS = {
+  // Stack & Env
   PUSH_CONST: 0x10,
   GET_ENV: 0x20,
+  
+  // Mémoire (Variables) - NOUVEAU
+  STORE: 0x60,      // Stocke le sommet de la pile dans une adresse mémoire
+  LOAD: 0x61,       // Charge une valeur depuis la mémoire vers la pile
+
+  // Flux de contrôle (Sauts) - NOUVEAU
+  JMP: 0x70,        // Saut inconditionnel
+  JMP_IF_FALSE: 0x71, // Saut si faux (pour le SI/SINON)
+
+  // Comparaisons
   EQ: 0x30, GT: 0x31, LT: 0x32,
+  
+  // Logique
   AND: 0x33, OR: 0x34,
+  
+  // Mathématiques
   ADD: 0x50, SUB: 0x51, ABS: 0x52,
-  ASSERT: 0x40, HALT: 0x00
+  
+  // Sécurité
+  ASSERT: 0x40,
+  HALT: 0x00
 };
 
 const ENV_VARS = {
@@ -40,7 +58,7 @@ const ENV_VARS = {
   USER_ID_HASH: 0x04
 };
 
-// --- UTILITAIRES BINAIRES ---
+// --- UTILS ---
 const int32ToBytes = (val: number): Uint8Array => {
   const buffer = new ArrayBuffer(4);
   new DataView(buffer).setInt32(0, val, false); // Big Endian
@@ -82,12 +100,17 @@ class SivaraCompiler {
   private tokens: string[] = [];
   private position: number = 0;
   private bytecode: number[] = [];
+  
+  // Table des symboles pour les variables (Nom -> Adresse Mémoire 0-255)
+  private variables: Map<string, number> = new Map();
+  private memoryPointer: number = 0;
 
   constructor(sourceCode: string) {
-    // Tokenizer simple : sépare par espaces et parenthèses
+    // Tokenizer amélioré : gère =, (, ), { }
     this.tokens = sourceCode
       .replace(/\(/g, ' ( ')
       .replace(/\)/g, ' ) ')
+      .replace(/=/g, ' = ')
       .trim()
       .split(/\s+/)
       .filter(t => t.length > 0);
@@ -96,6 +119,8 @@ class SivaraCompiler {
   public compile(): Uint8Array {
     this.position = 0;
     this.bytecode = [];
+    this.variables.clear();
+    this.memoryPointer = 0;
     
     while (this.position < this.tokens.length) {
       this.parseStatement();
@@ -114,23 +139,74 @@ class SivaraCompiler {
     bytes.forEach(b => this.bytecode.push(b));
   }
 
+  // Patch pour les sauts (Jump) : on remplace une valeur placeholder par la vraie adresse
+  private patchJump(addressIndex: number, targetIndex: number) {
+    const bytes = int32ToBytes(targetIndex);
+    for (let i = 0; i < 4; i++) {
+      this.bytecode[addressIndex + i] = bytes[i];
+    }
+  }
+
   private peek(): string { return this.tokens[this.position]; }
   private consume(): string { return this.tokens[this.position++]; }
 
-  // Grammaire : exiger ( EXPRESSION )
+  // --- PARSER ---
+
   private parseStatement() {
-    const token = this.consume();
-    if (token === 'exiger') {
+    const token = this.peek();
+
+    // 1. Déclaration de variable : soit x = 10
+    if (token === 'soit') {
+      this.consume(); // 'soit'
+      const varName = this.consume();
+      this.consume(); // '='
+      this.parseExpression(); // La valeur
+      
+      if (!this.variables.has(varName)) {
+        this.variables.set(varName, this.memoryPointer++);
+      }
+      const addr = this.variables.get(varName)!;
+      
+      this.emit(VM_OPS.STORE);
+      this.emitInt32(addr);
+    }
+    // 2. Condition : si ( cond ) alors ( ... )
+    else if (token === 'si') {
+      this.consume(); // 'si'
+      this.consume(); // '('
+      this.parseExpression(); // Condition
+      this.consume(); // ')'
+      
+      this.consume(); // 'alors'
+      this.consume(); // '(' debut bloc
+      
+      this.emit(VM_OPS.JMP_IF_FALSE);
+      const jumpFalseIndex = this.bytecode.length;
+      this.emitInt32(0); // Placeholder
+
+      // Bloc ALORS
+      while (this.peek() !== ')') {
+        this.parseStatement();
+      }
+      this.consume(); // ')' fin bloc
+
+      // Patch du saut
+      this.patchJump(jumpFalseIndex, this.bytecode.length);
+    }
+    // 3. Assertion : exiger ( ... )
+    else if (token === 'exiger') {
+      this.consume();
       this.consume(); // '('
       this.parseExpression();
       this.consume(); // ')'
       this.emit(VM_OPS.ASSERT);
-    } else {
-      throw new Error(`Erreur syntaxe: Attendu 'exiger', reçu '${token}'`);
+    }
+    else {
+      // Expression isolée (ex: calcul)
+      this.parseExpression();
     }
   }
 
-  // Expression : TERM { (ET|OU) TERM }
   private parseExpression() {
     this.parseTerm();
     while (this.position < this.tokens.length && ['ET', 'OU'].includes(this.peek())) {
@@ -141,7 +217,6 @@ class SivaraCompiler {
     }
   }
 
-  // Term : FACTEUR { (<|>) FACTEUR }
   private parseTerm() {
     this.parseFactor();
     while (this.position < this.tokens.length && ['<', '>', '=='].includes(this.peek())) {
@@ -153,7 +228,6 @@ class SivaraCompiler {
     }
   }
 
-  // Facteur : ATOME { (+|-) ATOME }
   private parseFactor() {
     this.parseAtom();
     while (this.position < this.tokens.length && ['+', '-'].includes(this.peek())) {
@@ -164,7 +238,6 @@ class SivaraCompiler {
     }
   }
 
-  // Atome : nombre, variable, ( EXPRESSION ), abs( EXPRESSION )
   private parseAtom() {
     const token = this.consume();
 
@@ -177,7 +250,7 @@ class SivaraCompiler {
     else if (token === 'env.temps') { this.emit(VM_OPS.GET_ENV, ENV_VARS.TIMESTAMP); }
     else if (token === 'abs') {
       this.consume(); // '('
-      this.parseExpression(); // Récursif pour abs(a - b)
+      this.parseExpression();
       this.consume(); // ')'
       this.emit(VM_OPS.ABS);
     }
@@ -185,8 +258,14 @@ class SivaraCompiler {
       this.parseExpression();
       this.consume(); // ')'
     }
+    // Variable existante
+    else if (this.variables.has(token)) {
+      const addr = this.variables.get(token)!;
+      this.emit(VM_OPS.LOAD);
+      this.emitInt32(addr);
+    }
     else {
-      throw new Error(`Token inconnu: ${token}`);
+      throw new Error(`Token inconnu ou variable non déclarée: ${token}`);
     }
   }
 }
@@ -194,10 +273,13 @@ class SivaraCompiler {
 // --- VM ENGINE (RUNTIME) ---
 const executeVM = (bytecode: Uint8Array, context: any) => {
   const stack: number[] = [];
+  // Mémoire vive de la VM (256 slots d'entiers)
+  const memory: number[] = new Array(256).fill(0);
+  
   const view = new DataView(bytecode.buffer, bytecode.byteOffset, bytecode.byteLength);
-  let pc = 0;
+  let pc = 0; // Program Counter
 
-  console.log(`[VM] Démarrage. Contexte: Lat=${context.lat}, Lng=${context.lng}`);
+  console.log(`[VM] Start. Context: Lat=${context.lat}, Lng=${context.lng}`);
 
   while (pc < bytecode.length) {
     const op = bytecode[pc++];
@@ -217,16 +299,46 @@ const executeVM = (bytecode: Uint8Array, context: any) => {
         else stack.push(0);
         break;
 
+      // --- MÉMOIRE ---
+      case VM_OPS.STORE:
+        const addrStore = view.getInt32(pc, false);
+        pc += 4;
+        const valStore = stack.pop()!;
+        memory[addrStore] = valStore;
+        break;
+
+      case VM_OPS.LOAD:
+        const addrLoad = view.getInt32(pc, false);
+        pc += 4;
+        stack.push(memory[addrLoad]);
+        break;
+
+      // --- SAUTS ---
+      case VM_OPS.JMP:
+        const targetJmp = view.getInt32(pc, false);
+        pc = targetJmp;
+        break;
+
+      case VM_OPS.JMP_IF_FALSE:
+        const targetJmpFalse = view.getInt32(pc, false);
+        pc += 4;
+        const condition = stack.pop();
+        if (condition === 0) {
+          pc = targetJmpFalse;
+        }
+        break;
+
+      // --- MATHS ---
       case VM_OPS.ADD: stack.push(stack.pop()! + stack.pop()!); break;
       case VM_OPS.SUB: { const b = stack.pop()!; const a = stack.pop()!; stack.push(a - b); break; }
       case VM_OPS.ABS: stack.push(Math.abs(stack.pop()!)); break;
       
+      // --- LOGIQUE ---
       case VM_OPS.EQ: stack.push(stack.pop() === stack.pop() ? 1 : 0); break;
       case VM_OPS.GT: { const b = stack.pop()!; const a = stack.pop()!; stack.push(a > b ? 1 : 0); break; }
       case VM_OPS.LT: { const b = stack.pop()!; const a = stack.pop()!; stack.push(a < b ? 1 : 0); break; }
-      
-      case VM_OPS.AND: { const b = stack.pop(); const a = stack.pop(); stack.push((a && b) ? 1 : 0); break; }
-      case VM_OPS.OR: { const b = stack.pop(); const a = stack.pop(); stack.push((a || b) ? 1 : 0); break; }
+      case VM_OPS.AND: { const b = stack.pop(); const a = stack.pop(); stack.push((a === 1 && b === 1) ? 1 : 0); break; }
+      case VM_OPS.OR: { const b = stack.pop(); const a = stack.pop(); stack.push((a === 1 || b === 1) ? 1 : 0); break; }
 
       case VM_OPS.ASSERT:
         if (stack.pop() !== 1) throw new Error("SIVARA_VM_PANIC: Security Assertion Failed. Access Denied.");
@@ -262,7 +374,7 @@ serve(async (req) => {
     if (action === 'compile') {
       const { encrypted_title, encrypted_content, iv, owner_id, icon, color, salt, security } = payload;
       
-      const metaJson = JSON.stringify({ owner_id, icon, color, salt, v: 4.2, security: security || {} });
+      const metaJson = JSON.stringify({ owner_id, icon, color, salt, v: 5.0, security: security || {} });
       const ivBuf = new Uint8Array(atob(iv).split('').map(c => c.charCodeAt(0)));
       const metaBuf = strToBuf(metaJson);
       const titleBuf = strToBuf(encrypted_title);
@@ -279,12 +391,20 @@ serve(async (req) => {
           const targetLng = Math.round(lng * 10000);
           const delta = Math.round((radius_km / 111) * 10000);
 
-          // Écriture du code source en Français
+          // Écriture du code source en SIVARA SCRIPT (Français)
+          // Utilisation des variables pour plus de clarté
           const sourceCode = `
+            soit cible_lat = ${targetLat}
+            soit cible_lng = ${targetLng}
+            soit rayon = ${delta}
+            
+            soit diff_lat = abs ( env.geo.lat - cible_lat )
+            soit diff_lng = abs ( env.geo.lng - cible_lng )
+            
             exiger ( 
-              abs ( env.geo.lat - ${targetLat} ) < ${delta} 
+              diff_lat < rayon 
               ET 
-              abs ( env.geo.lng - ${targetLng} ) < ${delta} 
+              diff_lng < rayon 
             )
           `;
           
