@@ -7,13 +7,14 @@ import { sivaraVM } from '@/lib/sivara-vm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
-import { useEditor, EditorContent, Extension } from '@tiptap/react';
+import { useEditor, EditorContent, Extension, BubbleMenu } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle } from '@tiptap/extension-text-style';
 import FontFamily from '@tiptap/extension-font-family';
+import Image from '@tiptap/extension-image';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 
 import {
@@ -23,7 +24,8 @@ import {
   BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
   Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool,
-  MapPin, Laptop, KeyRound, ShieldCheck, Crosshair, BookType
+  MapPin, Laptop, KeyRound, ShieldCheck, Crosshair, BookType, Image as ImageIcon,
+  Maximize, Minimize, Wand2, RefreshCcw, Upload
 } from 'lucide-react';
 
 import {
@@ -47,6 +49,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 // --- NEW COMPONENT: SIVARA TEXT ---
 import { SivaraText } from '@/components/SivaraText';
 
+// --- CUSTOM EXTENSIONS ---
 const FontSize = Extension.create({
   name: 'fontSize',
   addOptions() { return { types: ['textStyle'] }; },
@@ -64,6 +67,17 @@ const FontSize = Extension.create({
         },
       },
     }];
+  },
+});
+
+const CustomImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: { default: '100%' },
+      style: { default: '' }, // Pour les filtres CSS
+      class: { default: '' }, // Pour l'alignement
+    };
   },
 });
 
@@ -157,7 +171,7 @@ const DocEditor = () => {
   const [permission, setPermission] = useState<'read' | 'write'>('read');
   const [isOwner, setIsOwner] = useState(false);
   const [decryptionError, setDecryptionError] = useState(false);
-  const [userProfile, setUserProfile] = useState<{avatar_url: string | null} | null>(null);
+  const [userProfile, setUserProfile] = useState<{avatar_url: string | null, is_pro: boolean} | null>(null);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [cursors, setCursors] = useState<Record<string, RemoteCursor>>({});
   const [accessList, setAccessList] = useState<AccessEntry[]>([]);
@@ -167,12 +181,17 @@ const DocEditor = () => {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showImageDialog, setShowImageDialog] = useState(false);
   
   // UI Inputs
   const [selectedIcon, setSelectedIcon] = useState('FileText');
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
   const [newInviteEmail, setNewInviteEmail] = useState('');
   const [invitePermission, setInvitePermission] = useState<'read' | 'write'>('read');
+  
+  // Image Inputs
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [isImageUploading, setIsImageUploading] = useState(false);
   
   // Security Inputs (Export)
   const [exportPassword, setExportPassword] = useState('');
@@ -195,6 +214,7 @@ const DocEditor = () => {
   const editorRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef('');
   const myColorRef = useRef(CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { titleRef.current = title; }, [title]);
 
@@ -325,8 +345,8 @@ const DocEditor = () => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit, Underline, TextStyle, FontFamily, FontSize,
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      StarterKit, Underline, TextStyle, FontFamily, FontSize, CustomImage,
+      TextAlign.configure({ types: ['heading', 'paragraph', 'image'] }),
       Placeholder.configure({ placeholder: 'Commencez à écrire...' }),
     ],
     content: '',
@@ -381,8 +401,8 @@ const DocEditor = () => {
       }
 
       if (user) {
-        const { data } = await supabase.from('profiles').select('avatar_url').eq('id', user.id).single();
-        setUserProfile(data);
+        const { data } = await supabase.from('profiles').select('avatar_url, is_pro').eq('id', user.id).single();
+        setUserProfile(data as any);
       }
 
       await fetchDocumentAndInitCrypto();
@@ -671,13 +691,96 @@ const DocEditor = () => {
   const CurrentIcon = AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || FileText;
   const getIconTextColor = (bgColor: string) => { const hex = bgColor.replace('#', ''); const r = parseInt(hex.substr(0, 2), 16); const g = parseInt(hex.substr(2, 2), 16); const b = parseInt(hex.substr(4, 2), 16); return ((r * 299 + g * 587 + b * 114) / 1000) > 155 ? '#1F2937' : '#FFFFFF'; };
 
+  // --- IMAGE HANDLING ---
+  const addImageUrl = () => {
+    if (imageUrlInput) {
+      editor?.chain().focus().setImage({ src: imageUrlInput }).run();
+      setImageUrlInput('');
+      setShowImageDialog(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Check Quota
+    const isPro = userProfile?.is_pro || false;
+    const maxSize = isPro ? 35 * 1024 * 1024 : 15 * 1024 * 1024; // 35MB vs 15MB
+
+    if (file.size > maxSize) {
+        showError(`Fichier trop volumineux. Limite: ${isPro ? '35MB' : '15MB'}`);
+        return;
+    }
+
+    setIsImageUploading(true);
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+        
+        // On utilise le bucket 'doc-assets' (à créer si inexistant, ou fallback sur 'covers' si besoin)
+        // Pour l'instant on tente 'doc-assets'
+        const { error: uploadError } = await supabase.storage
+            .from('doc-assets')
+            .upload(fileName, file);
+
+        if (uploadError) {
+            // Fallback si le bucket n'existe pas encore (pour éviter de casser la démo)
+            console.warn("Bucket doc-assets manquant, tentative sur covers...");
+             const { error: fallbackError } = await supabase.storage
+                .from('covers')
+                .upload(`doc-images/${fileName}`, file);
+             
+             if (fallbackError) throw fallbackError;
+             
+             const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(`doc-images/${fileName}`);
+             editor?.chain().focus().setImage({ src: publicUrl }).run();
+        } else {
+             const { data: { publicUrl } } = supabase.storage.from('doc-assets').getPublicUrl(fileName);
+             editor?.chain().focus().setImage({ src: publicUrl }).run();
+        }
+        
+        setShowImageDialog(false);
+        showSuccess("Image insérée");
+    } catch (error: any) {
+        console.error(error);
+        showError("Erreur lors de l'upload");
+    } finally {
+        setIsImageUploading(false);
+    }
+  };
+
+  const setFilter = (filter: string) => {
+      if (!editor) return;
+      const currentStyle = editor.getAttributes('image').style || '';
+      // Simple regex replace or append
+      let newStyle = currentStyle;
+      if (newStyle.includes('filter:')) {
+          newStyle = newStyle.replace(/filter:[^;]+;?/, `filter: ${filter};`);
+      } else {
+          newStyle += `filter: ${filter};`;
+      }
+      editor.chain().focus().updateAttributes('image', { style: newStyle }).run();
+  };
+
+  const setAlignment = (align: 'left' | 'center' | 'right') => {
+      if (!editor) return;
+      // Tiptap Image doesn't support align out of the box easily without node view
+      // We use 'class' attribute or 'textAlign' extension if configured for image
+      editor.chain().focus().setTextAlign(align).run();
+  };
+
+  const setSize = (width: string) => {
+      editor?.chain().focus().updateAttributes('image', { width }).run();
+  };
+
   if (isLoading || authLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
   if (decryptionError) { return ( <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center"> <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full border border-gray-200"> <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"> <LockKeyhole className="h-8 w-8 text-red-600" /> </div> <h1 className="text-2xl font-bold text-gray-900 mb-2">Contenu sécurisé inaccessible</h1> <p className="text-gray-500 mb-6"> Ce document est chiffré et la clé de déchiffrement n'a pas pu être générée correctement. </p> <Button onClick={() => window.location.reload()} className="w-full">Réessayer</Button> </div> </div> ); }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F3F4F6] pt-[env(safe-area-inset-top)]">
       
-      {/* SIVARA TEXT COMPONENT (REMPLACE LEXIBOOK) */}
+      {/* SIVARA TEXT COMPONENT */}
       <SivaraText 
         editor={editor} 
         isOpen={showSivaraText} 
@@ -723,7 +826,6 @@ const DocEditor = () => {
 
               {isOwner && <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-2 h-8 sm:h-9 px-2 sm:px-4" onClick={() => setShowShareDialog(true)}><Share2 className="h-3 w-3 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Partager</span></Button>}
               
-              {/* BOUTON SIVARA TEXT */}
               <Button 
                 variant={showSivaraText ? "secondary" : "ghost"} 
                 size="icon" 
@@ -769,6 +871,8 @@ const DocEditor = () => {
                     <div className="w-px h-4 bg-gray-200 mx-1"></div>
                     <Toggle size="sm" className="h-7 w-7 sm:h-9 sm:w-9" pressed={editor?.isActive('bulletList')} onPressedChange={() => editor?.chain().focus().toggleBulletList().run()}><List className="h-3 w-3 sm:h-4 sm:w-4" /></Toggle>
                     <Toggle size="sm" className="h-7 w-7 sm:h-9 sm:w-9" pressed={editor?.isActive('orderedList')} onPressedChange={() => editor?.chain().focus().toggleOrderedList().run()}><ListOrdered className="h-3 w-3 sm:h-4 sm:w-4" /></Toggle>
+                    <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 sm:h-9 sm:w-9 p-0" onClick={() => setShowImageDialog(true)}><ImageIcon className="h-3 w-3 sm:h-4 sm:w-4" /></Button>
                 </div>
             </div>
         )}
@@ -788,10 +892,57 @@ const DocEditor = () => {
         ))}
 
         <div className="max-w-[21cm] w-full mx-auto py-4 sm:py-8">
+          {editor && (
+            <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }} shouldShow={({ editor }) => editor.isActive('image')}>
+                <div className="bg-white border border-gray-200 shadow-xl rounded-lg p-1 flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAlignment('left')}><AlignLeft className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAlignment('center')}><AlignCenter className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAlignment('right')}><AlignRight className="h-4 w-4" /></Button>
+                    <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSize('50%')}><Minimize className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSize('100%')}><Maximize className="h-4 w-4" /></Button>
+                    <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><Wand2 className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => setFilter('none')}>Normal</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setFilter('grayscale(100%)')}>Noir & Blanc</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setFilter('sepia(100%)')}>Sépia</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setFilter('blur(2px)')}>Flou</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowImageDialog(true)}><RefreshCcw className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => editor.chain().focus().deleteSelection().run()}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+            </BubbleMenu>
+          )}
           <EditorContent editor={editor} />
         </div>
       </div>
 
+      {/* Image Dialog */}
+      <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader><DialogTitle>Insérer une image</DialogTitle><DialogDescription>Ajoutez une image depuis votre appareil ou via une URL.</DialogDescription></DialogHeader>
+            <Tabs defaultValue="upload">
+                <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="upload">Upload</TabsTrigger><TabsTrigger value="url">Lien</TabsTrigger></TabsList>
+                <TabsContent value="upload" className="py-4">
+                    <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => imageInputRef.current?.click()}>
+                        {isImageUploading ? <Loader2 className="h-8 w-8 mx-auto animate-spin text-gray-400" /> : <Upload className="h-8 w-8 mx-auto text-gray-400" />}
+                        <p className="mt-2 text-sm text-gray-500">Cliquez pour choisir un fichier</p>
+                        <p className="text-xs text-gray-400 mt-1">Max: {userProfile?.is_pro ? '35MB' : '15MB'}</p>
+                    </div>
+                    <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </TabsContent>
+                <TabsContent value="url" className="py-4 space-y-4">
+                    <Input placeholder="https://exemple.com/image.jpg" value={imageUrlInput} onChange={(e) => setImageUrlInput(e.target.value)} />
+                    <Button onClick={addImageUrl} className="w-full">Insérer</Button>
+                </TabsContent>
+            </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Share Dialog */}
       <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
         <DialogContent className="sm:max-w-[500px] max-w-[95vw]">
           <DialogHeader><DialogTitle>Partager</DialogTitle><DialogDescription>Gérez les accès.</DialogDescription></DialogHeader>
