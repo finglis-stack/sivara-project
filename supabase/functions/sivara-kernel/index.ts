@@ -37,7 +37,7 @@ const VM_OPS = {
   AND: 0x33,        // &&
   OR: 0x34,         // ||
   
-  // Mathématiques (NOUVEAU)
+  // Mathématiques
   ADD: 0x50,        // +
   SUB: 0x51,        // -
   ABS: 0x52,        // Valeur Absolue
@@ -55,6 +55,7 @@ const ENV_VARS = {
   USER_ID_HASH: 0x04
 };
 
+// --- UTILS ---
 const sivaraShuffle = (buffer: Uint8Array, seed: number): Uint8Array => {
   const result = new Uint8Array(buffer.length);
   for (let i = 0; i < buffer.length; i++) {
@@ -78,8 +79,15 @@ const generateGhostBlock = (): Uint8Array[] => {
   const size = Math.floor(Math.random() * 1024) + 64;
   const noise = crypto.getRandomValues(new Uint8Array(size));
   const lenBuffer = new Uint8Array(4);
-  new DataView(lenBuffer.buffer).setUint32(0, size);
+  new DataView(lenBuffer.buffer).setUint32(0, size); // Big Endian default
   return [new Uint8Array([OP_CODES.GHOST_BLOCK]), lenBuffer, noise];
+};
+
+// CRITIQUE: Force Big Endian pour compatibilité VM DataView.getInt32()
+const int32ToBytes = (val: number): Uint8Array => {
+  const buffer = new ArrayBuffer(4);
+  new DataView(buffer).setInt32(0, val, false); // false = Big Endian
+  return new Uint8Array(buffer);
 };
 
 const strToBuf = (str: string) => new TextEncoder().encode(str);
@@ -98,7 +106,7 @@ const executeVM = (bytecode: Uint8Array, context: any) => {
 
     switch (op) {
       case VM_OPS.PUSH_CONST:
-        const val = view.getInt32(pc);
+        const val = view.getInt32(pc, false); // Big Endian explicit
         pc += 4;
         stack.push(val);
         break;
@@ -118,7 +126,7 @@ const executeVM = (bytecode: Uint8Array, context: any) => {
         break;
       case VM_OPS.SUB:
         const bSub = stack.pop()!; const aSub = stack.pop()!;
-        stack.push(aSub - bSub); // Attention ordre: a - b
+        stack.push(aSub - bSub);
         break;
       case VM_OPS.ABS:
         const aAbs = stack.pop()!;
@@ -205,42 +213,36 @@ serve(async (req) => {
       if (security && security.geofence) {
           const { lat, lng, radius_km } = security.geofence;
           
-          // Conversion en Entiers (x10000) pour la VM
           const targetLat = Math.round(lat * 10000);
           const targetLng = Math.round(lng * 10000);
-          
-          // Approximation Bounding Box : 1 degre lat ~= 111km
-          // Delta Lat/Lng autorisé = (Radius / 111) * 10000
           const delta = Math.round((radius_km / 111) * 10000);
 
           const vmBuilder: number[] = [];
           
-          // LOGIQUE: (ABS(ENV_LAT - TARGET_LAT) < DELTA) && (ABS(ENV_LNG - TARGET_LNG) < DELTA)
-          
           // --- CHECK LATITUDE ---
           vmBuilder.push(VM_OPS.GET_ENV, ENV_VARS.GEO_LAT);
-          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([targetLat]).buffer));
+          vmBuilder.push(VM_OPS.PUSH_CONST, ...int32ToBytes(targetLat)); // FIX: Big Endian
           vmBuilder.push(VM_OPS.SUB);
           vmBuilder.push(VM_OPS.ABS);
-          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([delta]).buffer));
-          vmBuilder.push(VM_OPS.LT); // Resultat A (sur la stack)
+          vmBuilder.push(VM_OPS.PUSH_CONST, ...int32ToBytes(delta)); // FIX: Big Endian
+          vmBuilder.push(VM_OPS.LT); 
 
           // --- CHECK LONGITUDE ---
           vmBuilder.push(VM_OPS.GET_ENV, ENV_VARS.GEO_LNG);
-          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([targetLng]).buffer));
+          vmBuilder.push(VM_OPS.PUSH_CONST, ...int32ToBytes(targetLng)); // FIX: Big Endian
           vmBuilder.push(VM_OPS.SUB);
           vmBuilder.push(VM_OPS.ABS);
-          vmBuilder.push(VM_OPS.PUSH_CONST, ...new Uint8Array(new Int32Array([delta]).buffer));
-          vmBuilder.push(VM_OPS.LT); // Resultat B (sur la stack)
+          vmBuilder.push(VM_OPS.PUSH_CONST, ...int32ToBytes(delta)); // FIX: Big Endian
+          vmBuilder.push(VM_OPS.LT); 
 
           // --- COMBINAISON ---
-          vmBuilder.push(VM_OPS.AND); // A && B
-          vmBuilder.push(VM_OPS.ASSERT); // Crash si faux
+          vmBuilder.push(VM_OPS.AND); 
+          vmBuilder.push(VM_OPS.ASSERT); 
           vmBuilder.push(VM_OPS.HALT);
 
           const vmBytecode = new Uint8Array(vmBuilder);
           const vmLen = new Uint8Array(4);
-          new DataView(vmLen.buffer).setUint32(0, vmBytecode.length);
+          new DataView(vmLen.buffer).setUint32(0, vmBytecode.length); // Big Endian default
 
           parts.push(new Uint8Array([OP_CODES.VM_EXEC]));
           parts.push(vmLen);
@@ -316,7 +318,6 @@ serve(async (req) => {
       const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
       let geoContext = { lat: 0, lng: 0 };
       
-      // Récupération Geo IP pour le contexte VM
       if (IP_GEO_KEY) {
           try {
               const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
@@ -371,11 +372,6 @@ serve(async (req) => {
           cursor += len;
         }
         else if (opcode === OP_CODES.DATA_CHUNK) {
-          // Legacy JSON Logic (Fallback si pas de VM)
-          if (metaData.security && metaData.security.allowed_emails) {
-             // ... (Logique existante conservée pour compatibilité)
-          }
-
           const len = view.getUint32(cursor);
           cursor += 4;
           const chunk = bytes.slice(cursor, cursor + len);
