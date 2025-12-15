@@ -8,7 +8,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
-import { Building2, User, Loader2, ArrowRight, ArrowLeft, CheckCircle2, Shield } from 'lucide-react';
+import { Building2, User, Loader2, ArrowRight } from 'lucide-react';
+import Lottie from 'lottie-react';
+import animationData from '../../public/animal.json';
 
 // Liste réorganisée : CA (+1) en premier avec image
 const countryCodes = [
@@ -119,7 +121,7 @@ const Onboarding = () => {
     <div className="min-h-screen flex bg-white font-sans selection:bg-gray-100">
       
       {/* GAUCHE : FORMULAIRE */}
-      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100">
+      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100 relative z-10 bg-white">
         <div className="max-w-md mx-auto w-full space-y-8">
           
           {/* Header */}
@@ -242,31 +244,10 @@ const Onboarding = () => {
         </div>
       </div>
 
-      {/* DROITE : VISUEL (FOND CLAIR) */}
+      {/* DROITE : LOTTIE ANIMATION */}
       <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden">
-         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30"></div>
-         
-         <div className="relative z-10 max-w-md w-full animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
-            <div className="bg-white p-2 rounded-2xl shadow-2xl mb-10 transform rotate-1 hover:rotate-0 transition-transform duration-500">
-                <img src="/device-hero-new.jpg" alt="Sivara Ecosystem" className="rounded-xl w-full h-auto object-cover" />
-            </div>
-
-            <div className="space-y-6">
-                <div className="flex items-start gap-4">
-                    <div className="mt-1 p-2 bg-blue-50 text-blue-600 rounded-lg"><Shield className="h-5 w-5" /></div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900">Souveraineté Numérique</h3>
-                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Reprenez le contrôle total de vos données. Pas de tracking, pas de revente.</p>
-                    </div>
-                </div>
-                <div className="flex items-start gap-4">
-                    <div className="mt-1 p-2 bg-green-50 text-green-600 rounded-lg"><CheckCircle2 className="h-5 w-5" /></div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900">Tout inclus</h3>
-                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Email, Cloud, Docs et Identité dans un seul abonnement transparent.</p>
-                    </div>
-                </div>
-            </div>
+         <div className="w-full max-w-lg">
+            <Lottie animationData={animationData} loop={true} />
          </div>
       </div>
     </div>

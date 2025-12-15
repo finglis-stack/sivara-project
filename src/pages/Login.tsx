@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
-import { Loader2, ArrowRight, Check, ShieldCheck, Zap, Globe } from 'lucide-react';
+import { Loader2, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import Lottie from 'lottie-react';
+import animationData from '../../public/animal.json';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -18,7 +20,6 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
 
   const returnTo = searchParams.get('returnTo') || '/';
 
@@ -50,7 +51,6 @@ const Login = () => {
     e.preventDefault();
     if (!email) { showError('Veuillez entrer votre adresse email'); return; }
     setIsChecking(true);
-    // Simulation UX fluide
     setTimeout(() => {
         setStep('password');
         setIsChecking(false);
@@ -98,7 +98,7 @@ const Login = () => {
   return (
     <div className="min-h-screen flex bg-white font-sans selection:bg-gray-100">
       {/* GAUCHE : FORMULAIRE */}
-      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100">
+      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100 relative z-10 bg-white">
         <div className="max-w-sm mx-auto w-full space-y-10">
           
           {/* Logo */}
@@ -210,38 +210,10 @@ const Login = () => {
         </div>
       </div>
 
-      {/* DROITE : VISUEL & FEATURES */}
+      {/* DROITE : LOTTIE ANIMATION */}
       <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden">
-         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30"></div>
-         
-         <div className="relative z-10 max-w-md w-full animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
-            <div className="bg-white p-2 rounded-2xl shadow-2xl mb-10 transform rotate-1 hover:rotate-0 transition-transform duration-500">
-                <img src="/device-hero-new.jpg" alt="Sivara Ecosystem" className="rounded-xl w-full h-auto object-cover" />
-            </div>
-
-            <div className="space-y-6">
-                <div className="flex items-start gap-4">
-                    <div className="mt-1 p-2 bg-blue-50 text-blue-600 rounded-lg"><ShieldCheck className="h-5 w-5" /></div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900">Sécurité Zero-Knowledge</h3>
-                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Vos données sont chiffrées avant de quitter votre appareil. Vous seul possédez la clé.</p>
-                    </div>
-                </div>
-                <div className="flex items-start gap-4">
-                    <div className="mt-1 p-2 bg-purple-50 text-purple-600 rounded-lg"><Zap className="h-5 w-5" /></div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900">Performance Edge</h3>
-                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Une infrastructure distribuée mondialement pour une latence minimale.</p>
-                    </div>
-                </div>
-                <div className="flex items-start gap-4">
-                    <div className="mt-1 p-2 bg-green-50 text-green-600 rounded-lg"><Globe className="h-5 w-5" /></div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900">Écosystème Unifié</h3>
-                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Docs, Mail, Drive et Identité connectés en toute fluidité.</p>
-                    </div>
-                </div>
-            </div>
+         <div className="w-full max-w-lg">
+            <Lottie animationData={animationData} loop={true} />
          </div>
       </div>
     </div>
