@@ -5,6 +5,7 @@ import { Check, Loader2, ArrowRight, Globe, Database, ShieldCheck, Zap, Layers, 
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
+import Footer from '@/components/Footer';
 
 interface UserProfile {
   is_pro: boolean;
@@ -86,7 +87,7 @@ const Pricing = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white selection:bg-pink-500 selection:text-white" style={{ fontFamily: '"Inter", sans-serif' }}>
+    <div className="min-h-screen bg-white selection:bg-pink-500 selection:text-white flex flex-col" style={{ fontFamily: '"Inter", sans-serif' }}>
       
       <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-black/10 backdrop-blur-md border-b border-white/10">
         <div className="container mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
@@ -325,6 +326,7 @@ const Pricing = () => {
               </div>
           </div>
       </div>
+      <Footer />
     </div>
   );
 };

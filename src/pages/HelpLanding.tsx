@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import UserMenu from '@/components/UserMenu';
+import Footer from '@/components/Footer';
 import { Search, Book, ArrowRight, Shield, Mail, LifeBuoy, Lock, Settings, Loader2, FileText } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -127,13 +128,14 @@ const HelpLanding = () => {
             </div>
         )}
       </div>
-      <div className="border-t border-gray-100 py-12 bg-gray-50 mt-auto">
+      <div className="border-t border-gray-100 py-12 bg-gray-50">
          <div className="container mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="flex items-start gap-4 group cursor-pointer"><div className="p-3 bg-white rounded-full shadow-sm text-green-600 group-hover:scale-110 transition-transform"><Shield className="h-6 w-6" /></div><div><h4 className="font-bold text-gray-900">Confidentialité</h4><p className="text-sm text-gray-500 mt-1">Protection des données.</p></div></div>
             <div className="flex items-start gap-4 group cursor-pointer"><div className="p-3 bg-white rounded-full shadow-sm text-blue-600 group-hover:scale-110 transition-transform"><Mail className="h-6 w-6" /></div><div><h4 className="font-bold text-gray-900">Support</h4><p className="text-sm text-gray-500 mt-1">Contactez notre équipe.</p></div></div>
             <div className="flex items-start gap-4 group cursor-pointer"><div className="p-3 bg-white rounded-full shadow-sm text-purple-600 group-hover:scale-110 transition-transform"><Settings className="h-6 w-6" /></div><div><h4 className="font-bold text-gray-900">Système</h4><p className="text-sm text-gray-500 mt-1">Opérationnel.</p></div></div>
          </div>
       </div>
+      <Footer />
     </div>
   );
 };

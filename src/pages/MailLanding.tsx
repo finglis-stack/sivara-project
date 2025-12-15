@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Shield, Zap, Inbox, Lock } from 'lucide-react';
+import Footer from '@/components/Footer';
 
 const MailLanding = () => {
   
@@ -16,7 +17,7 @@ const MailLanding = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans selection:bg-orange-500 selection:text-white">
+    <div className="min-h-screen bg-white font-sans selection:bg-orange-500 selection:text-white flex flex-col">
       {/* Navbar Transparente */}
       <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-black/10 backdrop-blur-md border-b border-white/10">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
@@ -131,19 +132,7 @@ const MailLanding = () => {
         </div>
       </div>
 
-      <footer className="py-10 bg-gray-50 border-t border-gray-200">
-        <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6 text-sm text-gray-500">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-gray-900">Sivara Mail</span>
-            <span>&copy; 2024</span>
-          </div>
-          <div className="flex gap-8">
-            <a href="#" className="hover:text-gray-900 transition-colors">Confidentialité</a>
-            <a href="#" className="hover:text-gray-900 transition-colors">Sécurité</a>
-            <a href="#" className="hover:text-gray-900 transition-colors">Support</a>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 };

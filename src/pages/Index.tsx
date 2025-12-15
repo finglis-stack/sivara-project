@@ -4,6 +4,7 @@ import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
 import UserMenu from '@/components/UserMenu';
+import Footer from '@/components/Footer';
 import { showError } from '@/utils/toast';
 import { 
   Settings, Globe, Zap, Shield, FileText, ArrowRight, Folder,
@@ -221,7 +222,7 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] font-sans selection:bg-yellow-400 selection:text-black">
+    <div className="min-h-screen bg-[#FAFAFA] font-sans selection:bg-yellow-400 selection:text-black flex flex-col">
       {hasSearched && (
         <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
           <div className="container mx-auto px-6 py-4 flex items-center justify-between">
@@ -247,7 +248,7 @@ const Index = () => {
         </header>
       )}
 
-      <div className={hasSearched ? "pt-24" : ""}>
+      <div className={`flex-1 ${hasSearched ? "pt-24" : ""}`}>
         {!hasSearched ? (
           <div className="relative min-h-screen w-full overflow-hidden flex flex-col bg-[#FAFAFA]">
              <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -422,6 +423,9 @@ const Index = () => {
           </div>
         )}
       </div>
+      
+      {/* FOOTER GLOBAL */}
+      <Footer />
     </div>
   );
 };

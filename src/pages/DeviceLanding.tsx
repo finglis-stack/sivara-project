@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from '@/components/UserMenu';
+import Footer from '@/components/Footer';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -254,7 +255,7 @@ const DeviceLanding = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black font-sans selection:bg-white selection:text-black overflow-x-hidden text-white">
+    <div className="min-h-screen bg-black font-sans selection:bg-white selection:text-black overflow-x-hidden text-white flex flex-col">
       {/* NAVBAR */}
       <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-black/50 backdrop-blur-md border-b border-white/5">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
@@ -461,7 +462,7 @@ const DeviceLanding = () => {
          </div>
       </section>
 
-      {/* Footer */}
+      {/* Footer CTA */}
       <div className="py-24 bg-black border-t border-white/10 text-center">
         <div className="container mx-auto px-6">
             <h2 className="text-4xl md:text-6xl font-bold mb-8 text-white">Le futur est ouvert.</h2>
@@ -474,6 +475,8 @@ const DeviceLanding = () => {
             <p className="mt-8 text-sm text-gray-500">Expédition sous 48h au Canada. Garantie 2 ans incluse.</p>
         </div>
       </div>
+
+      <Footer />
 
       {/* CONFIGURATOR DIALOG (LOGIQUE PRÉSERVÉE) */}
       <Dialog open={showConfig} onOpenChange={setShowConfig}>
