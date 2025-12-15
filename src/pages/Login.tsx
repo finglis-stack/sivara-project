@@ -3,10 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
-import { Loader2, Mail, Lock, ArrowRight, ArrowLeft, Send } from 'lucide-react';
+import { Loader2, ArrowRight, Check, ShieldCheck, Zap, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Login = () => {
@@ -14,9 +13,7 @@ const Login = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   
-  // État étendu : 'email' -> 'password' OU 'email' -> 'recovery'
   const [step, setStep] = useState<'email' | 'password' | 'recovery'>('email');
-  
   const [isChecking, setIsChecking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -35,10 +32,8 @@ const Login = () => {
             hashParams.append('expires_in', String(session.expires_in));
             hashParams.append('token_type', session.token_type);
             hashParams.append('type', 'recovery'); 
-
             const separator = url.includes('#') ? '&' : '#';
-            const redirectUrl = `${url}${separator}${hashParams.toString()}`;
-            window.location.href = redirectUrl;
+            window.location.href = `${url}${separator}${hashParams.toString()}`;
             return;
         }
         window.location.href = url;
@@ -51,28 +46,15 @@ const Login = () => {
     if (user) handleRedirect(returnTo);
   }, [user, returnTo]);
 
-  useEffect(() => {
-    if (blockedUntil) {
-      const interval = setInterval(() => {
-        if (Date.now() >= blockedUntil) setBlockedUntil(null);
-      }, 100);
-      return () => clearInterval(interval);
-    }
-  }, [blockedUntil]);
-
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) { showError('Veuillez entrer votre adresse email'); return; }
-    if (blockedUntil && Date.now() < blockedUntil) { return; }
-
     setIsChecking(true);
-    try {
-      // Simulation UX : on passe au mot de passe par défaut
-      // Supabase renverra une erreur spécifique si le compte n'existe pas lors du SignIn
-      setStep('password');
-    } finally {
-      setIsChecking(false);
-    }
+    // Simulation UX fluide
+    setTimeout(() => {
+        setStep('password');
+        setIsChecking(false);
+    }, 500);
   };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -83,7 +65,7 @@ const Login = () => {
       setIsLoading(true);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      showSuccess('Connexion réussie !');
+      showSuccess('Connexion réussie');
     } catch (error: any) {
       console.error('Login error:', error);
       showError(error.message || 'Identifiants incorrects');
@@ -97,20 +79,14 @@ const Login = () => {
     
     setIsLoading(true);
     try {
-        // Redirection explicite vers account.sivara.ca/reset-password
-        // Cela permet de gérer correctement le token même si l'utilisateur est en local
         const redirectUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:8080/reset-password?app=account'
             : 'https://account.sivara.ca/reset-password';
 
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: redirectUrl,
-        });
-
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
         if (error) throw error;
 
         showSuccess(`Email de récupération envoyé à ${email}`);
-        // On reste sur la page ou on revient à l'accueil
         setTimeout(() => setStep('email'), 3000);
     } catch (error: any) {
         showError(error.message || "Erreur d'envoi");
@@ -119,118 +95,154 @@ const Login = () => {
     }
   };
 
-  const getRemainingTime = () => {
-    if (!blockedUntil) return 0;
-    return Math.ceil((blockedUntil - Date.now()) / 1000);
-  };
-
-  const isBlocked = blockedUntil && Date.now() < blockedUntil;
-
   return (
-    <div className="min-h-screen relative flex items-center justify-center px-4 py-8 sm:py-0">
-      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url(/auth-bg-v2.jpg)' }}>
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-      </div>
+    <div className="min-h-screen flex bg-white font-sans selection:bg-gray-100">
+      {/* GAUCHE : FORMULAIRE */}
+      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100">
+        <div className="max-w-sm mx-auto w-full space-y-10">
+          
+          {/* Logo */}
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
+             <img src="/sivara-logo.png" alt="Sivara" className="h-10 w-10 object-contain" />
+             <span className="text-xl font-bold tracking-tight text-gray-900">Sivara</span>
+          </div>
 
-      <div className="relative z-10 w-full max-w-md">
-        <div className="text-center mb-6 sm:mb-8">
-          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-2 sm:mb-3 drop-shadow-lg">Sivara</h1>
-          <p className="text-base sm:text-lg text-white/90 drop-shadow px-4">Bienvenue ! Connectez-vous à votre compte</p>
-        </div>
+          {/* Header */}
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-900">
+              {step === 'recovery' ? 'Récupération' : 'Connexion'}
+            </h1>
+            <p className="text-gray-500 text-sm font-light">
+              {step === 'email' ? 'Accédez à votre espace sécurisé.' : 
+               step === 'password' ? `Bienvenue de nouveau, ${email}` : 
+               'Nous vous enverrons un lien sécurisé.'}
+            </p>
+          </div>
 
-        <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur overflow-hidden mx-auto w-full">
-          <CardHeader className="space-y-1 pb-4 sm:pb-6 px-5 sm:px-6 pt-5 sm:pt-6">
-            <CardTitle className="text-xl sm:text-2xl font-bold">
-                {step === 'recovery' ? 'Récupération' : 'Connexion'}
-            </CardTitle>
-            <CardDescription className="text-sm sm:text-base">
-              {step === 'email' ? 'Entrez votre adresse email pour commencer' : 
-               step === 'password' ? 'Entrez votre mot de passe pour continuer' : 
-               'Nous allons vous envoyer un lien de connexion'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-5 sm:px-6 pb-5 sm:pb-6">
+          {/* Formulaire */}
+          <div className="space-y-6">
             
-            {/* ETAPE 1: EMAIL */}
             {step === 'email' && (
-              <form onSubmit={handleEmailSubmit} className="space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-left-4 duration-500">
+              <form onSubmit={handleEmailSubmit} className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-300">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-semibold">Adresse email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                    <Input id="email" type="email" placeholder="jean.dupont@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 sm:h-12 pl-10 text-base" required autoFocus disabled={isChecking || isBlocked} />
-                  </div>
-                  {isBlocked && <p className="text-xs text-red-600 animate-pulse">Veuillez attendre {getRemainingTime()}s</p>}
+                  <Label htmlFor="email" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Adresse email</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="nom@entreprise.com" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    className="h-12 bg-gray-50 border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-900 transition-all" 
+                    required 
+                    autoFocus 
+                    disabled={isChecking} 
+                  />
                 </div>
-                <Button type="submit" className="w-full h-11 sm:h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold" disabled={isChecking || isBlocked}>
-                  {isChecking ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Vérification...</> : <><span className="mr-2">Continuer</span> <ArrowRight className="h-5 w-5" /></>}
+                <Button type="submit" className="w-full h-12 bg-gray-900 hover:bg-black text-white font-medium rounded-lg transition-all" disabled={isChecking}>
+                  {isChecking ? <Loader2 className="h-5 w-5 animate-spin" /> : <span className="flex items-center">Continuer <ArrowRight className="ml-2 h-4 w-4" /></span>}
                 </Button>
               </form>
             )}
 
-            {/* ETAPE 2: MOT DE PASSE */}
             {step === 'password' && (
-              <form onSubmit={handlePasswordSubmit} className="space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-right-4 duration-500">
+              <form onSubmit={handlePasswordSubmit} className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
                 <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-gray-500">Adresse email</Label>
-                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 sm:px-4 py-2 sm:py-3">
-                    <span className="text-sm font-medium text-gray-700 truncate mr-2">{email}</span>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => { setStep('email'); setPassword(''); }} className="h-8 text-xs shrink-0">Modifier</Button>
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="password" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Mot de passe</Label>
+                    <button type="button" onClick={() => setStep('recovery')} className="text-xs text-gray-500 hover:text-gray-900 hover:underline">Oublié ?</button>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-semibold">Mot de passe</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                    <Input id="password" type="password" placeholder="Votre mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} className="h-11 sm:h-12 pl-10 text-base" required autoFocus disabled={isLoading} />
-                  </div>
-                </div>
-                <div className="flex items-center justify-end">
-                  <button type="button" onClick={() => setStep('recovery')} className="text-sm text-gray-600 hover:text-gray-900 font-medium underline-offset-4 hover:underline">
-                    Mot de passe oublié ?
-                  </button>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    className="h-12 bg-gray-50 border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-900 transition-all" 
+                    required 
+                    autoFocus 
+                    disabled={isLoading} 
+                  />
                 </div>
                 <div className="flex gap-3">
-                  <Button type="button" variant="outline" onClick={() => setStep('email')} className="h-11 sm:h-12 text-base font-semibold" disabled={isLoading}><ArrowLeft className="mr-2 h-5 w-5" /> Retour</Button>
-                  <Button type="submit" className="flex-1 h-11 sm:h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold" disabled={isLoading}>
-                    {isLoading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Connexion...</> : 'Se connecter'}
-                  </Button>
+                    <Button type="button" variant="outline" onClick={() => setStep('email')} className="h-12 px-6 border-gray-200 text-gray-600 hover:bg-gray-50">Retour</Button>
+                    <Button type="submit" className="flex-1 h-12 bg-gray-900 hover:bg-black text-white font-medium rounded-lg transition-all" disabled={isLoading}>
+                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Se connecter'}
+                    </Button>
                 </div>
               </form>
             )}
 
-            {/* ETAPE 3: RECOVERY */}
             {step === 'recovery' && (
-                <form onSubmit={handleRecoverySubmit} className="space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-right-4 duration-500">
-                    <div className="space-y-2">
-                        <Label className="text-sm font-semibold text-gray-500">Compte à récupérer</Label>
-                        <div className="bg-gray-50 rounded-lg px-3 py-3 text-sm font-medium text-gray-700 border border-gray-100">{email}</div>
+                <form onSubmit={handleRecoverySubmit} className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
+                    <div className="p-4 bg-blue-50 text-blue-700 text-sm rounded-lg border border-blue-100">
+                        Un lien de connexion temporaire sera envoyé à <strong>{email}</strong>.
                     </div>
-                    <p className="text-sm text-gray-500 leading-relaxed">
-                        Nous allons envoyer un lien sécurisé à cette adresse pour définir un nouveau mot de passe.
-                    </p>
-                    <div className="flex gap-3 pt-2">
-                        <Button type="button" variant="outline" onClick={() => setStep('password')} className="h-11 text-base font-semibold" disabled={isLoading}>Annuler</Button>
-                        <Button type="submit" className="flex-1 h-11 bg-black hover:bg-gray-800 text-base font-semibold text-white" disabled={isLoading}>
-                            {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                            Envoyer le lien
+                    <div className="flex gap-3">
+                        <Button type="button" variant="outline" onClick={() => setStep('password')} className="h-12 px-6 border-gray-200 text-gray-600 hover:bg-gray-50">Annuler</Button>
+                        <Button type="submit" className="flex-1 h-12 bg-gray-900 hover:bg-black text-white font-medium rounded-lg transition-all" disabled={isLoading}>
+                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Envoyer le lien'}
                         </Button>
                     </div>
                 </form>
             )}
 
-            <div className="mt-5 sm:mt-6 text-center">
-              {step !== 'recovery' && (
-                  <p className="text-sm text-gray-600">
-                    Vous n'avez pas de compte ?{' '}
-                    <a href={`/onboarding?returnTo=${encodeURIComponent(returnTo)}`} className="text-gray-700 font-semibold hover:text-gray-900 underline block sm:inline mt-1 sm:mt-0">
-                      Créer un compte
-                    </a>
-                  </p>
-              )}
+            <div className="relative">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-100" /></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-gray-400">ou</span></div>
             </div>
-          </CardContent>
-        </Card>
+
+            <div className="text-center">
+              <p className="text-sm text-gray-600">
+                Pas encore de compte ?{' '}
+                <a href={`/onboarding?returnTo=${encodeURIComponent(returnTo)}`} className="font-semibold text-gray-900 hover:underline">
+                  S'inscrire gratuitement
+                </a>
+              </p>
+            </div>
+          </div>
+
+          {/* Footer Links */}
+          <div className="pt-8 flex gap-6 text-xs text-gray-400">
+            <a href="#" className="hover:text-gray-600">Conditions</a>
+            <a href="#" className="hover:text-gray-600">Confidentialité</a>
+            <a href="#" className="hover:text-gray-600">Aide</a>
+          </div>
+        </div>
+      </div>
+
+      {/* DROITE : VISUEL & FEATURES */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden">
+         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30"></div>
+         
+         <div className="relative z-10 max-w-md w-full animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
+            <div className="bg-white p-2 rounded-2xl shadow-2xl mb-10 transform rotate-1 hover:rotate-0 transition-transform duration-500">
+                <img src="/device-hero-new.jpg" alt="Sivara Ecosystem" className="rounded-xl w-full h-auto object-cover" />
+            </div>
+
+            <div className="space-y-6">
+                <div className="flex items-start gap-4">
+                    <div className="mt-1 p-2 bg-blue-50 text-blue-600 rounded-lg"><ShieldCheck className="h-5 w-5" /></div>
+                    <div>
+                        <h3 className="font-semibold text-gray-900">Sécurité Zero-Knowledge</h3>
+                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Vos données sont chiffrées avant de quitter votre appareil. Vous seul possédez la clé.</p>
+                    </div>
+                </div>
+                <div className="flex items-start gap-4">
+                    <div className="mt-1 p-2 bg-purple-50 text-purple-600 rounded-lg"><Zap className="h-5 w-5" /></div>
+                    <div>
+                        <h3 className="font-semibold text-gray-900">Performance Edge</h3>
+                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Une infrastructure distribuée mondialement pour une latence minimale.</p>
+                    </div>
+                </div>
+                <div className="flex items-start gap-4">
+                    <div className="mt-1 p-2 bg-green-50 text-green-600 rounded-lg"><Globe className="h-5 w-5" /></div>
+                    <div>
+                        <h3 className="font-semibold text-gray-900">Écosystème Unifié</h3>
+                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Docs, Mail, Drive et Identité connectés en toute fluidité.</p>
+                    </div>
+                </div>
+            </div>
+         </div>
       </div>
     </div>
   );

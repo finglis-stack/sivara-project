@@ -5,14 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
-import { Building2, User, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Building2, User, Loader2, ArrowRight, ArrowLeft, CheckCircle2, Shield } from 'lucide-react';
 
+// Liste réorganisée : CA (+1) en premier
 const countryCodes = [
-  { code: '+1', country: 'US/CA', flag: '🇺🇸' },
+  { code: '+1', country: 'CA', flag: '🇨🇦' },
+  { code: '+1', country: 'US', flag: '🇺🇸' },
   { code: '+33', country: 'FR', flag: '🇫🇷' },
   { code: '+44', country: 'UK', flag: '🇬🇧' },
   { code: '+49', country: 'DE', flag: '🇩🇪' },
@@ -33,7 +34,7 @@ const Onboarding = () => {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    phoneCountryCode: '+33',
+    phoneCountryCode: '+1', // Default CA
     phoneNumber: '',
     accountType: 'individual',
     termsAccepted: false,
@@ -116,277 +117,160 @@ const Onboarding = () => {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center px-4 py-8 sm:py-12">
-      <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: 'url(/auth-bg-v2.jpg)' }}
-      >
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+    <div className="min-h-screen flex bg-white font-sans selection:bg-gray-100">
+      
+      {/* GAUCHE : FORMULAIRE */}
+      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100">
+        <div className="max-w-md mx-auto w-full space-y-8">
+          
+          {/* Header */}
+          <div className="space-y-6">
+             <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
+                <img src="/sivara-logo.png" alt="Sivara" className="h-10 w-10 object-contain" />
+                <span className="text-xl font-bold tracking-tight text-gray-900">Sivara</span>
+             </div>
+             
+             <div className="space-y-2">
+                <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Créer un compte</h1>
+                <p className="text-gray-500 text-sm font-light">Rejoignez l'écosystème numérique souverain.</p>
+             </div>
+
+             {/* Stepper */}
+             <div className="flex items-center gap-2">
+                <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${step >= 1 ? 'bg-gray-900' : 'bg-gray-100'}`}></div>
+                <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${step >= 2 ? 'bg-gray-900' : 'bg-gray-100'}`}></div>
+             </div>
+          </div>
+
+          {/* Formulaire */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {step === 1 ? (
+              <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Prénom</Label>
+                    <Input id="firstName" placeholder="Jean" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Nom</Label>
+                    <Input id="lastName" placeholder="Dupont" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" required />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Téléphone</Label>
+                  <div className="flex gap-2">
+                    <Select value={formData.phoneCountryCode} onValueChange={(value) => setFormData({ ...formData, phoneCountryCode: value })}>
+                      <SelectTrigger className="w-[110px] h-12 bg-gray-50 border-gray-200"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {countryCodes.map((country) => (
+                          <SelectItem key={country.country} value={country.code}>
+                            <span className="flex items-center gap-2"><span>{country.flag}</span> <span className="font-mono text-xs">{country.country}</span></span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input id="phone" type="tel" placeholder="514 123 4567" value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} className="flex-1 h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                    <Label className="text-xs font-medium text-gray-700 uppercase tracking-wide">Type de compte</Label>
+                    <RadioGroup value={formData.accountType} onValueChange={(value) => setFormData({ ...formData, accountType: value })} className="grid grid-cols-2 gap-4">
+                      <Label htmlFor="individual" className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.accountType === 'individual' ? 'border-gray-900 bg-gray-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                          <RadioGroupItem value="individual" id="individual" className="sr-only" />
+                          <User className={`h-6 w-6 mb-2 ${formData.accountType === 'individual' ? 'text-gray-900' : 'text-gray-400'}`} />
+                          <span className="text-sm font-medium">Personnel</span>
+                      </Label>
+                      <Label htmlFor="corporate" className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.accountType === 'corporate' ? 'border-gray-900 bg-gray-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                          <RadioGroupItem value="corporate" id="corporate" className="sr-only" />
+                          <Building2 className={`h-6 w-6 mb-2 ${formData.accountType === 'corporate' ? 'text-gray-900' : 'text-gray-400'}`} />
+                          <span className="text-sm font-medium">Entreprise</span>
+                      </Label>
+                    </RadioGroup>
+                </div>
+
+                <div className="flex items-start space-x-3 pt-2">
+                    <Checkbox id="terms" checked={formData.termsAccepted} onCheckedChange={(checked) => setFormData({ ...formData, termsAccepted: checked as boolean })} className="mt-1" />
+                    <label htmlFor="terms" className="text-sm text-gray-500 leading-relaxed cursor-pointer">
+                        J'accepte les <a href="#" className="text-gray-900 underline">Conditions d'utilisation</a> et la <a href="#" className="text-gray-900 underline">Politique de confidentialité</a>.
+                    </label>
+                </div>
+
+                <Button type="button" onClick={handleNextStep} className="w-full h-12 bg-gray-900 hover:bg-black text-white font-medium rounded-lg transition-all" disabled={!formData.termsAccepted}>
+                    Suivant <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Email de connexion</Label>
+                  <Input id="email" type="email" placeholder="jean@exemple.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" required />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Mot de passe</Label>
+                  <Input id="password" type="password" placeholder="Minimum 6 caractères" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" required />
+                  <p className="text-xs text-gray-400">Utilisez un mot de passe fort et unique.</p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 px-6 border-gray-200 text-gray-600 hover:bg-gray-50">Retour</Button>
+                    <Button type="submit" className="flex-1 h-12 bg-gray-900 hover:bg-black text-white font-medium rounded-lg transition-all" disabled={isLoading}>
+                        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Créer mon compte'}
+                    </Button>
+                </div>
+              </div>
+            )}
+          </form>
+
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Déjà inscrit ?{' '}
+              <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="font-semibold text-gray-900 hover:underline">
+                Se connecter
+              </a>
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="relative z-10 w-full max-w-2xl">
-        <div className="text-center mb-6 sm:mb-8">
-          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-2 sm:mb-3 drop-shadow-lg">Sivara</h1>
-          <p className="text-base sm:text-lg text-white/90 drop-shadow px-2">Créez votre compte en quelques étapes</p>
-        </div>
-
-        <div className="mb-6 sm:mb-8">
-          <div className="flex items-center justify-center gap-2">
-            <div className={`h-2 w-20 sm:w-24 rounded-full transition-all duration-300 ${step >= 1 ? 'bg-white' : 'bg-white/30'}`}></div>
-            <div className={`h-2 w-20 sm:w-24 rounded-full transition-all duration-300 ${step >= 2 ? 'bg-white' : 'bg-white/30'}`}></div>
-          </div>
-          <div className="text-center mt-3 text-sm text-white/90 drop-shadow">
-            Étape {step} sur 2
-          </div>
-        </div>
-
-        <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur">
-          <CardHeader className="space-y-1 pb-4 sm:pb-6 px-5 sm:px-6 pt-5 sm:pt-6">
-            <CardTitle className="text-xl sm:text-2xl font-bold">
-              {step === 1 ? 'Informations personnelles' : 'Créez vos identifiants'}
-            </CardTitle>
-            <CardDescription className="text-sm sm:text-base">
-              {step === 1 
-                ? 'Commençons par quelques informations de base' 
-                : 'Choisissez votre email et mot de passe'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-5 sm:px-6 pb-5 sm:pb-6">
-            <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
-              {step === 1 ? (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName" className="text-sm font-semibold">
-                        Prénom <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="firstName"
-                        placeholder="Jean"
-                        value={formData.firstName}
-                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                        className="h-11 sm:h-12 text-base"
-                        required
-                      />
+      {/* DROITE : VISUEL */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gray-900 items-center justify-center p-12 relative overflow-hidden text-white">
+         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
+         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-[120px] pointer-events-none"></div>
+         
+         <div className="relative z-10 max-w-md w-full animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
+            <h2 className="text-3xl font-bold mb-6">Pourquoi choisir Sivara ?</h2>
+            
+            <div className="space-y-8">
+                <div className="flex gap-4">
+                    <div className="mt-1 p-2 bg-white/10 rounded-lg border border-white/10"><Shield className="h-5 w-5 text-blue-400" /></div>
+                    <div>
+                        <h3 className="font-semibold text-lg">Souveraineté Numérique</h3>
+                        <p className="text-gray-400 text-sm leading-relaxed mt-1">Reprenez le contrôle total de vos données. Pas de tracking, pas de revente.</p>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName" className="text-sm font-semibold">
-                        Nom <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="lastName"
-                        placeholder="Dupont"
-                        value={formData.lastName}
-                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                        className="h-11 sm:h-12 text-base"
-                        required
-                      />
+                </div>
+                <div className="flex gap-4">
+                    <div className="mt-1 p-2 bg-white/10 rounded-lg border border-white/10"><CheckCircle2 className="h-5 w-5 text-green-400" /></div>
+                    <div>
+                        <h3 className="font-semibold text-lg">Tout inclus</h3>
+                        <p className="text-gray-400 text-sm leading-relaxed mt-1">Email, Cloud, Docs et Identité dans un seul abonnement transparent.</p>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-sm font-semibold">
-                      Numéro de téléphone
-                    </Label>
-                    <div className="flex gap-2">
-                      <Select
-                        value={formData.phoneCountryCode}
-                        onValueChange={(value) => setFormData({ ...formData, phoneCountryCode: value })}
-                      >
-                        <SelectTrigger className="w-[110px] sm:w-[140px] h-11 sm:h-12 text-sm sm:text-base px-2 sm:px-3">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {countryCodes.map((country) => (
-                            <SelectItem key={country.code} value={country.code}>
-                              <span className="flex items-center gap-2">
-                                <span>{country.flag}</span>
-                                <span>{country.code}</span>
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="6 12 34 56 78"
-                        value={formData.phoneNumber}
-                        onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                        className="flex-1 h-11 sm:h-12 text-base"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label className="text-sm font-semibold">
-                      Type de compte <span className="text-red-500">*</span>
-                    </Label>
-                    <RadioGroup
-                      value={formData.accountType}
-                      onValueChange={(value) => setFormData({ ...formData, accountType: value })}
-                      className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4"
-                    >
-                      <div>
-                        <RadioGroupItem
-                          value="individual"
-                          id="individual"
-                          className="peer sr-only"
-                        />
-                        <Label
-                          htmlFor="individual"
-                          className="flex flex-row sm:flex-col items-center sm:justify-between rounded-xl border-2 border-gray-200 bg-white p-4 sm:p-6 hover:bg-gray-50 peer-data-[state=checked]:border-gray-700 peer-data-[state=checked]:bg-gray-50 peer-data-[state=checked]:shadow-lg cursor-pointer transition-all h-full"
-                        >
-                          <User className="h-8 w-8 sm:h-10 sm:w-10 text-gray-700 mr-4 sm:mr-0 sm:mb-3" />
-                          <div className="text-left sm:text-center">
-                            <div className="font-bold text-base sm:text-lg">Individuel</div>
-                            <div className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">
-                              Pour un usage personnel
-                            </div>
-                          </div>
-                        </Label>
-                      </div>
-                      <div>
-                        <RadioGroupItem
-                          value="corporate"
-                          id="corporate"
-                          className="peer sr-only"
-                        />
-                        <Label
-                          htmlFor="corporate"
-                          className="flex flex-row sm:flex-col items-center sm:justify-between rounded-xl border-2 border-gray-200 bg-white p-4 sm:p-6 hover:bg-gray-50 peer-data-[state=checked]:border-gray-700 peer-data-[state=checked]:bg-gray-50 peer-data-[state=checked]:shadow-lg cursor-pointer transition-all h-full"
-                        >
-                          <Building2 className="h-8 w-8 sm:h-10 sm:w-10 text-gray-700 mr-4 sm:mr-0 sm:mb-3" />
-                          <div className="text-left sm:text-center">
-                            <div className="font-bold text-base sm:text-lg">Entreprise</div>
-                            <div className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">
-                              Pour un usage professionnel
-                            </div>
-                          </div>
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  <div className="space-y-4 pt-2 sm:pt-4 border-t">
-                    <div className="flex items-start space-x-3">
-                      <Checkbox
-                        id="terms"
-                        checked={formData.termsAccepted}
-                        onCheckedChange={(checked) =>
-                          setFormData({ ...formData, termsAccepted: checked as boolean })
-                        }
-                        className="mt-1"
-                      />
-                      <div className="grid gap-1.5 leading-none">
-                        <label
-                          htmlFor="terms"
-                          className="text-sm font-medium leading-relaxed cursor-pointer"
-                        >
-                          J'accepte les conditions d'utilisation{' '}
-                          <span className="text-red-500">*</span>
-                        </label>
-                        <p className="text-xs sm:text-sm text-gray-500 leading-relaxed">
-                          En cochant cette case, vous acceptez nos{' '}
-                          <a href="#" className="text-gray-700 underline hover:text-gray-900 font-medium">
-                            conditions d'utilisation
-                          </a>{' '}
-                          et notre{' '}
-                          <a href="#" className="text-gray-700 underline hover:text-gray-900 font-medium">
-                            politique de confidentialité
-                          </a>
-                          .
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    onClick={handleNextStep}
-                    className="w-full h-11 sm:h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
-                    disabled={!formData.termsAccepted}
-                  >
-                    Continuer
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-4 sm:space-y-5">
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-sm font-semibold">
-                        Adresse email <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="jean.dupont@example.com"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="h-11 sm:h-12 text-base"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="password" className="text-sm font-semibold">
-                        Mot de passe <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder="Minimum 6 caractères"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="h-11 sm:h-12 text-base"
-                        required
-                      />
-                      <p className="text-xs text-gray-500">
-                        Utilisez au moins 6 caractères avec un mélange de lettres et de chiffres
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-2 sm:pt-4">
-                    <Button
-                      type="button"
-                      onClick={() => setStep(1)}
-                      variant="outline"
-                      className="flex-1 h-11 sm:h-12 text-base font-semibold"
-                    >
-                      <ArrowLeft className="mr-2 h-5 w-5" />
-                      Retour
-                    </Button>
-                    <Button
-                      type="submit"
-                      className="flex-1 h-11 sm:h-12 bg-gray-700 hover:bg-gray-800 text-base font-semibold"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          Création...
-                        </>
-                      ) : (
-                        'Créer'
-                      )}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </form>
-
-            <div className="mt-5 sm:mt-6 text-center">
-              <p className="text-sm text-gray-600">
-                Vous avez déjà un compte ?{' '}
-                <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="text-gray-700 font-semibold hover:text-gray-900 underline block sm:inline mt-1 sm:mt-0">
-                  Se connecter
-                </a>
-              </p>
+                </div>
             </div>
-          </CardContent>
-        </Card>
+
+            <div className="mt-12 pt-8 border-t border-white/10">
+                <p className="text-sm text-gray-500 italic">"La meilleure alternative aux géants de la tech."</p>
+                <div className="flex items-center gap-2 mt-3">
+                    <div className="flex -space-x-2">
+                        {[1,2,3].map(i => <div key={i} className="w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-900"></div>)}
+                    </div>
+                    <span className="text-xs text-gray-400">+2000 utilisateurs</span>
+                </div>
+            </div>
+         </div>
       </div>
     </div>
   );
