@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowRight, Check, ShieldCheck, Zap, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Lottie from 'lottie-react';
 import animationData from '../../public/animal.json';
@@ -20,6 +20,7 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
 
   const returnTo = searchParams.get('returnTo') || '/';
 
@@ -51,6 +52,7 @@ const Login = () => {
     e.preventDefault();
     if (!email) { showError('Veuillez entrer votre adresse email'); return; }
     setIsChecking(true);
+    // Simulation UX fluide
     setTimeout(() => {
         setStep('password');
         setIsChecking(false);
@@ -98,7 +100,7 @@ const Login = () => {
   return (
     <div className="min-h-screen flex bg-white font-sans selection:bg-gray-100">
       {/* GAUCHE : FORMULAIRE */}
-      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100 relative z-10 bg-white">
+      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100">
         <div className="max-w-sm mx-auto w-full space-y-10">
           
           {/* Logo */}
@@ -211,9 +213,13 @@ const Login = () => {
       </div>
 
       {/* DROITE : LOTTIE ANIMATION */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden">
-         <div className="w-full max-w-lg">
+      <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden flex-col text-center">
+         <div className="w-64 h-64 mb-8">
             <Lottie animationData={animationData} loop={true} />
+         </div>
+         <div className="max-w-md space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+            <h3 className="text-xl font-bold text-gray-900">Encore vous ?</h3>
+            <p className="text-gray-500 text-sm">On a gardé vos données au chaud (et chiffrées, évidemment). Les hamsters du serveur vous passent le bonjour.</p>
          </div>
       </div>
     </div>

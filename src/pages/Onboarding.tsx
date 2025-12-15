@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
-import { Building2, User, Loader2, ArrowRight } from 'lucide-react';
+import { Building2, User, Loader2, ArrowRight, ArrowLeft, CheckCircle2, Shield } from 'lucide-react';
 import Lottie from 'lottie-react';
 import animationData from '../../public/animal.json';
 
@@ -245,9 +245,13 @@ const Onboarding = () => {
       </div>
 
       {/* DROITE : LOTTIE ANIMATION */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden">
-         <div className="w-full max-w-lg">
+      <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden flex-col text-center">
+         <div className="w-64 h-64 mb-8">
             <Lottie animationData={animationData} loop={true} />
+         </div>
+         <div className="max-w-md space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+            <h3 className="text-xl font-bold text-gray-900">Bienvenue dans la résistance.</h3>
+            <p className="text-gray-500 text-sm">Promis, on ne vendra pas votre historique à des robots publicitaires. (Sauf s'ils demandent gentiment... non, on rigole).</p>
          </div>
       </div>
     </div>
