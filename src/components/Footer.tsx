@@ -33,9 +33,9 @@ const Footer = () => {
             </div>
             
             <nav className="flex gap-6 text-xs font-medium">
-              <a href={getHelpLink()} className="hover:text-white transition-colors">Centre d'aide</a>
-              <a href="#" className="hover:text-white transition-colors">Confidentialité</a>
-              <a href="#" className="hover:text-white transition-colors">Conditions</a>
+              <a href="https://help.sivara.ca" className="hover:text-white transition-colors">Centre d'aide</a>
+              <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="hover:text-white transition-colors">Confidentialité</a>
+              <a href="https://help.sivara.ca/article/conditions-dutilisation" className="hover:text-white transition-colors">Conditions</a>
             </nav>
           </div>
 

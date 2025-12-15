@@ -203,9 +203,9 @@ const Login = () => {
 
           {/* Footer Links */}
           <div className="pt-8 flex gap-6 text-xs text-gray-400">
-            <a href="#" className="hover:text-gray-600">Conditions</a>
-            <a href="#" className="hover:text-gray-600">Confidentialité</a>
-            <a href="#" className="hover:text-gray-600">Aide</a>
+            <a href="https://help.sivara.ca/article/conditions-dutilisation" className="hover:text-gray-600">Conditions</a>
+            <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="hover:text-gray-600">Confidentialité</a>
+            <a href="https://help.sivara.ca" className="hover:text-gray-600">Aide</a>
           </div>
         </div>
       </div>

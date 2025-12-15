@@ -41,7 +41,7 @@ interface Profile {
 }
 
 const countryCodes = [
-  { code: '+1', country: 'US/CA', flag: '🇺🇸' },
+  { code: '+1', country: 'CA', flagUrl: '/ca-flag.png' },
   { code: '+33', country: 'FR', flag: '🇫🇷' },
   { code: '+44', country: 'UK', flag: '🇬🇧' },
   { code: '+49', country: 'DE', flag: '🇩🇪' },
@@ -71,7 +71,7 @@ const Profile = () => {
   const [profile, setProfile] = useState<Profile>({
     first_name: '',
     last_name: '',
-    phone_country_code: '+33',
+    phone_country_code: '+1',
     phone_number: '',
     account_type: 'individual',
     created_at: '',
@@ -442,7 +442,7 @@ const Profile = () => {
             <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl">Contact</CardTitle><CardDescription>Gérez vos informations de contact</CardDescription></CardHeader>
             <CardContent className="space-y-4 sm:space-y-5 px-5 sm:px-6 pb-6">
               <div className="space-y-2"><Label htmlFor="email" className="text-sm font-medium">Email</Label><Input id="email" type="email" value={user?.email || ''} disabled className="h-10 sm:h-11 bg-gray-50 text-gray-500" /><p className="text-xs text-gray-400">L'email ne peut pas être modifié</p></div>
-              <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-medium">Numéro de téléphone</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[110px] sm:w-[140px] h-10 sm:h-11 text-xs sm:text-sm"><SelectValue /></SelectTrigger><SelectContent>{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code}><span>{country.flag} {country.code}</span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-10 sm:h-11" /></div></div>
+              <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-medium">Numéro de téléphone</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[110px] sm:w-[140px] h-10 sm:h-11 text-xs sm:text-sm"><SelectValue /></SelectTrigger><SelectContent>{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code}><span className="flex items-center gap-2">{country.flagUrl ? <img src={country.flagUrl} alt={country.country} className="w-5 h-auto object-contain" /> : <span>{country.flag}</span>} <span className="font-mono text-xs">{country.country}</span></span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-10 sm:h-11" /></div></div>
             </CardContent>
           </Card>
         </div>

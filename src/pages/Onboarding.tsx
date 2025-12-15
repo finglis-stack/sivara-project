@@ -10,10 +10,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
 import { Building2, User, Loader2, ArrowRight, ArrowLeft, CheckCircle2, Shield } from 'lucide-react';
 
-// Liste réorganisée : CA (+1) en premier
+// Liste réorganisée : CA (+1) en premier avec image
 const countryCodes = [
-  { code: '+1', country: 'CA', flag: '🇨🇦' },
-  { code: '+1', country: 'US', flag: '🇺🇸' },
+  { code: '+1', country: 'CA', flagUrl: '/ca-flag.png' },
   { code: '+33', country: 'FR', flag: '🇫🇷' },
   { code: '+44', country: 'UK', flag: '🇬🇧' },
   { code: '+49', country: 'DE', flag: '🇩🇪' },
@@ -166,7 +165,14 @@ const Onboarding = () => {
                       <SelectContent>
                         {countryCodes.map((country) => (
                           <SelectItem key={country.country} value={country.code}>
-                            <span className="flex items-center gap-2"><span>{country.flag}</span> <span className="font-mono text-xs">{country.country}</span></span>
+                            <span className="flex items-center gap-2">
+                                {country.flagUrl ? (
+                                    <img src={country.flagUrl} alt={country.country} className="w-5 h-auto object-contain" />
+                                ) : (
+                                    <span>{country.flag}</span>
+                                )}
+                                <span className="font-mono text-xs">{country.country}</span>
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -194,7 +200,7 @@ const Onboarding = () => {
                 <div className="flex items-start space-x-3 pt-2">
                     <Checkbox id="terms" checked={formData.termsAccepted} onCheckedChange={(checked) => setFormData({ ...formData, termsAccepted: checked as boolean })} className="mt-1" />
                     <label htmlFor="terms" className="text-sm text-gray-500 leading-relaxed cursor-pointer">
-                        J'accepte les <a href="#" className="text-gray-900 underline">Conditions d'utilisation</a> et la <a href="#" className="text-gray-900 underline">Politique de confidentialité</a>.
+                        J'accepte les <a href="https://help.sivara.ca/article/conditions-dutilisation" className="text-gray-900 underline">Conditions d'utilisation</a> et la <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="text-gray-900 underline">Politique de confidentialité</a>.
                     </label>
                 </div>
 
@@ -236,38 +242,29 @@ const Onboarding = () => {
         </div>
       </div>
 
-      {/* DROITE : VISUEL */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gray-900 items-center justify-center p-12 relative overflow-hidden text-white">
-         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
-         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-[120px] pointer-events-none"></div>
+      {/* DROITE : VISUEL (FOND CLAIR) */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden">
+         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30"></div>
          
          <div className="relative z-10 max-w-md w-full animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
-            <h2 className="text-3xl font-bold mb-6">Pourquoi choisir Sivara ?</h2>
-            
-            <div className="space-y-8">
-                <div className="flex gap-4">
-                    <div className="mt-1 p-2 bg-white/10 rounded-lg border border-white/10"><Shield className="h-5 w-5 text-blue-400" /></div>
-                    <div>
-                        <h3 className="font-semibold text-lg">Souveraineté Numérique</h3>
-                        <p className="text-gray-400 text-sm leading-relaxed mt-1">Reprenez le contrôle total de vos données. Pas de tracking, pas de revente.</p>
-                    </div>
-                </div>
-                <div className="flex gap-4">
-                    <div className="mt-1 p-2 bg-white/10 rounded-lg border border-white/10"><CheckCircle2 className="h-5 w-5 text-green-400" /></div>
-                    <div>
-                        <h3 className="font-semibold text-lg">Tout inclus</h3>
-                        <p className="text-gray-400 text-sm leading-relaxed mt-1">Email, Cloud, Docs et Identité dans un seul abonnement transparent.</p>
-                    </div>
-                </div>
+            <div className="bg-white p-2 rounded-2xl shadow-2xl mb-10 transform rotate-1 hover:rotate-0 transition-transform duration-500">
+                <img src="/device-hero-new.jpg" alt="Sivara Ecosystem" className="rounded-xl w-full h-auto object-cover" />
             </div>
 
-            <div className="mt-12 pt-8 border-t border-white/10">
-                <p className="text-sm text-gray-500 italic">"La meilleure alternative aux géants de la tech."</p>
-                <div className="flex items-center gap-2 mt-3">
-                    <div className="flex -space-x-2">
-                        {[1,2,3].map(i => <div key={i} className="w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-900"></div>)}
+            <div className="space-y-6">
+                <div className="flex items-start gap-4">
+                    <div className="mt-1 p-2 bg-blue-50 text-blue-600 rounded-lg"><Shield className="h-5 w-5" /></div>
+                    <div>
+                        <h3 className="font-semibold text-gray-900">Souveraineté Numérique</h3>
+                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Reprenez le contrôle total de vos données. Pas de tracking, pas de revente.</p>
                     </div>
-                    <span className="text-xs text-gray-400">+2000 utilisateurs</span>
+                </div>
+                <div className="flex items-start gap-4">
+                    <div className="mt-1 p-2 bg-green-50 text-green-600 rounded-lg"><CheckCircle2 className="h-5 w-5" /></div>
+                    <div>
+                        <h3 className="font-semibold text-gray-900">Tout inclus</h3>
+                        <p className="text-sm text-gray-500 leading-relaxed mt-1">Email, Cloud, Docs et Identité dans un seul abonnement transparent.</p>
+                    </div>
                 </div>
             </div>
          </div>
