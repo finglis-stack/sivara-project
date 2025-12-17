@@ -9,6 +9,7 @@ const corsHeaders = {
 }
 
 // --- SIVARA BINARY PROTOCOL (SBP) CONSTANTS ---
+// Doit être IDENTIQUE à sivara-kernel
 const OP_CODES = {
   MAGIC: 0x53, // 'S'
   HEADER: 0xA1,
@@ -16,8 +17,15 @@ const OP_CODES = {
   DATA_CHUNK: 0xC3,
   META_TAG: 0xD4,
   GHOST_BLOCK: 0x1F,
+  VM_BYTECODE: 0xE5, // Le bloc VM
   EOF: 0xFF
 };
+
+// Bytecode pour "exiger(1)" (Toujours vrai / Accès autorisé)
+// PUSH_NUM(1) -> 0x01, 0x00, 0x00, 0x00, 0x01
+// ASSERT      -> 0x99
+// HALT        -> 0x00
+const DEFAULT_ALLOW_BYTECODE = new Uint8Array([0x01, 0x00, 0x00, 0x00, 0x01, 0x99, 0x00]);
 
 // Clé universelle pour les archives publiques
 const PUBLIC_CONTAINER_SEED = "SIVARA_PUBLIC_CONTAINER_V1";
@@ -88,7 +96,15 @@ serve(async (req) => {
         // 1. Magic Header (SVR2)
         parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x02])); 
 
-        // 2. IV Block
+        // 2. VM Bytecode (Smart Contract par défaut)
+        // C'est ici qu'on assure la compatibilité avec le Kernel
+        const bcLen = new Uint8Array(4);
+        new DataView(bcLen.buffer).setUint32(0, DEFAULT_ALLOW_BYTECODE.length);
+        parts.push(new Uint8Array([OP_CODES.VM_BYTECODE]));
+        parts.push(bcLen);
+        parts.push(DEFAULT_ALLOW_BYTECODE);
+
+        // 3. IV Block
         const ivBinString = atob(doc.encryption_iv);
         const ivBuf = new Uint8Array(ivBinString.length);
         for (let i = 0; i < ivBinString.length; i++) ivBuf[i] = ivBinString.charCodeAt(i);
@@ -97,27 +113,28 @@ serve(async (req) => {
         parts.push(new Uint8Array([ivBuf.length]));
         parts.push(ivBuf);
 
-        // 3. Metadata
+        // 4. Metadata
         const metaJson = JSON.stringify({ 
             owner_id: doc.owner_id, 
             icon: doc.icon, 
             color: doc.color,
             visibility: doc.visibility,
-            archived_at: new Date().toISOString()
+            archived_at: new Date().toISOString(),
+            type: 'auto-archive'
         });
         const metaBuf = strToBuf(metaJson);
-        const shuffledMeta = sivaraShuffle(metaBuf, containerSeed);
+        // On ne shuffle pas les métadonnées ici pour que le Kernel puisse lire l'owner_id facilement
         const metaLen = new Uint8Array(4);
-        new DataView(metaLen.buffer).setUint32(0, shuffledMeta.length);
+        new DataView(metaLen.buffer).setUint32(0, metaBuf.length);
         
         parts.push(new Uint8Array([OP_CODES.META_TAG]));
         parts.push(metaLen);
-        parts.push(shuffledMeta);
+        parts.push(metaBuf);
 
-        // 4. Ghost Block
+        // 5. Ghost Block (Obfuscation)
         parts.push(...generateGhostBlock());
 
-        // 5. Payload (Title + Content)
+        // 6. Payload (Title + Content)
         const titleBuf = strToBuf(doc.title);
         const contentBuf = strToBuf(doc.content);
         
@@ -134,7 +151,7 @@ serve(async (req) => {
         parts.push(payloadLen);
         parts.push(shuffledPayload);
 
-        // 6. EOF
+        // 7. EOF
         parts.push(new Uint8Array([OP_CODES.EOF]));
 
         // Assemblage
@@ -158,11 +175,11 @@ serve(async (req) => {
         }
 
         // Update DB (Passage en Cold Storage)
-        // IMPORTANT: On ne touche PAS au titre, on vide juste le contenu
+        // IMPORTANT: On garde le titre pour le dashboard
         const { error: updateError } = await supabase
             .from('documents')
             .update({ 
-                content: '', // On vide le contenu pour libérer la DB
+                content: '', // On vide le contenu
                 storage_path: filePath 
             })
             .eq('id', doc.id);
