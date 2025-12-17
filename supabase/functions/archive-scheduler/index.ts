@@ -74,6 +74,7 @@ serve(async (req) => {
     const { data: docsToArchive, error: fetchError } = await supabase
       .from('documents')
       .select('id, title, content, encryption_iv, owner_id, icon, color, visibility')
+      .eq('type', 'file') // EXCLUSION DES DOSSIERS
       .is('storage_path', null)
       .neq('content', '') 
       .lt('updated_at', fiveMinutesAgo)
