@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from '@capacitor/app';
@@ -37,6 +37,32 @@ import IdentityVerification from "./pages/IdentityVerification";
 import DeviceCustomerDetails from "./pages/DeviceCustomerDetails";
 
 const queryClient = new QueryClient();
+
+// --- COMPOSANT ARCHIVER (Invisible) ---
+const ArchiverDaemon = () => {
+    const { user } = useAuth();
+    
+    useEffect(() => {
+        if (!user) return;
+        
+        // Exécuter immédiatement au montage (si user connecté)
+        const runArchive = async () => {
+            try {
+                await supabase.functions.invoke('archive-scheduler');
+            } catch (e) {
+                // Silent fail
+            }
+        };
+        
+        runArchive();
+
+        // Puis toutes les 5 minutes
+        const interval = setInterval(runArchive, 5 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, [user]);
+
+    return null;
+};
 
 const AppRoutes = () => {
   const [searchParams] = useSearchParams();
@@ -84,118 +110,121 @@ const AppRoutes = () => {
   }, [searchParams, hostname]);
 
   return (
-    <Routes>
-      {/* --- MOBILE LAUNCHER --- */}
-      {currentApp === 'mobile-launcher' && (
-        <Route path="*" element={<MobileLanding />} />
-      )}
+    <>
+      <ArchiverDaemon />
+      <Routes>
+        {/* --- MOBILE LAUNCHER --- */}
+        {currentApp === 'mobile-launcher' && (
+          <Route path="*" element={<MobileLanding />} />
+        )}
 
-      {/* --- APPLICATION: ACCOUNT --- */}
-      {currentApp === 'account' && (
-        <>
-          <Route path="/" element={<Navigate to="/profile" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/pro-onboarding" element={
-            <ProtectedRoute>
-              <ProOnboarding />
-            </ProtectedRoute>
-          } />
-          <Route path="/profile" element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          } />
-          <Route path="*" element={<Navigate to="/profile" replace />} />
-        </>
-      )}
-
-      {/* --- APPLICATION: HELP --- */}
-      {currentApp === 'help' && (
-        <>
-          <Route path="/" element={<HelpLanding />} />
-          <Route path="/admin" element={<HelpAdmin />} />
-          <Route path="/category/:slug" element={<HelpCategory />} />
-          <Route path="/article/:slug" element={<HelpArticle />} />
-          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-        </>
-      )}
-
-      {/* --- APPLICATION: DEVICE --- */}
-      {currentApp === 'device' && (
-        <>
-            <Route path="/" element={<DeviceLanding />} />
-            <Route path="/checkout" element={<DeviceCheckout />} />
-            <Route path="/admin" element={
-                <ProtectedRoute>
-                    <DeviceAdmin />
-                </ProtectedRoute>
+        {/* --- APPLICATION: ACCOUNT --- */}
+        {currentApp === 'account' && (
+          <>
+            <Route path="/" element={<Navigate to="/profile" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/pro-onboarding" element={
+              <ProtectedRoute>
+                <ProOnboarding />
+              </ProtectedRoute>
             } />
-            <Route path="/admin/customer/:id" element={
-                <ProtectedRoute>
-                    <DeviceCustomerDetails />
-                </ProtectedRoute>
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
             } />
-            <Route path="*" element={<Navigate to="/" replace />} />
-        </>
-      )}
-      
-      {/* --- APPLICATION: DEVICE ADMIN (Direct Access) --- */}
-      {currentApp === 'device-admin' && (
-         <Route path="*" element={
-            <ProtectedRoute>
-                <DeviceAdmin />
-            </ProtectedRoute>
-         } />
-      )}
+            <Route path="*" element={<Navigate to="/profile" replace />} />
+          </>
+        )}
 
-      {/* --- APPLICATION: ID SECURE (Identity Verification) --- */}
-      {currentApp === 'id' && (
-         <Route path="*" element={
-            <ProtectedRoute>
-                <IdentityVerification />
-            </ProtectedRoute>
-         } />
-      )}
+        {/* --- APPLICATION: HELP --- */}
+        {currentApp === 'help' && (
+          <>
+            <Route path="/" element={<HelpLanding />} />
+            <Route path="/admin" element={<HelpAdmin />} />
+            <Route path="/category/:slug" element={<HelpCategory />} />
+            <Route path="/article/:slug" element={<HelpArticle />} />
+            <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+          </>
+        )}
 
-      {/* --- APPLICATION: DOCS --- */}
-      {currentApp === 'docs' && (
-        <>
-          <Route path="/" element={<Docs />} />
-          <Route path="/:id" element={<DocEditor />} />
-          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-        </>
-      )}
+        {/* --- APPLICATION: DEVICE --- */}
+        {currentApp === 'device' && (
+          <>
+              <Route path="/" element={<DeviceLanding />} />
+              <Route path="/checkout" element={<DeviceCheckout />} />
+              <Route path="/admin" element={
+                  <ProtectedRoute>
+                      <DeviceAdmin />
+                  </ProtectedRoute>
+              } />
+              <Route path="/admin/customer/:id" element={
+                  <ProtectedRoute>
+                      <DeviceCustomerDetails />
+                  </ProtectedRoute>
+              } />
+              <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        )}
+        
+        {/* --- APPLICATION: DEVICE ADMIN (Direct Access) --- */}
+        {currentApp === 'device-admin' && (
+           <Route path="*" element={
+              <ProtectedRoute>
+                  <DeviceAdmin />
+              </ProtectedRoute>
+           } />
+        )}
 
-      {/* --- APPLICATION: MAIL --- */}
-      {currentApp === 'mail' && (
-        <>
-          <Route path="/" element={<Mail />} />
-          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-        </>
-      )}
+        {/* --- APPLICATION: ID SECURE (Identity Verification) --- */}
+        {currentApp === 'id' && (
+           <Route path="*" element={
+              <ProtectedRoute>
+                  <IdentityVerification />
+              </ProtectedRoute>
+           } />
+        )}
 
-      {/* --- APPLICATION: SEARCH ENGINE --- */}
-      {currentApp === 'www' && (
-        <>
-          <Route path="/" element={<Index />} />
-          <Route path="/monitor" element={
-            <ProtectedRoute>
-              <Monitor />
-            </ProtectedRoute>
-          } />
-          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-        </>
-      )}
+        {/* --- APPLICATION: DOCS --- */}
+        {currentApp === 'docs' && (
+          <>
+            <Route path="/" element={<Docs />} />
+            <Route path="/:id" element={<DocEditor />} />
+            <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+          </>
+        )}
 
-      {/* --- DEV PORTAL --- */}
-      {currentApp === 'dev-portal' && (
-        <Route path="*" element={<DevPortal />} />
-      )}
-    </Routes>
+        {/* --- APPLICATION: MAIL --- */}
+        {currentApp === 'mail' && (
+          <>
+            <Route path="/" element={<Mail />} />
+            <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+          </>
+        )}
+
+        {/* --- APPLICATION: SEARCH ENGINE --- */}
+        {currentApp === 'www' && (
+          <>
+            <Route path="/" element={<Index />} />
+            <Route path="/monitor" element={
+              <ProtectedRoute>
+                <Monitor />
+              </ProtectedRoute>
+            } />
+            <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+          </>
+        )}
+
+        {/* --- DEV PORTAL --- */}
+        {currentApp === 'dev-portal' && (
+          <Route path="*" element={<DevPortal />} />
+        )}
+      </Routes>
+    </>
   );
 };
 

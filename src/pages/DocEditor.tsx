@@ -26,7 +26,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
   Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool,
   MapPin, Laptop, KeyRound, ShieldCheck, Crosshair, BookType, Image as ImageIcon,
-  Maximize, Minimize, Wand2, RefreshCcw, Upload
+  Maximize, Minimize, Wand2, RefreshCcw, Upload, Snowflake
 } from 'lucide-react';
 
 import {
@@ -74,57 +74,41 @@ const FontSize = Extension.create({
 
 // --- EXTENSION IMAGE ROBUSTE (FIX PERSISTANCE) ---
 const AdvancedImage = Image.extend({
-  // On surcharge addAttributes pour s'assurer que Tiptap sait lire/écrire nos données
   addAttributes() {
     return {
-      src: {
-        default: null,
-      },
-      alt: {
-        default: null,
-      },
+      src: { default: null },
+      alt: { default: null },
       width: {
         default: '100%',
-        // Lecture: on regarde le style width ou l'attribut width
         parseHTML: (element) => element.style.width || element.getAttribute('width'),
-        // Ecriture: on ne fait rien ici, c'est géré dans renderHTML global
       },
       style: {
         default: '',
-        // Lecture: on récupère tout le style inline
         parseHTML: (element) => element.getAttribute('style'),
       },
       textAlign: {
         default: 'center',
-        // Lecture: on regarde le style text-align ou data-align
         parseHTML: (element) => element.style.textAlign || element.getAttribute('data-align'),
       },
     };
   },
-
-  // C'est ICI que la magie opère pour la sauvegarde
   renderHTML({ HTMLAttributes }) {
     const { style, width, textAlign, ...rest } = HTMLAttributes;
-
-    // On construit une chaîne CSS complète et valide
     const styles = [
-      style, // Les filtres (blur, grayscale...)
-      width ? `width: ${width}` : '', // La taille
-      textAlign ? `text-align: ${textAlign}` : '', // L'alignement interne
-      'display: block', // Force le block pour que les marges auto fonctionnent
-      // Gestion des marges pour l'alignement visuel
+      style,
+      width ? `width: ${width}` : '',
+      textAlign ? `text-align: ${textAlign}` : '',
+      'display: block',
       textAlign === 'center' ? 'margin-left: auto; margin-right: auto;' : '',
       textAlign === 'right' ? 'margin-left: auto; margin-right: 0;' : '',
       textAlign === 'left' ? 'margin-right: auto; margin-left: 0;' : '',
     ].filter(Boolean).join('; ');
 
-    // On retourne une balise <img> standard avec tout dans l'attribut style
     return ['img', mergeAttributes(this.options.HTMLAttributes, rest, { 
       style: styles,
-      'data-align': textAlign // Backup pour le parsing
+      'data-align': textAlign 
     })];
   },
-
   addNodeView() {
     return ReactNodeViewRenderer(ImageNodeView);
   },
@@ -143,6 +127,7 @@ interface Document {
   color?: string;
   visibility: 'private' | 'limited' | 'public';
   public_permission: 'read' | 'write';
+  storage_path?: string | null; // NOUVEAU : Chemin Cold Storage
 }
 
 interface AccessEntry {
@@ -216,6 +201,7 @@ const DocEditor = () => {
   const [document, setDocument] = useState<Document | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isColdStorage, setIsColdStorage] = useState(false); // Indicateur visuel
   const [title, setTitle] = useState('');
   const [permission, setPermission] = useState<'read' | 'write'>('read');
   const [isOwner, setIsOwner] = useState(false);
@@ -265,7 +251,6 @@ const DocEditor = () => {
   const myColorRef = useRef(CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   
-  // --- FIX: PREVENT RELOAD ON TAB SWITCH ---
   const isLoadedRef = useRef(false);
 
   useEffect(() => { titleRef.current = title; }, [title]);
@@ -286,7 +271,7 @@ const DocEditor = () => {
       if (newState) showSuccess("Sivara Text activé");
   };
 
-  // Load Google Maps Script for Geofencing
+  // ... (Google Maps Logic - Unchanged) ...
   useEffect(() => {
       if (showExportDialog && restrictGeo && !window.google) {
           const loadMaps = async () => {
@@ -309,7 +294,6 @@ const DocEditor = () => {
       if (circleObjRef.current && geoRadius.length > 0) {
           const currentMapRadius = circleObjRef.current.getRadius();
           const targetRadius = geoRadius[0] * 1000; 
-          
           if (Math.abs(currentMapRadius - targetRadius) > 100) {
               circleObjRef.current.setRadius(targetRadius);
           }
@@ -318,87 +302,33 @@ const DocEditor = () => {
 
   const initMap = async () => {
       if (!mapRef.current) return;
-      
-      let initialPos = { lat: 45.5017, lng: -73.5673 }; // Default MTL
-
+      let initialPos = { lat: 45.5017, lng: -73.5673 }; 
       try {
-          const { data, error } = await supabase.functions.invoke('sivara-kernel', {
-              body: { action: 'locate_me' }
-          });
-          if (!error && data?.lat) {
-              initialPos = { lat: data.lat, lng: data.lng };
-              showSuccess(`Position Internet détectée : ${data.city}`);
-          }
-      } catch (e) { console.error("Locate error", e); }
-
+          const { data, error } = await supabase.functions.invoke('sivara-kernel', { body: { action: 'locate_me' } });
+          if (!error && data?.lat) { initialPos = { lat: data.lat, lng: data.lng }; }
+      } catch (e) {}
       setGeoCenter(initialPos);
-
-      const map = new window.google.maps.Map(mapRef.current, {
-          center: initialPos,
-          zoom: 9,
-          disableDefaultUI: true,
-          streetViewControl: false,
-      });
+      const map = new window.google.maps.Map(mapRef.current, { center: initialPos, zoom: 9, disableDefaultUI: true, streetViewControl: false });
       mapObjRef.current = map;
-
-      new window.google.maps.Marker({
-          position: initialPos,
-          map: map,
-          title: "Votre IP (Centre de données)",
-          icon: {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 5,
-              fillColor: "#EF4444",
-              fillOpacity: 1,
-              strokeWeight: 0
-          }
-      });
-
-      const circle = new window.google.maps.Circle({
-          strokeColor: '#3B82F6',
-          strokeOpacity: 0.8,
-          strokeWeight: 2,
-          fillColor: '#3B82F6',
-          fillOpacity: 0.35,
-          map,
-          center: initialPos,
-          radius: geoRadius[0] * 1000, 
-          editable: true,
-          draggable: true
-      });
+      new window.google.maps.Marker({ position: initialPos, map: map, icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: "#EF4444", fillOpacity: 1, strokeWeight: 0 } });
+      const circle = new window.google.maps.Circle({ strokeColor: '#3B82F6', strokeOpacity: 0.8, strokeWeight: 2, fillColor: '#3B82F6', fillOpacity: 0.35, map, center: initialPos, radius: geoRadius[0] * 1000, editable: true, draggable: true });
       circleObjRef.current = circle;
-
-      circle.addListener('center_changed', () => {
-          const c = circle.getCenter();
-          setGeoCenter({ lat: c.lat(), lng: c.lng() });
-      });
-
-      circle.addListener('radius_changed', () => {
-          const r = circle.getRadius();
-          setGeoRadius([Math.round(r / 1000)]);
-      });
+      circle.addListener('center_changed', () => { const c = circle.getCenter(); setGeoCenter({ lat: c.lat(), lng: c.lng() }); });
+      circle.addListener('radius_changed', () => { const r = circle.getRadius(); setGeoRadius([Math.round(r / 1000)]); });
   };
 
   const recenterMap = async () => {
       if (!mapObjRef.current || !circleObjRef.current) return;
       try {
-          const { data } = await supabase.functions.invoke('sivara-kernel', {
-              body: { action: 'locate_me' }
-          });
-          if (data?.lat) {
-              const pos = { lat: data.lat, lng: data.lng };
-              mapObjRef.current.panTo(pos);
-              circleObjRef.current.setCenter(pos);
-              setGeoCenter(pos);
-              showSuccess(`Recentré sur : ${data.city}`);
-          }
+          const { data } = await supabase.functions.invoke('sivara-kernel', { body: { action: 'locate_me' } });
+          if (data?.lat) { const pos = { lat: data.lat, lng: data.lng }; mapObjRef.current.panTo(pos); circleObjRef.current.setCenter(pos); setGeoCenter(pos); }
       } catch (e) {}
   };
 
   const editor = useEditor({
     extensions: [
       StarterKit, Underline, TextStyle, FontFamily, FontSize, AdvancedImage,
-      TextAlign.configure({ types: ['heading', 'paragraph'] }), // Image gérée par NodeView
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Placeholder.configure({ placeholder: 'Commencez à écrire...' }),
     ],
     content: '',
@@ -442,13 +372,7 @@ const DocEditor = () => {
 
   useEffect(() => {
     if (!id || authLoading) return;
-    
-    // --- FIX: PREVENT RELOAD ON TAB SWITCH ---
-    // Si on a déjà chargé le document pour cet ID, on ne le recharge pas
-    // sauf si l'ID change (navigation vers un autre doc)
-    if (isLoadedRef.current && document?.id === id) {
-        return;
-    }
+    if (isLoadedRef.current && document?.id === id) return;
 
     const init = async () => {
       if (!window.document.getElementById('sivara-google-fonts')) {
@@ -465,12 +389,12 @@ const DocEditor = () => {
       }
 
       await fetchDocumentAndInitCrypto();
-      isLoadedRef.current = true; // Marquer comme chargé
+      isLoadedRef.current = true;
     };
     init();
     
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
-  }, [id, user, editor, authLoading]); // On garde les dépendances mais on bloque avec la ref
+  }, [id, user, editor, authLoading]);
 
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
   
@@ -619,9 +543,31 @@ const DocEditor = () => {
 
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
+
+      // --- LOGIQUE COLD STORAGE ---
+      if (doc.storage_path) {
+          setIsColdStorage(true);
+          try {
+              // Téléchargement depuis le bucket
+              const { data: blob, error: downloadError } = await supabase.storage
+                  .from('doc-archives')
+                  .download(doc.storage_path);
+              
+              if (downloadError) throw downloadError;
+              
+              // Le contenu est dans le fichier
+              decryptedContent = await blob.text();
+          } catch (e) {
+              console.error("Erreur récupération Cold Storage", e);
+              decryptedContent = ""; // Fallback
+          }
+      }
+
       try {
           decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
-          decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
+          if (decryptedContent) {
+              decryptedContent = await encryptionService.decrypt(decryptedContent, doc.encryption_iv);
+          }
       } catch (e) { setDecryptionError(true); decryptedTitle = "Document sécurisé"; decryptedContent = ""; }
       
       setDocument(doc); 
@@ -645,7 +591,29 @@ const DocEditor = () => {
 
   const fetchAccessList = async () => { const { data } = await supabase.from('document_access').select('*').eq('document_id', id); setAccessList(data || []); };
   
-  const handleSave = async (key: string, value: string) => { if (!id || permission !== 'write') return; try { setIsSaving(true); const { encrypted: encTitle, iv } = await encryptionService.encrypt(titleRef.current); const { encrypted: encContent } = await encryptionService.encrypt(editor?.getHTML() || '', iv); await supabase.from('documents').update({ title: encTitle, content: encContent, encryption_iv: iv, updated_at: new Date().toISOString(), ...((key === 'icon') ? { icon: value } : {}), ...((key === 'color') ? { color: value } : {}) }).eq('id', id); } catch(e) { console.error(e); } finally { setIsSaving(false); } };
+  const handleSave = async (key: string, value: string) => { 
+      if (!id || permission !== 'write') return; 
+      try { 
+          setIsSaving(true); 
+          const { encrypted: encTitle, iv } = await encryptionService.encrypt(titleRef.current); 
+          const { encrypted: encContent } = await encryptionService.encrypt(editor?.getHTML() || '', iv); 
+          
+          // --- LOGIQUE HOT WRITE ---
+          // On force le contenu dans la DB et on vide le storage_path pour le sortir du Cold Storage
+          await supabase.from('documents').update({ 
+              title: encTitle, 
+              content: encContent, 
+              encryption_iv: iv, 
+              updated_at: new Date().toISOString(), 
+              storage_path: null, // IMPORTANT: Retour en Hot Storage
+              ...((key === 'icon') ? { icon: value } : {}), 
+              ...((key === 'color') ? { color: value } : {}) 
+          }).eq('id', id); 
+          
+          if (isColdStorage) setIsColdStorage(false); // Update UI
+
+      } catch(e) { console.error(e); } finally { setIsSaving(false); } 
+  };
   
   const handleContentChange = (content: string) => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = setTimeout(() => handleSave('content', content), 500); };
   
@@ -682,6 +650,12 @@ const DocEditor = () => {
         let encryptedContent = document.content;
         let iv = document.encryption_iv;
         let salt = null;
+
+        // Si Cold Storage, on doit récupérer le contenu chiffré brut
+        if (document.storage_path) {
+             const { data: blob } = await supabase.storage.from('doc-archives').download(document.storage_path);
+             if (blob) encryptedContent = await blob.text();
+        }
 
         if (exportPassword) {
             const saltValue = crypto.randomUUID();
@@ -764,9 +738,8 @@ const DocEditor = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // Check Quota
     const isPro = userProfile?.is_pro || false;
-    const maxSize = isPro ? 35 * 1024 * 1024 : 15 * 1024 * 1024; // 35MB vs 15MB
+    const maxSize = isPro ? 35 * 1024 * 1024 : 15 * 1024 * 1024; 
 
     if (file.size > maxSize) {
         showError(`Fichier trop volumineux. Limite: ${isPro ? '35MB' : '15MB'}`);
@@ -778,14 +751,11 @@ const DocEditor = () => {
         const fileExt = file.name.split('.').pop();
         const fileName = `${user.id}/${Date.now()}.${fileExt}`;
         
-        // On utilise le bucket 'doc-assets' (à créer si inexistant, ou fallback sur 'covers' si besoin)
-        // Pour l'instant on tente 'doc-assets'
         const { error: uploadError } = await supabase.storage
             .from('doc-assets')
             .upload(fileName, file);
 
         if (uploadError) {
-            // Fallback si le bucket n'existe pas encore (pour éviter de casser la démo)
             console.warn("Bucket doc-assets manquant, tentative sur covers...");
              const { error: fallbackError } = await supabase.storage
                 .from('covers')
@@ -816,7 +786,6 @@ const DocEditor = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#F3F4F6] pt-[env(safe-area-inset-top)]">
       
-      {/* SIVARA TEXT COMPONENT */}
       <SivaraText 
         editor={editor} 
         isOpen={showSivaraText} 
@@ -840,6 +809,12 @@ const DocEditor = () => {
                  {document?.visibility === 'public' ? <Globe2 className="h-3 w-3" /> : document?.visibility === 'limited' ? <Users className="h-3 w-3" /> : <LockKeyhole className="h-3 w-3" />}
                  {document?.visibility === 'public' ? 'Public' : document?.visibility === 'limited' ? 'Limité' : 'Barré'}
               </Badge>
+
+              {isColdStorage && (
+                  <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-blue-100 gap-1 animate-in fade-in">
+                      <Snowflake className="h-3 w-3" /> Archivé
+                  </Badge>
+              )}
 
               <div className="flex items-center gap-1.5 text-xs text-gray-400 min-w-[20px] shrink-0">
                 {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Cloud className="h-3 w-3" />}
