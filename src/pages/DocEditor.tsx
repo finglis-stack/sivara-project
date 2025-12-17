@@ -544,27 +544,41 @@ const DocEditor = () => {
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
 
-      // --- LOGIQUE COLD STORAGE ---
+      // --- LOGIQUE COLD STORAGE (SBP) ---
       if (doc.storage_path) {
           setIsColdStorage(true);
           try {
-              // Téléchargement depuis le bucket
+              // 1. Téléchargement du fichier .sivara
               const { data: blob, error: downloadError } = await supabase.storage
                   .from('doc-archives')
                   .download(doc.storage_path);
               
               if (downloadError) throw downloadError;
               
-              // Le contenu est dans le fichier
-              decryptedContent = await blob.text();
+              // 2. Décompilation via Kernel (sivaraVM)
+              // On passe le fichier binaire au Kernel qui va extraire les données chiffrées
+              // Note: Le Kernel ne déchiffre PAS le contenu (il n'a pas la clé), il extrait juste le payload du conteneur SBP
+              const file = new File([blob], "archive.sivara");
+              const decompiled = await sivaraVM.decompile(file);
+              
+              // 3. Récupération des données chiffrées
+              if (decompiled.encrypted_title) decryptedTitle = decompiled.encrypted_title;
+              if (decompiled.encrypted_content) decryptedContent = decompiled.encrypted_content;
+              
+              // Mise à jour de l'IV si présent dans l'archive (important pour le déchiffrement)
+              if (decompiled.iv) {
+                  doc.encryption_iv = decompiled.iv;
+              }
+
           } catch (e) {
               console.error("Erreur récupération Cold Storage", e);
               decryptedContent = ""; // Fallback
+              showError("Erreur lors de la récupération de l'archive");
           }
       }
 
       try {
-          decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
+          decryptedTitle = await encryptionService.decrypt(decryptedTitle, doc.encryption_iv);
           if (decryptedContent) {
               decryptedContent = await encryptionService.decrypt(decryptedContent, doc.encryption_iv);
           }
@@ -654,7 +668,13 @@ const DocEditor = () => {
         // Si Cold Storage, on doit récupérer le contenu chiffré brut
         if (document.storage_path) {
              const { data: blob } = await supabase.storage.from('doc-archives').download(document.storage_path);
-             if (blob) encryptedContent = await blob.text();
+             if (blob) {
+                 // Décompilation pour récupérer le contenu chiffré
+                 const file = new File([blob], "temp.sivara");
+                 const decompiled = await sivaraVM.decompile(file);
+                 if (decompiled.encrypted_content) encryptedContent = decompiled.encrypted_content;
+                 if (decompiled.iv) iv = decompiled.iv;
+             }
         }
 
         if (exportPassword) {
