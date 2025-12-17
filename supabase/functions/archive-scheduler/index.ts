@@ -19,10 +19,22 @@ const OP_CODES = {
   EOF: 0xFF
 };
 
+// Clé universelle pour les archives publiques
+const PUBLIC_CONTAINER_SEED = "SIVARA_PUBLIC_CONTAINER_V1";
+
 // Utils pour la construction binaire
 const strToBuf = (str: string) => new TextEncoder().encode(str);
 
-const sivaraShuffle = (buffer: Uint8Array, seed: number): Uint8Array => {
+// Fonction de mélange (Shuffling) basée sur une graine (Seed)
+// Si le document est public, on utilise une graine connue. Sinon, l'ID du user.
+const sivaraShuffle = (buffer: Uint8Array, seedString: string): Uint8Array => {
+  // Génération d'un seed numérique simple à partir de la string
+  let seed = 0;
+  for (let i = 0; i < seedString.length; i++) {
+    seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+    seed |= 0;
+  }
+
   const result = new Uint8Array(buffer.length);
   for (let i = 0; i < buffer.length; i++) {
     const key = (seed + i) & 0xFF; 
@@ -32,7 +44,7 @@ const sivaraShuffle = (buffer: Uint8Array, seed: number): Uint8Array => {
 };
 
 const generateGhostBlock = (): Uint8Array[] => {
-  const size = Math.floor(Math.random() * 64) + 16; // Plus petit pour l'archivage de masse
+  const size = Math.floor(Math.random() * 64) + 16;
   const noise = crypto.getRandomValues(new Uint8Array(size));
   const lenBuffer = new Uint8Array(4);
   new DataView(lenBuffer.buffer).setUint32(0, size);
@@ -50,17 +62,16 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Trouver les documents "Hot" inactifs
-    // Critère : > 5 minutes sans update
+    // 1. Trouver les documents "Hot" inactifs (> 5 min)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
     const { data: docsToArchive, error: fetchError } = await supabase
       .from('documents')
-      .select('id, title, content, encryption_iv, owner_id, icon, color')
+      .select('id, title, content, encryption_iv, owner_id, icon, color, visibility')
       .is('storage_path', null)
       .neq('content', '') 
       .lt('updated_at', fiveMinutesAgo)
-      .limit(20); // Batch prudent
+      .limit(20);
 
     if (fetchError) throw fetchError;
 
@@ -71,15 +82,16 @@ serve(async (req) => {
     for (const doc of docsToArchive || []) {
         if (!doc.content) continue;
 
-        // --- COMPILATION SBP (Sivara Binary Protocol) ---
-        // On encapsule les données DÉJÀ CHIFFRÉES de la DB.
-        
+        // DÉTERMINATION DE LA CLÉ DU CONTENEUR
+        // Si Public -> Clé Globale. Si Privé -> ID Propriétaire.
+        const containerSeed = doc.visibility === 'public' ? PUBLIC_CONTAINER_SEED : doc.owner_id;
+
         const parts: Uint8Array[] = [];
         
         // 1. Magic Header (SVR2)
         parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x02])); 
 
-        // 2. IV Block (Vital pour déchiffrer plus tard)
+        // 2. IV Block
         const ivBinString = atob(doc.encryption_iv);
         const ivBuf = new Uint8Array(ivBinString.length);
         for (let i = 0; i < ivBinString.length; i++) ivBuf[i] = ivBinString.charCodeAt(i);
@@ -88,15 +100,16 @@ serve(async (req) => {
         parts.push(new Uint8Array([ivBuf.length]));
         parts.push(ivBuf);
 
-        // 3. Metadata (Icon, Color, Owner) - Obfusqué
+        // 3. Metadata (Icon, Color, Owner, Visibility) - Obfusqué avec le Seed
         const metaJson = JSON.stringify({ 
             owner_id: doc.owner_id, 
             icon: doc.icon, 
             color: doc.color,
+            visibility: doc.visibility, // Important pour l'import
             archived_at: new Date().toISOString()
         });
         const metaBuf = strToBuf(metaJson);
-        const shuffledMeta = sivaraShuffle(metaBuf, 0xAA);
+        const shuffledMeta = sivaraShuffle(metaBuf, containerSeed);
         const metaLen = new Uint8Array(4);
         new DataView(metaLen.buffer).setUint32(0, shuffledMeta.length);
         
@@ -104,10 +117,10 @@ serve(async (req) => {
         parts.push(metaLen);
         parts.push(shuffledMeta);
 
-        // 4. Ghost Block (Noise)
+        // 4. Ghost Block
         parts.push(...generateGhostBlock());
 
-        // 5. Payload (Title + Content) - Déjà chiffrés en AES-GCM par le client
+        // 5. Payload (Title + Content) - Obfusqué avec le Seed
         const titleBuf = strToBuf(doc.title);
         const contentBuf = strToBuf(doc.content);
         
@@ -116,7 +129,7 @@ serve(async (req) => {
         combinedPayload[titleBuf.length] = 0x00; // Separator
         combinedPayload.set(contentBuf, titleBuf.length + 1);
 
-        const shuffledPayload = sivaraShuffle(combinedPayload, 0xBB);
+        const shuffledPayload = sivaraShuffle(combinedPayload, containerSeed);
         const payloadLen = new Uint8Array(4);
         new DataView(payloadLen.buffer).setUint32(0, shuffledPayload.length);
 
@@ -127,7 +140,7 @@ serve(async (req) => {
         // 6. EOF
         parts.push(new Uint8Array([OP_CODES.EOF]));
 
-        // Assemblage final
+        // Assemblage
         const totalLength = parts.reduce((acc, p) => acc + p.length, 0);
         const finalBuffer = new Uint8Array(totalLength);
         let offset = 0;

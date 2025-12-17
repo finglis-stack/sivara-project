@@ -28,7 +28,6 @@ import {
   Download, Share2, Copy, Loader2, Grid3x3, List, ArrowLeft, 
   FolderPlus, Folder, ChevronRight, Home, MoveUp, Edit2, 
   Image as ImageIcon, Palette, UserCircle, StarOff, Upload, FileJson, Lock,
-  // Ajout des icônes manquantes pour correspondre à l'éditeur
   Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
   Calendar, CheckSquare, MessageSquare, Mail, Globe, Settings, Heart, Zap, Award, BarChart
 } from 'lucide-react';
@@ -83,7 +82,6 @@ interface Profile {
 // --- CONSTANTS ---
 const DEFAULT_COVER = '/default-cover.jpg';
 
-// Liste synchronisée avec DocEditor.tsx
 const AVAILABLE_ICONS = [
   { name: 'FileText', icon: FileText }, { name: 'Briefcase', icon: Briefcase },
   { name: 'FolderOpen', icon: FolderOpen }, { name: 'BookOpen', icon: BookOpen },
@@ -94,7 +92,6 @@ const AVAILABLE_ICONS = [
   { name: 'Globe', icon: Globe }, { name: 'Settings', icon: Settings },
   { name: 'Heart', icon: Heart }, { name: 'Zap', icon: Zap },
   { name: 'Award', icon: Award }, { name: 'BarChart', icon: BarChart },
-  // Icônes spécifiques aux dossiers ou legacy
   { name: 'Folder', icon: Folder }, 
   { name: 'Star', icon: Star },
   { name: 'Home', icon: Home },
@@ -177,24 +174,19 @@ const Docs = () => {
   const { user, loading, signOut } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   
-  // State Data
   const [documents, setDocuments] = useState<DecryptedDocument[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   
-  // State UI
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filter, setFilter] = useState<'all' | 'recent' | 'starred'>('all');
   
-  // State Navigation & Folders
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<FolderPath[]>([{ id: null, name: 'Accueil' }]);
   
-  // State DnD
   const [activeDragItem, setActiveDragItem] = useState<DecryptedDocument | null>(null);
 
-  // State Modals
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean, docId: string, currentTitle: string }>({ isOpen: false, docId: '', currentTitle: '' });
   const [customizeDialog, setCustomizeDialog] = useState<{ isOpen: boolean, doc: DecryptedDocument | null }>({ isOpen: false, doc: null });
   const [importPasswordDialog, setImportPasswordDialog] = useState<{ isOpen: boolean, fileData: any | null }>({ isOpen: false, fileData: null });
@@ -203,7 +195,6 @@ const Docs = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importPassword, setImportPassword] = useState('');
   
-  // State Customization
   const [customIcon, setCustomIcon] = useState('Folder');
   const [customColor, setCustomColor] = useState('#6B7280');
   const [isUploading, setIsUploading] = useState(false);
@@ -217,18 +208,14 @@ const Docs = () => {
     })
   );
 
-  // --- HELPER: CONTRASTE COULEUR ---
   const getIconTextColor = (bgColor: string) => { 
     if (!bgColor) return '#FFFFFF';
     const hex = bgColor.replace('#', ''); 
     const r = parseInt(hex.substr(0, 2), 16); 
     const g = parseInt(hex.substr(2, 2), 16); 
     const b = parseInt(hex.substr(4, 2), 16); 
-    // Formule de luminosité YIQ
     return ((r * 299 + g * 587 + b * 114) / 1000) > 155 ? '#1F2937' : '#FFFFFF'; 
   };
-
-  // --- INITIALIZATION ---
 
   const fetchProfile = async () => {
     if (!user) return;
@@ -246,7 +233,6 @@ const Docs = () => {
     }
   };
 
-  // --- LOGIQUE D'OUVERTURE DE DOSSIER VIA URL ---
   useEffect(() => {
       const folderParam = searchParams.get('folder');
       if (folderParam && folderParam !== currentFolderId) {
@@ -257,7 +243,6 @@ const Docs = () => {
               if (data) {
                   try {
                       const title = await encryptionService.decrypt(data.title, data.encryption_iv);
-                      // TODO: Idéalement reconstruire tout le chemin parent
                       setBreadcrumbs([{ id: null, name: 'Accueil' }, { id: data.id, name: title }]);
                       setCurrentFolderId(data.id);
                   } catch (e) {
@@ -274,7 +259,6 @@ const Docs = () => {
     setIsLoadingDocs(true);
 
     try {
-      // IMPORTANT: S'assurer que l'instance crypto est bien sur l'utilisateur courant avant de fetch
       await encryptionService.initialize(user.id);
 
       let query = supabase.from('documents').select('*').eq('owner_id', user.id);
@@ -316,10 +300,7 @@ const Docs = () => {
     fetchProfile();
   }, [user, currentFolderId]);
 
-  // --- ACTIONS ---
-
   const handleNavigate = (id: string) => {
-    // Si c'est en local, on ajoute app=docs
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     if (isLocal) {
         navigate(`/${id}?app=docs`);
@@ -333,7 +314,6 @@ const Docs = () => {
     try {
       const title = type === 'folder' ? 'Nouveau dossier' : 'Document sans titre';
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(title);
-      // On initialise le contenu aussi
       const { encrypted: encryptedContent } = await encryptionService.encrypt('', iv);
 
       const { data, error } = await supabase
@@ -366,17 +346,11 @@ const Docs = () => {
 
   const handleRename = async () => {
     if (!user || !newTitle.trim()) return;
-    
-    // CORRECTION CRITIQUE : Il faut aussi ré-encrypter le contenu avec le nouvel IV
-    // Sinon le contenu devient illisible car l'IV de la row a changé
     const docToRename = documents.find(d => d.id === renameDialog.docId);
     if (!docToRename) return;
 
     try {
-      // 1. Chiffrement du nouveau titre -> Génère un nouvel IV
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(newTitle);
-      
-      // 2. Chiffrement du contenu existant avec le MÊME nouvel IV
       const contentToEncrypt = docToRename.decryptedContent || ''; 
       const { encrypted: encryptedContent } = await encryptionService.encrypt(contentToEncrypt, iv);
 
@@ -384,7 +358,7 @@ const Docs = () => {
         .from('documents')
         .update({ 
             title: encryptedTitle, 
-            content: encryptedContent, // Update content too!
+            content: encryptedContent, 
             encryption_iv: iv 
         })
         .eq('id', renameDialog.docId);
@@ -475,9 +449,12 @@ const Docs = () => {
     try {
         setIsImporting(true);
 
+        // 1. Initialisation du service de déchiffrement selon le contexte
         if (data.header === 'SIVARA_SECURE_DOC_V2' && password && data.salt) {
+            // Cas: Fichier protégé par mot de passe
             await encryptionService.initialize(password, data.salt);
-        } else if (data.header === 'SIVARA_SECURE_DOC_V1' || data.header === 'SIVARA_SECURE_DOC_V2') {
+        } else if (data.header === 'SIVARA_SECURE_DOC_V2' && data.owner_id) {
+            // Cas: Fichier public ou privé standard (utilise l'ID du propriétaire original)
             await encryptionService.initialize(data.owner_id);
         } else {
             throw new Error("Format non supporté");
@@ -490,19 +467,22 @@ const Docs = () => {
             decryptedTitle = await encryptionService.decrypt(data.encrypted_title, data.iv);
             decryptedContent = data.encrypted_content ? await encryptionService.decrypt(data.encrypted_content, data.iv) : '';
         } catch (decryptError) {
+            // Si échec, c'est peut-être un fichier protégé qui nécessite un mot de passe
             if (data.header === 'SIVARA_SECURE_DOC_V2' && !password) {
                 setImportPasswordDialog({ isOpen: true, fileData: data });
                 setIsImporting(false);
                 return;
             }
-            throw new Error("Clé de déchiffrement invalide.");
+            throw new Error("Clé de déchiffrement invalide ou fichier corrompu.");
         }
 
+        // 2. Re-chiffrement avec la clé de l'utilisateur courant (Appropriation)
         await encryptionService.initialize(user.id);
         
         const { encrypted: newEncTitle, iv: newIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
         const { encrypted: newEncContent } = await encryptionService.encrypt(decryptedContent, newIv);
 
+        // 3. Insertion en base avec les métadonnées récupérées (Icon, Color)
         const { error: insertError } = await supabase
             .from('documents')
             .insert({
@@ -512,8 +492,8 @@ const Docs = () => {
                 owner_id: user.id, 
                 type: 'file',
                 visibility: 'private',
-                icon: data.icon || 'FileText',
-                color: data.color || '#3B82F6',
+                icon: data.icon || 'FileText', // Récupération de l'icône
+                color: data.color || '#3B82F6', // Récupération de la couleur
                 parent_id: currentFolderId 
             });
         
@@ -527,6 +507,7 @@ const Docs = () => {
 
     } catch (err: any) {
         console.error(err);
+        // Reset du service de chiffrement en cas d'erreur
         if (user) await encryptionService.initialize(user.id);
         showError(err.message || "Erreur lors de l'importation");
     } finally {
@@ -541,21 +522,30 @@ const Docs = () => {
 
     try {
         setIsImporting(true);
+        // Appel au Kernel pour extraire le contenu du conteneur SBP
         const data = await sivaraVM.decompile(file);
         
-        if (data.header === 'SIVARA_SECURE_DOC_V2') {
-            setImportPasswordDialog({ isOpen: true, fileData: data });
-            setIsImporting(false);
-        } else {
-            await processImport(data);
+        // Si le Kernel renvoie une erreur d'auth (fichier privé d'un autre user), on demande le mot de passe
+        if (data.require_auth) {
+             setImportPasswordDialog({ isOpen: true, fileData: data }); // Note: data ici contient peut-être juste l'erreur, à ajuster selon le retour du Kernel
+             // En fait, si require_auth est true, le Kernel n'a PAS renvoyé les données chiffrées.
+             // Il faut que l'utilisateur fournisse le mot de passe pour que le Kernel puisse déchiffrer le conteneur SBP lui-même ?
+             // NON. Le Kernel déchiffre le conteneur SBP. Si c'est public, il réussit. Si c'est privé, il échoue.
+             // Si il échoue, on ne peut rien faire sans la clé privée du propriétaire original.
+             // SAUF SI c'est un export manuel avec mot de passe.
+             
+             // Simplification : Si decompile réussit, on a les données chiffrées (AES).
+             // On passe à processImport qui va tenter de déchiffrer l'AES.
+             throw new Error("Ce fichier est protégé et ne peut être ouvert que par son propriétaire.");
         }
+
+        await processImport(data);
+
     } catch (err: any) {
-        showError(err.message || "Fichier invalide");
+        showError(err.message || "Fichier invalide ou accès refusé");
         setIsImporting(false);
     }
   };
-
-  // --- NAVIGATION & DND ---
 
   const enterFolder = (folder: DecryptedDocument) => {
     setCurrentFolderId(folder.id);
@@ -621,8 +611,6 @@ const Docs = () => {
       showError("Erreur lors du déplacement");
     }
   };
-
-  // --- RENDER HELPERS ---
 
   const getPreviewText = (content: string) => {
     const text = content.replace(/<[^>]*>/g, '').trim();
