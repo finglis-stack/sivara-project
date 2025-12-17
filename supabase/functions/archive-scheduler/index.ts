@@ -8,39 +8,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// --- SIVARA BINARY PROTOCOL (SBP) CONSTANTS ---
-// Doit être IDENTIQUE à sivara-kernel
+// --- SIVARA BINARY PROTOCOL (SBP) ---
 const OP_CODES = {
-  MAGIC: 0x53, // 'S'
-  HEADER: 0xA1,
-  IV_BLOCK: 0xB2,
-  DATA_CHUNK: 0xC3,
-  META_TAG: 0xD4,
-  GHOST_BLOCK: 0x1F,
-  VM_BYTECODE: 0xE5, // Le bloc VM
-  EOF: 0xFF
+  MAGIC: 0x53, HEADER: 0xA1, IV_BLOCK: 0xB2, DATA_CHUNK: 0xC3,
+  META_TAG: 0xD4, GHOST_BLOCK: 0x1F, VM_BYTECODE: 0xE5, EOF: 0xFF
 };
 
-// Bytecode pour "exiger(1)" (Toujours vrai / Accès autorisé)
-// PUSH_NUM(1) -> 0x01, 0x00, 0x00, 0x00, 0x01
-// ASSERT      -> 0x99
-// HALT        -> 0x00
-const DEFAULT_ALLOW_BYTECODE = new Uint8Array([0x01, 0x00, 0x00, 0x00, 0x01, 0x99, 0x00]);
+// --- VM INSTRUCTIONS ---
+const VM = {
+  PUSH_NUM: 0x01, PUSH_STR: 0x02, 
+  EQ: 0x30, OR: 0x35, 
+  ENV_GET: 0x50, ASSERT: 0x99
+};
+
+const ENV_EMAIL = 3; // ID pour env.utilisateur.email
 
 // Clé universelle pour les archives publiques
 const PUBLIC_CONTAINER_SEED = "SIVARA_PUBLIC_CONTAINER_V1";
 
-// Utils pour la construction binaire
 const strToBuf = (str: string) => new TextEncoder().encode(str);
 
-// Fonction de mélange (Shuffling)
+// Hachage DJB2 pour les strings (identique au Kernel)
+const hashString = (str: string): number => {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) hash = ((hash << 5) + hash) + str.charCodeAt(i);
+  return hash >>> 0;
+};
+
 const sivaraShuffle = (buffer: Uint8Array, seedString: string): Uint8Array => {
   let seed = 0;
   for (let i = 0; i < seedString.length; i++) {
     seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
     seed |= 0;
   }
-
   const result = new Uint8Array(buffer.length);
   for (let i = 0; i < buffer.length; i++) {
     const key = (seed + i) & 0xFF; 
@@ -57,6 +57,34 @@ const generateGhostBlock = (): Uint8Array[] => {
   return [new Uint8Array([OP_CODES.GHOST_BLOCK]), lenBuffer, noise];
 };
 
+// Générateur de Bytecode ACL (Access Control List)
+const generateACLBytecode = (allowedEmails: string[]): Uint8Array => {
+    const bytecode: number[] = [];
+    
+    // Init: PUSH 0 (False) - État initial "Accès Refusé"
+    bytecode.push(VM.PUSH_NUM, 0, 0, 0, 0); 
+
+    for (const email of allowedEmails) {
+        // 1. Récupérer Email Courant
+        bytecode.push(VM.ENV_GET, 0, 0, 0, ENV_EMAIL);
+        
+        // 2. PUSH Hash Email Autorisé
+        const hash = hashString(email.toLowerCase().trim());
+        bytecode.push(VM.PUSH_STR, (hash >> 24) & 0xFF, (hash >> 16) & 0xFF, (hash >> 8) & 0xFF, hash & 0xFF);
+        
+        // 3. Comparer (EQ)
+        bytecode.push(VM.EQ);
+        
+        // 4. OU Logique (Si c'est bon, on passe à 1)
+        bytecode.push(VM.OR);
+    }
+
+    // Final: ASSERT (Si 0 -> Kernel Panic)
+    bytecode.push(VM.ASSERT);
+    
+    return new Uint8Array(bytecode);
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -68,53 +96,78 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Trouver les documents "Hot" inactifs (> 5 min)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // 1. TIMING : 3 Minutes
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
     const { data: docsToArchive, error: fetchError } = await supabase
       .from('documents')
       .select('id, title, content, encryption_iv, owner_id, icon, color, visibility')
-      .eq('type', 'file') // EXCLUSION DES DOSSIERS
+      .eq('type', 'file') // FICHIERS SEULEMENT
       .is('storage_path', null)
       .neq('content', '') 
-      .lt('updated_at', fiveMinutesAgo)
-      .limit(20);
+      .lt('updated_at', threeMinutesAgo)
+      .limit(15); // Batch size raisonnable
 
     if (fetchError) throw fetchError;
 
-    console.log(`[Archiver] ${docsToArchive?.length || 0} documents à compiler en .sivara`);
+    console.log(`[Archiver] ${docsToArchive?.length || 0} fichiers inactifs (>3min) à traiter.`);
 
     const results = [];
 
     for (const doc of docsToArchive || []) {
         if (!doc.content) continue;
 
-        // DÉTERMINATION DE LA CLÉ DU CONTENEUR
-        const containerSeed = doc.visibility === 'public' ? PUBLIC_CONTAINER_SEED : doc.owner_id;
+        // --- LOGIQUE DE SÉCURITÉ (SMART CONTRACT) ---
+        let vmBytecode: Uint8Array;
+        let containerSeed = doc.owner_id;
 
+        if (doc.visibility === 'public') {
+            // Public : Tout le monde passe, Seed publique
+            containerSeed = PUBLIC_CONTAINER_SEED;
+            // Bytecode: PUSH 1, ASSERT (Toujours vrai)
+            vmBytecode = new Uint8Array([VM.PUSH_NUM, 0, 0, 0, 1, VM.ASSERT]);
+        } else {
+            // Privé / Limité : Liste blanche stricte
+            const allowedEmails: string[] = [];
+            
+            // A. Récupérer l'email du propriétaire
+            // Note: On utilise profiles car auth.users n'est pas toujours accessible facilement en join
+            const { data: ownerProfile } = await supabase.from('profiles').select('email').eq('id', doc.owner_id).single();
+            if (ownerProfile?.email) allowedEmails.push(ownerProfile.email);
+
+            // B. Récupérer les invités (si limité)
+            if (doc.visibility === 'limited') {
+                const { data: accessList } = await supabase.from('document_access').select('email').eq('document_id', doc.id);
+                if (accessList) accessList.forEach((a: any) => allowedEmails.push(a.email));
+            }
+
+            // Génération du contrat
+            vmBytecode = generateACLBytecode(allowedEmails);
+            console.log(`[Archiver] ACL générée pour ${doc.id} : ${allowedEmails.length} emails autorisés.`);
+        }
+
+        // --- CONSTRUCTION SBP ---
         const parts: Uint8Array[] = [];
         
-        // 1. Magic Header (SVR2)
+        // Header
         parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x02])); 
 
-        // 2. VM Bytecode (Smart Contract par défaut)
-        // C'est ici qu'on assure la compatibilité avec le Kernel
+        // VM Block (Le contrat de sécurité)
         const bcLen = new Uint8Array(4);
-        new DataView(bcLen.buffer).setUint32(0, DEFAULT_ALLOW_BYTECODE.length);
+        new DataView(bcLen.buffer).setUint32(0, vmBytecode.length);
         parts.push(new Uint8Array([OP_CODES.VM_BYTECODE]));
         parts.push(bcLen);
-        parts.push(DEFAULT_ALLOW_BYTECODE);
+        parts.push(vmBytecode);
 
-        // 3. IV Block
+        // IV Block
         const ivBinString = atob(doc.encryption_iv);
         const ivBuf = new Uint8Array(ivBinString.length);
         for (let i = 0; i < ivBinString.length; i++) ivBuf[i] = ivBinString.charCodeAt(i);
-        
         parts.push(new Uint8Array([OP_CODES.IV_BLOCK]));
         parts.push(new Uint8Array([ivBuf.length]));
         parts.push(ivBuf);
 
-        // 4. Metadata
+        // Metadata
         const metaJson = JSON.stringify({ 
             owner_id: doc.owner_id, 
             icon: doc.icon, 
@@ -124,35 +177,31 @@ serve(async (req) => {
             type: 'auto-archive'
         });
         const metaBuf = strToBuf(metaJson);
-        // On ne shuffle pas les métadonnées ici pour que le Kernel puisse lire l'owner_id facilement
         const metaLen = new Uint8Array(4);
         new DataView(metaLen.buffer).setUint32(0, metaBuf.length);
-        
         parts.push(new Uint8Array([OP_CODES.META_TAG]));
         parts.push(metaLen);
         parts.push(metaBuf);
 
-        // 5. Ghost Block (Obfuscation)
+        // Ghost Block
         parts.push(...generateGhostBlock());
 
-        // 6. Payload (Title + Content)
+        // Payload
         const titleBuf = strToBuf(doc.title);
         const contentBuf = strToBuf(doc.content);
-        
         const combinedPayload = new Uint8Array(titleBuf.length + 1 + contentBuf.length);
         combinedPayload.set(titleBuf, 0);
-        combinedPayload[titleBuf.length] = 0x00; // Separator
+        combinedPayload[titleBuf.length] = 0x00;
         combinedPayload.set(contentBuf, titleBuf.length + 1);
 
         const shuffledPayload = sivaraShuffle(combinedPayload, containerSeed);
         const payloadLen = new Uint8Array(4);
         new DataView(payloadLen.buffer).setUint32(0, shuffledPayload.length);
-
         parts.push(new Uint8Array([OP_CODES.DATA_CHUNK]));
         parts.push(payloadLen);
         parts.push(shuffledPayload);
 
-        // 7. EOF
+        // EOF
         parts.push(new Uint8Array([OP_CODES.EOF]));
 
         // Assemblage
@@ -175,12 +224,11 @@ serve(async (req) => {
             continue;
         }
 
-        // Update DB (Passage en Cold Storage)
-        // IMPORTANT: On garde le titre pour le dashboard
+        // Update DB (Cold Storage)
         const { error: updateError } = await supabase
             .from('documents')
             .update({ 
-                content: '', // On vide le contenu
+                content: '', // Contenu vidé
                 storage_path: filePath 
             })
             .eq('id', doc.id);
