@@ -73,7 +73,6 @@ serve(async (req) => {
 
         // --- COMPILATION SBP (Sivara Binary Protocol) ---
         // On encapsule les données DÉJÀ CHIFFRÉES de la DB.
-        // Le serveur ne déchiffre rien. Il package.
         
         const parts: Uint8Array[] = [];
         
@@ -81,7 +80,6 @@ serve(async (req) => {
         parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x02])); 
 
         // 2. IV Block (Vital pour déchiffrer plus tard)
-        // L'IV est stocké en base64 dans la DB, on le convertit en binaire
         const ivBinString = atob(doc.encryption_iv);
         const ivBuf = new Uint8Array(ivBinString.length);
         for (let i = 0; i < ivBinString.length; i++) ivBuf[i] = ivBinString.charCodeAt(i);
@@ -110,7 +108,6 @@ serve(async (req) => {
         parts.push(...generateGhostBlock());
 
         // 5. Payload (Title + Content) - Déjà chiffrés en AES-GCM par le client
-        // On les concatène avec un séparateur NULL
         const titleBuf = strToBuf(doc.title);
         const contentBuf = strToBuf(doc.content);
         
@@ -151,8 +148,6 @@ serve(async (req) => {
         }
 
         // Update DB (Passage en Cold Storage)
-        // On garde le titre chiffré pour l'affichage rapide dans la liste
-        // On vide le contenu lourd
         const { error: updateError } = await supabase
             .from('documents')
             .update({ 
