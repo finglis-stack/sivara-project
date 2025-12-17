@@ -9,47 +9,47 @@ const corsHeaders = {
 }
 
 // @ts-ignore
-const IP_GEO_KEY = Deno.env.get('IPGEOLOCATION_API_KEY');
-const PUBLIC_CONTAINER_SEED = "SIVARA_PUBLIC_CONTAINER_V1";
+const CLE_GEO_IP = Deno.env.get('IPGEOLOCATION_API_KEY');
+const GRAINE_CONTENEUR_PUBLIC = "SIVARA_PUBLIC_CONTAINER_V1";
 
-// --- SIVARA BINARY PROTOCOL (SBP) ---
-const SBP_OP = {
-  MAGIC: 0x53, // 'S'
-  HEADER: 0xA1,
-  IV_BLOCK: 0xB2,
-  DATA_CHUNK: 0xC3,
-  META_TAG: 0xD4,
-  GHOST_BLOCK: 0x1F,
-  VM_BYTECODE: 0xE5,
-  EOF: 0xFF
+// --- PROTOCOLE BINAIRE SIVARA (SBP) ---
+const OP_SBP = {
+  MAGIE: 0x53, // 'S'
+  ENTETE: 0xA1,
+  BLOC_IV: 0xB2,
+  MORCEAU_DONNEES: 0xC3,
+  BALISE_META: 0xD4,
+  BLOC_FANTOME: 0x1F,
+  BYTECODE_VM: 0xE5,
+  FIN_FICHIER: 0xFF
 };
 
-// --- JEU D'INSTRUCTIONS (ISA) ---
-const VM_OP = {
-  HALT: 0x00,
-  PUSH_NUM: 0x01, // PUSH float
-  PUSH_STR: 0x02, // PUSH string hash
-  LOAD: 0x10,     // Charger variable
-  STORE: 0x11,    // Stocker variable
+// --- JEU D'INSTRUCTIONS VM (ISA) ---
+const OP_VM = {
+  ARRET: 0x00,
+  EMPI_NUM: 0x01, // PUSH float
+  EMPI_TXT: 0x02, // PUSH string hash
+  CHARGER: 0x10,  // LOAD variable
+  STOCKER: 0x11,  // STORE variable
   
-  // Math
-  ADD: 0x20, SUB: 0x21, MUL: 0x22, DIV: 0x23, ABS: 0x24,
+  // Mathématiques
+  ADD: 0x20, SOUS: 0x21, MULT: 0x22, DIV: 0x23, ABS: 0x24,
   
-  // Logic
-  EQ: 0x30, NEQ: 0x31, LT: 0x32, GT: 0x33, AND: 0x34, OR: 0x35,
+  // Logique
+  EGAL: 0x30, DIFF: 0x31, INF: 0x32, SUP: 0x33, ET: 0x34, OU: 0x35,
   
-  // Flow
-  JMP: 0x40, JMP_FALSE: 0x41,
+  // Contrôle de flux
+  SAUT: 0x40, SAUT_SI_FAUX: 0x41,
   
-  // Environment & Security
-  ENV_GET: 0x50,   // Récupérer variable env (geo, user...)
-  GEO_DIST: 0x51,  // Calcul distance Haversine (lat1, lng1, lat2, lng2)
-  LIST_HAS: 0x52,  // Vérifier si liste contient valeur
-  ASSERT: 0x99     // KERNEL PANIC si faux
+  // Environnement & Sécurité
+  ENV_LIRE: 0x50,   // Récupérer variable env
+  GEO_DIST: 0x51,   // Calcul distance
+  LISTE_A: 0x52,    // Vérifier présence liste
+  EXIGER: 0x99      // KERNEL PANIC si faux
 };
 
-// --- MAPPINGS ENVIRONNEMENT ---
-const ENV_MAP: Record<string, number> = {
+// --- MAPPAGE ENVIRONNEMENT ---
+const CARTE_ENV: Record<string, number> = {
   'env.geo.lat': 1,
   'env.geo.lng': 2,
   'env.utilisateur.email': 3,
@@ -58,137 +58,129 @@ const ENV_MAP: Record<string, number> = {
 };
 
 // --- COMPILATEUR SIVARASCRIPT (FRANÇAIS) ---
-class SivaraCompiler {
-  private tokens: string[];
+class CompilateurSivara {
+  private jetons: string[];
   private pos: number = 0;
   private bytecode: number[] = [];
-  private stringTable: Record<string, number> = {}; // Hash map pour les strings
 
   constructor(source: string) {
-    // Tokenizer simple qui gère les parenthèses et les opérateurs
-    this.tokens = source
+    // Analyseur lexical simple
+    this.jetons = source
       .replace(/\(/g, ' ( ')
       .replace(/\)/g, ' ) ')
       .replace(/,/g, ' ')
-      .replace(/==/g, ' EQ ')
-      .replace(/</g, ' LT ')
-      .replace(/>/g, ' GT ')
+      .replace(/==/g, ' EGAL ')
+      .replace(/</g, ' INF ')
+      .replace(/>/g, ' SUP ')
       .trim()
       .split(/\s+/)
       .filter(t => t.length > 0);
   }
 
-  // Hachage simple pour les strings (DJB2)
-  private hashString(str: string): number {
+  // Hachage DJB2 pour les chaînes
+  private hacherChaine(str: string): number {
     let hash = 5381;
     for (let i = 0; i < str.length; i++) {
       hash = ((hash << 5) + hash) + str.charCodeAt(i);
     }
-    return hash >>> 0; // Ensure unsigned 32-bit
+    return hash >>> 0; // Force non-signé 32-bit
   }
 
-  public compile(): Uint8Array {
-    while (this.pos < this.tokens.length) {
-      const token = this.tokens[this.pos++];
+  public compiler(): Uint8Array {
+    while (this.pos < this.jetons.length) {
+      const jeton = this.jetons[this.pos++];
       
-      if (token === 'soit') {
-        const varName = this.tokens[this.pos++];
-        if (this.tokens[this.pos++] !== '=') throw new Error(`Syntaxe: attendu '=' après ${varName}`);
-        this.compileExpression();
-        this.emit(VM_OP.STORE, this.hashString(varName));
+      if (jeton === 'soit') {
+        const nomVar = this.jetons[this.pos++];
+        if (this.jetons[this.pos++] !== '=') throw new Error(`Erreur Syntaxe: '=' attendu après ${nomVar}`);
+        this.compilerExpression();
+        this.emettre(OP_VM.STOCKER, this.hacherChaine(nomVar));
       }
-      else if (token === 'exiger') {
-        this.compileExpression();
-        this.emit(VM_OP.ASSERT);
+      else if (jeton === 'exiger') {
+        this.compilerExpression();
+        this.emettre(OP_VM.EXIGER);
       }
-      else if (token === 'si') {
-        // Implémentation basique du saut conditionnel
-        // Pour simplifier ce prototype, on ne gère pas les blocs imbriqués complexes
-        // On assume une structure linéaire pour la sécurité
-      }
+      // Note: 'si' implémenté basiquement pour la structure linéaire des ACL
     }
-    this.emit(VM_OP.HALT);
+    this.emettre(OP_VM.ARRET);
     return new Uint8Array(this.bytecode);
   }
 
-  private compileExpression() {
-    const token = this.tokens[this.pos++];
+  private compilerExpression() {
+    const jeton = this.jetons[this.pos++];
     
-    // Gestion des fonctions natives
-    if (token === 'calcul_distance') {
-        // Attend 4 arguments sur la stack
-        this.pos++; // Skip (
-        this.compileExpression(); // lat1
-        this.compileExpression(); // lng1
-        this.compileExpression(); // lat2
-        this.compileExpression(); // lng2
-        this.pos++; // Skip )
-        this.emit(VM_OP.GEO_DIST);
+    // Fonctions natives
+    if (jeton === 'calcul_distance') {
+        this.pos++; // Sauter (
+        this.compilerExpression(); // lat1
+        this.compilerExpression(); // lng1
+        this.compilerExpression(); // lat2
+        this.compilerExpression(); // lng2
+        this.pos++; // Sauter )
+        this.emettre(OP_VM.GEO_DIST);
         return;
     }
     
-    if (token === 'liste_contient') {
-        this.pos++; // Skip (
-        this.compileExpression(); // liste
-        this.compileExpression(); // valeur
-        this.pos++; // Skip )
-        this.emit(VM_OP.LIST_HAS);
+    if (jeton === 'liste_contient') {
+        this.pos++; 
+        this.compilerExpression(); 
+        this.compilerExpression(); 
+        this.pos++; 
+        this.emettre(OP_VM.LISTE_A);
         return;
     }
 
-    if (token === 'abs') {
-        this.compileExpression();
-        this.emit(VM_OP.ABS);
+    if (jeton === 'abs') {
+        this.compilerExpression();
+        this.emettre(OP_VM.ABS);
         return;
     }
 
     // Valeurs littérales
-    if (!isNaN(Number(token))) {
-      this.emit(VM_OP.PUSH_NUM, Number(token));
+    if (!isNaN(Number(jeton))) {
+      this.emettre(OP_VM.EMPI_NUM, Number(jeton));
     } 
     // Variables d'environnement
-    else if (ENV_MAP[token]) {
-      this.emit(VM_OP.ENV_GET, ENV_MAP[token]);
+    else if (CARTE_ENV[jeton]) {
+      this.emettre(OP_VM.ENV_LIRE, CARTE_ENV[jeton]);
     }
-    // Chaînes de caractères (entre guillemets)
-    else if (token.startsWith('"')) {
-      // Reconstitution de la string si elle a des espaces
-      let str = token;
-      while (!str.endsWith('"') && this.pos < this.tokens.length) {
-          str += " " + this.tokens[this.pos++];
+    // Chaînes de caractères
+    else if (jeton.startsWith('"')) {
+      let str = jeton;
+      while (!str.endsWith('"') && this.pos < this.jetons.length) {
+          str += " " + this.jetons[this.pos++];
       }
-      str = str.replace(/"/g, ''); // Enlever les quotes
-      this.emit(VM_OP.PUSH_STR, this.hashString(str));
+      str = str.replace(/"/g, '');
+      this.emettre(OP_VM.EMPI_TXT, this.hacherChaine(str));
     }
     // Variables utilisateur
     else {
-      this.emit(VM_OP.LOAD, this.hashString(token));
+      this.emettre(OP_VM.CHARGER, this.hacherChaine(jeton));
     }
 
-    // Opérateurs binaires (Lookahead simple)
-    if (this.pos < this.tokens.length) {
-        const next = this.tokens[this.pos];
-        if (['+', '-', '*', '/', 'EQ', 'LT', 'GT', 'ET', 'OU'].includes(next)) {
+    // Opérateurs binaires
+    if (this.pos < this.jetons.length) {
+        const suivant = this.jetons[this.pos];
+        if (['+', '-', '*', '/', 'EGAL', 'INF', 'SUP', 'ET', 'OU'].includes(suivant)) {
             this.pos++;
-            this.compileExpression(); // Récursif pour l'opérande droite
+            this.compilerExpression(); // Récursif
             
-            if (next === '+') this.emit(VM_OP.ADD);
-            if (next === '-') this.emit(VM_OP.SUB);
-            if (next === '*') this.emit(VM_OP.MUL);
-            if (next === '/') this.emit(VM_OP.DIV);
-            if (next === 'EQ') this.emit(VM_OP.EQ);
-            if (next === 'LT') this.emit(VM_OP.LT);
-            if (next === 'GT') this.emit(VM_OP.GT);
-            if (next === 'ET') this.emit(VM_OP.AND);
-            if (next === 'OU') this.emit(VM_OP.OR);
+            if (suivant === '+') this.emettre(OP_VM.ADD);
+            if (suivant === '-') this.emettre(OP_VM.SOUS);
+            if (suivant === '*') this.emettre(OP_VM.MULT);
+            if (suivant === '/') this.emettre(OP_VM.DIV);
+            if (suivant === 'EGAL') this.emettre(OP_VM.EGAL);
+            if (suivant === 'INF') this.emettre(OP_VM.INF);
+            if (suivant === 'SUP') this.emettre(OP_VM.SUP);
+            if (suivant === 'ET') this.emettre(OP_VM.ET);
+            if (suivant === 'OU') this.emettre(OP_VM.OU);
         }
     }
   }
 
-  private emit(op: number, arg?: number) {
+  private emettre(op: number, arg?: number) {
     this.bytecode.push(op);
     if (arg !== undefined) {
-       // Encodage 32-bit Big Endian
        this.bytecode.push((arg >> 24) & 0xFF);
        this.bytecode.push((arg >> 16) & 0xFF);
        this.bytecode.push((arg >> 8) & 0xFF);
@@ -197,18 +189,17 @@ class SivaraCompiler {
   }
 }
 
-// --- MACHINE VIRTUELLE (KERNEL) ---
-class SivaraVM {
-  private stack: any[] = []; // Peut contenir number ou string hash
-  private memory: Record<number, any> = {};
+// --- MACHINE VIRTUELLE (NOYAU) ---
+class NoyauSivara {
+  private pile: any[] = [];
+  private memoire: Record<number, any> = {};
   private env: any;
 
   constructor(env: any) {
     this.env = env;
   }
 
-  // Haversine Formula
-  private getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  private obtenirDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
     const R = 6371; // km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -219,152 +210,151 @@ class SivaraVM {
     return R * c;
   }
 
-  // Hachage pour vérification runtime (doit matcher le compilateur)
-  private hashString(str: string): number {
+  private hacherChaine(str: string): number {
     let hash = 5381;
     for (let i = 0; i < str.length; i++) hash = ((hash << 5) + hash) + str.charCodeAt(i);
     return hash >>> 0;
   }
 
-  public execute(bytecode: Uint8Array): boolean {
+  public executer(bytecode: Uint8Array): boolean {
     let ip = 0;
-    const view = new DataView(bytecode.buffer);
+    const vue = new DataView(bytecode.buffer);
 
     try {
       while (ip < bytecode.length) {
         const op = bytecode[ip++];
 
         switch (op) {
-          case VM_OP.HALT: return true;
+          case OP_VM.ARRET: return true;
 
-          case VM_OP.PUSH_NUM:
-            this.stack.push(view.getInt32(ip)); ip += 4;
+          case OP_VM.EMPI_NUM:
+            this.pile.push(vue.getInt32(ip)); ip += 4;
             break;
           
-          case VM_OP.PUSH_STR:
-            this.stack.push(view.getInt32(ip)); ip += 4; // On push le hash
+          case OP_VM.EMPI_TXT:
+            this.pile.push(vue.getInt32(ip)); ip += 4;
             break;
 
-          case VM_OP.ENV_GET:
-            const envId = view.getInt32(ip); ip += 4;
-            if (envId === 1) this.stack.push(this.env.lat || 0);
-            else if (envId === 2) this.stack.push(this.env.lng || 0);
-            else if (envId === 3) this.stack.push(this.hashString(this.env.email || ""));
-            else if (envId === 4) this.stack.push(this.hashString(this.env.fingerprint || ""));
-            else if (envId === 5) this.stack.push(Date.now());
-            else this.stack.push(0);
+          case OP_VM.ENV_LIRE:
+            const idEnv = vue.getInt32(ip); ip += 4;
+            if (idEnv === 1) this.pile.push(this.env.lat || 0);
+            else if (idEnv === 2) this.pile.push(this.env.lng || 0);
+            else if (idEnv === 3) this.pile.push(this.hacherChaine(this.env.email || ""));
+            else if (idEnv === 4) this.pile.push(this.hacherChaine(this.env.fingerprint || ""));
+            else if (idEnv === 5) this.pile.push(Date.now());
+            else this.pile.push(0);
             break;
 
-          case VM_OP.STORE:
-            const addr = view.getInt32(ip); ip += 4;
-            this.memory[addr] = this.stack.pop();
+          case OP_VM.STOCKER:
+            const adr = vue.getInt32(ip); ip += 4;
+            this.memoire[adr] = this.pile.pop();
             break;
 
-          case VM_OP.LOAD:
-            const loadAddr = view.getInt32(ip); ip += 4;
-            this.stack.push(this.memory[loadAddr]);
+          case OP_VM.CHARGER:
+            const adrCharg = vue.getInt32(ip); ip += 4;
+            this.pile.push(this.memoire[adrCharg]);
             break;
 
-          // Opérations Math
-          case VM_OP.ADD: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a + b); break; }
-          case VM_OP.SUB: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a - b); break; }
-          case VM_OP.LT: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a < b ? 1 : 0); break; }
-          case VM_OP.GT: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a > b ? 1 : 0); break; }
-          case VM_OP.EQ: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a === b ? 1 : 0); break; }
-          case VM_OP.ABS: { const a = this.stack.pop(); this.stack.push(Math.abs(a)); break; }
+          // Maths
+          case OP_VM.ADD: { const b = this.pile.pop(); const a = this.pile.pop(); this.pile.push(a + b); break; }
+          case OP_VM.SOUS: { const b = this.pile.pop(); const a = this.pile.pop(); this.pile.push(a - b); break; }
+          case OP_VM.INF: { const b = this.pile.pop(); const a = this.pile.pop(); this.pile.push(a < b ? 1 : 0); break; }
+          case OP_VM.SUP: { const b = this.pile.pop(); const a = this.pile.pop(); this.pile.push(a > b ? 1 : 0); break; }
+          case OP_VM.EGAL: { const b = this.pile.pop(); const a = this.pile.pop(); this.pile.push(a === b ? 1 : 0); break; }
+          case OP_VM.ABS: { const a = this.pile.pop(); this.pile.push(Math.abs(a)); break; }
 
-          // Opérations Logiques (AJOUTÉES)
-          case VM_OP.AND: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push((a && b) ? 1 : 0); break; }
-          case VM_OP.OR: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push((a || b) ? 1 : 0); break; }
+          // Logique
+          case OP_VM.ET: { const b = this.pile.pop(); const a = this.pile.pop(); this.pile.push((a && b) ? 1 : 0); break; }
+          case OP_VM.OU: { const b = this.pile.pop(); const a = this.pile.pop(); this.pile.push((a || b) ? 1 : 0); break; }
 
-          case VM_OP.GEO_DIST:
-            const lng2 = this.stack.pop(); const lat2 = this.stack.pop();
-            const lng1 = this.stack.pop(); const lat1 = this.stack.pop();
-            this.stack.push(this.getDistance(lat1, lng1, lat2, lng2));
+          case OP_VM.GEO_DIST:
+            const lng2 = this.pile.pop(); const lat2 = this.pile.pop();
+            const lng1 = this.pile.pop(); const lat1 = this.pile.pop();
+            this.pile.push(this.obtenirDistance(lat1, lng1, lat2, lng2));
             break;
 
-          case VM_OP.LIST_HAS:
-             const val = this.stack.pop();
-             const listHash = this.stack.pop(); 
-             this.stack.push(val === listHash ? 1 : 0);
+          case OP_VM.LISTE_A:
+             const val = this.pile.pop();
+             const hashListe = this.pile.pop(); 
+             this.pile.push(val === hashListe ? 1 : 0);
              break;
 
-          case VM_OP.ASSERT:
-            const check = this.stack.pop();
-            if (check !== 1) {
-               console.error("KERNEL PANIC: Assertion Failed. Security Violation.");
+          case OP_VM.EXIGER:
+            const verif = this.pile.pop();
+            if (verif !== 1) {
+               console.error("PANIQUE NOYAU: Assertion échouée. Violation de sécurité.");
                return false;
             }
             break;
         }
       }
     } catch (e) {
-      console.error("VM Runtime Error:", e);
+      console.error("Erreur d'exécution VM:", e);
       return false;
     }
     return true;
   }
 }
 
-// --- UTILS ---
-const bufToStr = (buf: Uint8Array) => new TextDecoder().decode(buf);
-const strToBuf = (str: string) => new TextEncoder().encode(str);
+// --- UTILITAIRES ---
+const bufVersTexte = (buf: Uint8Array) => new TextDecoder().decode(buf);
+const texteVersBuf = (str: string) => new TextEncoder().encode(str);
 
-const sivaraShuffle = (buffer: Uint8Array, seedString: string): Uint8Array => {
-  let seed = 0;
-  for (let i = 0; i < seedString.length; i++) {
-    seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
-    seed |= 0;
+const melangeSivara = (buffer: Uint8Array, graineChaine: string): Uint8Array => {
+  let graine = 0;
+  for (let i = 0; i < graineChaine.length; i++) {
+    graine = ((graine << 5) - graine) + graineChaine.charCodeAt(i);
+    graine |= 0;
   }
-  const result = new Uint8Array(buffer.length);
+  const resultat = new Uint8Array(buffer.length);
   for (let i = 0; i < buffer.length; i++) {
-    const key = (seed + i) & 0xFF; 
-    result[i] = ((buffer[i] << 2) | (buffer[i] >> 6)) ^ key;
+    const cle = (graine + i) & 0xFF; 
+    resultat[i] = ((buffer[i] << 2) | (buffer[i] >> 6)) ^ cle;
   }
-  return result;
+  return resultat;
 };
 
-const sivaraUnshuffle = (buffer: Uint8Array, seedString: string): Uint8Array => {
-  let seed = 0;
-  for (let i = 0; i < seedString.length; i++) {
-    seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
-    seed |= 0;
+const demelangeSivara = (buffer: Uint8Array, graineChaine: string): Uint8Array => {
+  let graine = 0;
+  for (let i = 0; i < graineChaine.length; i++) {
+    graine = ((graine << 5) - graine) + graineChaine.charCodeAt(i);
+    graine |= 0;
   }
-  const result = new Uint8Array(buffer.length);
+  const resultat = new Uint8Array(buffer.length);
   for (let i = 0; i < buffer.length; i++) {
-    const key = (seed + i) & 0xFF; 
-    const val = buffer[i] ^ key;
-    result[i] = (val >> 2) | (val << 6);
+    const cle = (graine + i) & 0xFF; 
+    const val = buffer[i] ^ cle;
+    resultat[i] = (val >> 2) | (val << 6);
   }
-  return result;
+  return resultat;
 };
 
-// --- GÉNÉRATEUR DE SMART CONTRACT (JSON -> SIVARASCRIPT) ---
-const generateSivaraScript = (security: any): string => {
+// --- GÉNÉRATEUR DE CONTRAT INTELLIGENT (JSON -> SIVARASCRIPT) ---
+const genererScriptSivara = (securite: any): string => {
     let script = "";
     
     // 1. Restriction Utilisateur (Email)
-    if (security.allowed_emails && security.allowed_emails.length > 0) {
-        const ownerEmail = security.allowed_emails[0];
-        script += `soit email_cible = "${ownerEmail}"\n`;
+    if (securite.allowed_emails && securite.allowed_emails.length > 0) {
+        const emailProprio = securite.allowed_emails[0];
+        script += `soit email_cible = "${emailProprio}"\n`;
         script += `soit email_courant = env.utilisateur.email\n`;
         script += `exiger ( email_courant == email_cible )\n`;
     }
 
     // 2. Geofencing
-    if (security.geofence) {
+    if (securite.geofence) {
         script += `soit ma_lat = env.geo.lat\n`;
         script += `soit ma_lng = env.geo.lng\n`;
-        script += `soit cible_lat = ${security.geofence.lat}\n`;
-        script += `soit cible_lng = ${security.geofence.lng}\n`;
+        script += `soit cible_lat = ${securite.geofence.lat}\n`;
+        script += `soit cible_lng = ${securite.geofence.lng}\n`;
         script += `soit distance = calcul_distance ( ma_lat , ma_lng , cible_lat , cible_lng )\n`;
-        script += `soit rayon = ${security.geofence.radius_km}\n`;
-        script += `exiger ( distance < rayon )\n`;
+        script += `soit rayon = ${securite.geofence.radius_km}\n`;
+        script += `exiger ( distance INF rayon )\n`;
     }
 
     // 3. Verrouillage Appareil (Fingerprint)
-    if (security.allowed_fingerprints && security.allowed_fingerprints.length > 0) {
-        const fp = security.allowed_fingerprints[0];
+    if (securite.allowed_fingerprints && securite.allowed_fingerprints.length > 0) {
+        const fp = securite.allowed_fingerprints[0];
         script += `soit fp_cible = "${fp}"\n`;
         script += `soit fp_courant = env.appareil.empreinte\n`;
         script += `exiger ( fp_courant == fp_cible )\n`;
@@ -379,116 +369,113 @@ serve(async (req) => {
   try {
     const { action, payload, fileData, context, body } = await req.json();
     
-    // Support pour les appels imbriqués (body vs direct)
-    const requestData = body || { action, payload, fileData, context };
-    const reqAction = requestData.action;
+    const donneesRequete = body || { action, payload, fileData, context };
+    const actionReq = donneesRequete.action;
 
     // --- LOCALISATION ---
-    if (reqAction === 'locate_me') {
-        const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
-        if (!IP_GEO_KEY) throw new Error("Service de géolocalisation non configuré.");
-        const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
-        const geoData = await geoRes.json();
+    if (actionReq === 'locate_me') {
+        const ipClient = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
+        if (!CLE_GEO_IP) throw new Error("Service de géolocalisation non configuré.");
+        const repGeo = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${CLE_GEO_IP}&ip=${ipClient}`);
+        const donneesGeo = await repGeo.json();
         return new Response(JSON.stringify({ 
-            lat: parseFloat(geoData.latitude), 
-            lng: parseFloat(geoData.longitude),
-            ip: clientIp,
-            city: geoData.city
+            lat: parseFloat(donneesGeo.latitude), 
+            lng: parseFloat(donneesGeo.longitude),
+            ip: ipClient,
+            city: donneesGeo.city
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- COMPILATION (Export .sivara) ---
-    if (reqAction === 'compile') {
-       const { payload } = requestData;
+    if (actionReq === 'compile') {
+       const { payload } = donneesRequete;
        
-       // 1. Génération du Smart Contract en Français
-       const scriptSource = generateSivaraScript(payload.security || {});
-       console.log("[Kernel] Compiling Script:\n", scriptSource);
+       // 1. Génération du Contrat Intelligent en Français
+       const sourceScript = genererScriptSivara(payload.security || {});
+       console.log("[Noyau] Compilation du script:\n", sourceScript);
 
        // 2. Compilation en Bytecode
-       const compiler = new SivaraCompiler(scriptSource);
-       const bytecode = compiler.compile();
+       const compilateur = new CompilateurSivara(sourceScript);
+       const bytecode = compilateur.compiler();
 
        // 3. Construction du Conteneur SBP
-       const parts: Uint8Array[] = [];
+       const parties: Uint8Array[] = [];
        
-       // Header
-       parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x02])); 
+       // En-tête
+       parties.push(new Uint8Array([0x53, 0x56, 0x52, 0x02])); 
 
-       // Bytecode Block (NOUVEAU)
-       const bcLen = new Uint8Array(4);
-       new DataView(bcLen.buffer).setUint32(0, bytecode.length);
-       parts.push(new Uint8Array([SBP_OP.VM_BYTECODE]));
-       parts.push(bcLen);
-       parts.push(bytecode);
+       // Bloc Bytecode
+       const lenBc = new Uint8Array(4);
+       new DataView(lenBc.buffer).setUint32(0, bytecode.length);
+       parties.push(new Uint8Array([OP_SBP.BYTECODE_VM]));
+       parties.push(lenBc);
+       parties.push(bytecode);
 
-       // IV Block
-       const ivBinString = atob(payload.iv);
-       const ivBuf = new Uint8Array(ivBinString.length);
-       for (let i = 0; i < ivBinString.length; i++) ivBuf[i] = ivBinString.charCodeAt(i);
-       parts.push(new Uint8Array([SBP_OP.IV_BLOCK]));
-       parts.push(new Uint8Array([ivBuf.length]));
-       parts.push(ivBuf);
+       // Bloc IV
+       const chaineBinIv = atob(payload.iv);
+       const bufIv = new Uint8Array(chaineBinIv.length);
+       for (let i = 0; i < chaineBinIv.length; i++) bufIv[i] = chaineBinIv.charCodeAt(i);
+       parties.push(new Uint8Array([OP_SBP.BLOC_IV]));
+       parties.push(new Uint8Array([bufIv.length]));
+       parties.push(bufIv);
 
-       // Data Chunk (Encrypted Title + Content)
-       const titleBuf = strToBuf(payload.encrypted_title);
-       const contentBuf = strToBuf(payload.encrypted_content);
-       const combinedPayload = new Uint8Array(titleBuf.length + 1 + contentBuf.length);
-       combinedPayload.set(titleBuf, 0);
-       combinedPayload[titleBuf.length] = 0x00;
-       combinedPayload.set(contentBuf, titleBuf.length + 1);
+       // Morceau de Données (Titre + Contenu Chiffrés)
+       const bufTitre = texteVersBuf(payload.encrypted_title);
+       const bufContenu = texteVersBuf(payload.encrypted_content);
+       const chargeUtileCombinee = new Uint8Array(bufTitre.length + 1 + bufContenu.length);
+       chargeUtileCombinee.set(bufTitre, 0);
+       chargeUtileCombinee[bufTitre.length] = 0x00;
+       chargeUtileCombinee.set(bufContenu, bufTitre.length + 1);
 
-       // Shuffling avec le sel (ou owner_id si pas de sel)
-       const seed = payload.salt || payload.owner_id;
-       const shuffledPayload = sivaraShuffle(combinedPayload, seed);
+       // Mélange avec le sel (ou owner_id si pas de sel)
+       const graine = payload.salt || payload.owner_id;
+       const chargeUtileMelangee = melangeSivara(chargeUtileCombinee, graine);
        
-       const payloadLen = new Uint8Array(4);
-       new DataView(payloadLen.buffer).setUint32(0, shuffledPayload.length);
-       parts.push(new Uint8Array([SBP_OP.DATA_CHUNK]));
-       parts.push(payloadLen);
-       parts.push(shuffledPayload);
+       const lenCharge = new Uint8Array(4);
+       new DataView(lenCharge.buffer).setUint32(0, chargeUtileMelangee.length);
+       parties.push(new Uint8Array([OP_SBP.MORCEAU_DONNEES]));
+       parties.push(lenCharge);
+       parties.push(chargeUtileMelangee);
 
-       // Meta Tag (Pour aider le déchiffrement)
-       const metaJson = JSON.stringify({ 
+       // Balise Méta
+       const jsonMeta = JSON.stringify({ 
            owner_id: payload.owner_id, 
-           salt: payload.salt, // Important pour le déchiffrement par mot de passe
+           salt: payload.salt, 
            icon: payload.icon,
            color: payload.color
        });
-       const metaBuf = strToBuf(metaJson);
-       // On ne shuffle pas les métadonnées de base pour permettre l'identification du propriétaire
-       // Mais dans une version prod, on le ferait. Ici on laisse en clair pour faciliter le debug.
-       const metaLen = new Uint8Array(4);
-       new DataView(metaLen.buffer).setUint32(0, metaBuf.length);
-       parts.push(new Uint8Array([SBP_OP.META_TAG]));
-       parts.push(metaLen);
-       parts.push(metaBuf);
+       const bufMeta = texteVersBuf(jsonMeta);
+       const lenMeta = new Uint8Array(4);
+       new DataView(lenMeta.buffer).setUint32(0, bufMeta.length);
+       parties.push(new Uint8Array([OP_SBP.BALISE_META]));
+       parties.push(lenMeta);
+       parties.push(bufMeta);
 
-       parts.push(new Uint8Array([SBP_OP.EOF]));
+       parties.push(new Uint8Array([OP_SBP.FIN_FICHIER]));
 
        // Assemblage final
-       const totalLength = parts.reduce((acc, p) => acc + p.length, 0);
-       const finalBuffer = new Uint8Array(totalLength);
-       let offset = 0;
-       for (const part of parts) { finalBuffer.set(part, offset); offset += part.length; }
+       const longueurTotale = parties.reduce((acc, p) => acc + p.length, 0);
+       const tamponFinal = new Uint8Array(longueurTotale);
+       let decalage = 0;
+       for (const partie of parties) { tamponFinal.set(partie, decalage); decalage += partie.length; }
 
-       // Retour en Base64 pour le client
-       let binary = '';
-       for (let i = 0; i < finalBuffer.length; i++) binary += String.fromCharCode(finalBuffer[i]);
+       // Retour en Base64
+       let binaire = '';
+       for (let i = 0; i < tamponFinal.length; i++) binaire += String.fromCharCode(tamponFinal[i]);
        
-       return new Response(JSON.stringify({ file: btoa(binary) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+       return new Response(JSON.stringify({ file: btoa(binaire) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- DÉCOMPILATION (Import / Lecture) ---
-    if (reqAction === 'decompile') {
-      const { fileData, context } = requestData;
-      const binaryString = atob(fileData);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
+    if (actionReq === 'decompile') {
+      const { fileData, context } = donneesRequete;
+      const chaineBinaire = atob(fileData);
+      const octets = new Uint8Array(chaineBinaire.length);
+      for (let i = 0; i < chaineBinaire.length; i++) { octets[i] = chaineBinaire.charCodeAt(i); }
       
-      const view = new DataView(bytes.buffer);
+      const vue = new DataView(octets.buffer);
       
-      if (bytes[0] !== 0x53 || bytes[1] !== 0x56 || bytes[2] !== 0x52) throw new Error("Format SBP invalide.");
+      if (octets[0] !== 0x53 || octets[1] !== 0x56 || octets[2] !== 0x52) throw new Error("Format SBP invalide.");
       
       // Récupération du contexte utilisateur pour la VM
       const supabase = createClient(
@@ -498,146 +485,142 @@ serve(async (req) => {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
 
-      let userEmail = "";
+      let emailUtilisateur = "";
       if (context?.userId) {
           const { data: u } = await supabase.auth.admin.getUserById(context.userId);
-          userEmail = u?.user?.email || "";
+          emailUtilisateur = u?.user?.email || "";
       }
 
       // Environnement VM Réel
-      let vmEnv = { 
+      let envVm = { 
           lat: 0, lng: 0, 
-          email: userEmail, 
+          email: emailUtilisateur, 
           fingerprint: context?.fingerprint || "" 
       };
 
       // Enrichissement Geo (si possible)
       try {
-          const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
-          if (IP_GEO_KEY) {
-             const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
-             const geoData = await geoRes.json();
-             vmEnv.lat = parseFloat(geoData.latitude);
-             vmEnv.lng = parseFloat(geoData.longitude);
+          const ipClient = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
+          if (CLE_GEO_IP) {
+             const repGeo = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${CLE_GEO_IP}&ip=${ipClient}`);
+             const donneesGeo = await repGeo.json();
+             envVm.lat = parseFloat(donneesGeo.latitude);
+             envVm.lng = parseFloat(donneesGeo.longitude);
           }
       } catch(e) {}
 
-      const attemptDecompile = (seed: string) => {
-          let cursor = 4; 
-          const result: any = { header: 'SIVARA_SECURE_DOC_V2' };
-          let metaData: any = {};
-          let success = true;
-          let vmPassed = true;
+      const tentativeDecompilation = (graine: string) => {
+          let curseur = 4; 
+          const resultat: any = { header: 'SIVARA_SECURE_DOC_V2' };
+          let metaDonnees: any = {};
+          let succes = true;
+          let vmValidee = true;
 
-          const vm = new SivaraVM(vmEnv);
+          const vm = new NoyauSivara(envVm);
 
-          while (cursor < bytes.length) {
-            const opcode = bytes[cursor++];
-            if (opcode === SBP_OP.EOF) break;
+          while (curseur < octets.length) {
+            const opcode = octets[curseur++];
+            if (opcode === OP_SBP.FIN_FICHIER) break;
 
-            if (opcode === SBP_OP.GHOST_BLOCK) {
-                const len = view.getUint32(cursor);
-                cursor += 4 + len;
+            if (opcode === OP_SBP.BLOC_FANTOME) {
+                const len = vue.getUint32(curseur);
+                curseur += 4 + len;
                 continue;
             }
-            else if (opcode === SBP_OP.VM_BYTECODE) {
-                const len = view.getUint32(cursor);
-                cursor += 4;
-                const bytecode = bytes.slice(cursor, cursor + len);
+            else if (opcode === OP_SBP.BYTECODE_VM) {
+                const len = vue.getUint32(curseur);
+                curseur += 4;
+                const bytecode = octets.slice(curseur, curseur + len);
                 
-                console.log("[Kernel] Executing Smart Contract...");
-                const vmResult = vm.execute(bytecode);
-                if (!vmResult) {
-                    console.error("[Kernel] Security Check Failed");
-                    vmPassed = false;
-                    success = false;
+                console.log("[Noyau] Exécution du Contrat Intelligent...");
+                const resultatVm = vm.executer(bytecode);
+                if (!resultatVm) {
+                    console.error("[Noyau] Échec de la vérification de sécurité");
+                    vmValidee = false;
+                    succes = false;
                     break; // Arrêt immédiat
                 }
-                cursor += len;
+                curseur += len;
             }
-            else if (opcode === SBP_OP.IV_BLOCK) {
-              const len = bytes[cursor++];
-              const ivBytes = bytes.slice(cursor, cursor + len);
-              let ivBin = '';
-              for(let i=0; i<ivBytes.length; i++) ivBin += String.fromCharCode(ivBytes[i]);
-              result.iv = btoa(ivBin);
-              cursor += len;
+            else if (opcode === OP_SBP.BLOC_IV) {
+              const len = octets[curseur++];
+              const octetsIv = octets.slice(curseur, curseur + len);
+              let binIv = '';
+              for(let i=0; i<octetsIv.length; i++) binIv += String.fromCharCode(octetsIv[i]);
+              resultat.iv = btoa(binIv);
+              curseur += len;
             }
-            else if (opcode === SBP_OP.META_TAG) {
-              const len = view.getUint32(cursor);
-              cursor += 4;
-              const chunk = bytes.slice(cursor, cursor + len);
-              // Les métadonnées ne sont pas shufflées dans cette version pour permettre la récupération du salt/owner
+            else if (opcode === OP_SBP.BALISE_META) {
+              const len = vue.getUint32(curseur);
+              curseur += 4;
+              const morceau = octets.slice(curseur, curseur + len);
               try {
-                 const jsonStr = bufToStr(chunk);
-                 metaData = JSON.parse(jsonStr);
-                 Object.assign(result, metaData);
+                 const jsonStr = bufVersTexte(morceau);
+                 metaDonnees = JSON.parse(jsonStr);
+                 Object.assign(resultat, metaDonnees);
               } catch(e) {}
-              cursor += len;
+              curseur += len;
             }
-            else if (opcode === SBP_OP.DATA_CHUNK) {
-              if (!vmPassed) break; // On ne lit pas les données si la VM a échoué
+            else if (opcode === OP_SBP.MORCEAU_DONNEES) {
+              if (!vmValidee) break; // On ne lit pas les données si la VM a échoué
 
-              const len = view.getUint32(cursor);
-              cursor += 4;
-              const chunk = bytes.slice(cursor, cursor + len);
-              const clearChunk = sivaraUnshuffle(chunk, seed);
+              const len = vue.getUint32(curseur);
+              curseur += 4;
+              const morceau = octets.slice(curseur, curseur + len);
+              const morceauClair = demelangeSivara(morceau, graine);
               
-              let separatorIndex = -1;
-              for(let i=0; i<clearChunk.length; i++) { if (clearChunk[i] === 0x00) { separatorIndex = i; break; } }
+              let indexSeparateur = -1;
+              for(let i=0; i<morceauClair.length; i++) { if (morceauClair[i] === 0x00) { indexSeparateur = i; break; } }
               
-              if (separatorIndex !== -1) {
-                  result.encrypted_title = bufToStr(clearChunk.slice(0, separatorIndex));
-                  result.encrypted_content = bufToStr(clearChunk.slice(separatorIndex + 1));
+              if (indexSeparateur !== -1) {
+                  resultat.encrypted_title = bufVersTexte(morceauClair.slice(0, indexSeparateur));
+                  resultat.encrypted_content = bufVersTexte(morceauClair.slice(indexSeparateur + 1));
               } else {
-                  // Si pas de séparateur, le seed est probablement mauvais
-                  success = false;
+                  // Si pas de séparateur, la graine est probablement mauvaise
+                  succes = false;
               }
-              cursor += len;
+              curseur += len;
             }
           }
-          return success ? result : null;
+          return succes ? resultat : null;
       };
 
-      // 1. Lecture préliminaire pour trouver le propriétaire/sel (via META_TAG)
-      // On fait une passe rapide sans déchiffrer les données
-      let tempResult = attemptDecompile("DUMMY"); 
-      let ownerId = tempResult?.owner_id;
-      let salt = tempResult?.salt;
+      // 1. Lecture préliminaire pour trouver le propriétaire/sel (via BALISE_META)
+      let resultatTemp = tentativeDecompilation("DUMMY"); 
+      let idProprio = resultatTemp?.owner_id;
+      let sel = resultatTemp?.salt;
 
       // 2. Tentative de déchiffrement réel
-      let finalResult = null;
+      let resultatFinal = null;
 
       // A. Si public
-      finalResult = attemptDecompile(PUBLIC_CONTAINER_SEED);
+      resultatFinal = tentativeDecompilation(GRAINE_CONTENEUR_PUBLIC);
 
       // B. Si privé (avec ID utilisateur courant)
-      if (!finalResult && context?.userId) {
-           finalResult = attemptDecompile(context.userId);
+      if (!resultatFinal && context?.userId) {
+           resultatFinal = tentativeDecompilation(context.userId);
       }
 
       // C. Si privé (avec ID propriétaire du fichier - cas import)
-      if (!finalResult && ownerId) {
-           finalResult = attemptDecompile(ownerId);
+      if (!resultatFinal && idProprio) {
+           resultatFinal = tentativeDecompilation(idProprio);
       }
       
-      // D. Si protégé par mot de passe (Salt présent)
-      if (!finalResult && salt) {
-           // On ne peut pas déchiffrer ici car on n'a pas le mot de passe
-           // On renvoie les métadonnées pour que le client demande le mot de passe
+      // D. Si protégé par mot de passe (Sel présent)
+      if (!resultatFinal && sel) {
            return new Response(JSON.stringify({ 
                error: "Mot de passe requis", 
                require_auth: true,
-               salt: salt,
-               iv: tempResult?.iv,
+               salt: sel,
+               iv: resultatTemp?.iv,
                header: 'SIVARA_SECURE_DOC_V2'
            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      if (finalResult && finalResult.encrypted_title) {
-          return new Response(JSON.stringify(finalResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (resultatFinal && resultatFinal.encrypted_title) {
+          return new Response(JSON.stringify(resultatFinal), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else {
-          return new Response(JSON.stringify({ error: "Accès refusé par le Kernel ou fichier corrompu" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          return new Response(JSON.stringify({ error: "Accès refusé par le Noyau ou fichier corrompu" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
 

@@ -8,79 +8,87 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// --- SIVARA BINARY PROTOCOL (SBP) ---
-const OP_CODES = {
-  MAGIC: 0x53, HEADER: 0xA1, IV_BLOCK: 0xB2, DATA_CHUNK: 0xC3,
-  META_TAG: 0xD4, GHOST_BLOCK: 0x1F, VM_BYTECODE: 0xE5, EOF: 0xFF
+// --- PROTOCOLE BINAIRE SIVARA (SBP) ---
+const OP_SBP = {
+  MAGIE: 0x53, // 'S'
+  ENTETE: 0xA1,
+  BLOC_IV: 0xB2,
+  MORCEAU_DONNEES: 0xC3,
+  BALISE_META: 0xD4,
+  BLOC_FANTOME: 0x1F,
+  BYTECODE_VM: 0xE5,
+  FIN_FICHIER: 0xFF
 };
 
-// --- VM INSTRUCTIONS ---
-const VM = {
-  PUSH_NUM: 0x01, PUSH_STR: 0x02, 
-  EQ: 0x30, OR: 0x35, 
-  ENV_GET: 0x50, ASSERT: 0x99
+// --- JEU D'INSTRUCTIONS VM (ISA) ---
+const OP_VM = {
+  ARRET: 0x00,
+  EMPI_NUM: 0x01, 
+  EMPI_TXT: 0x02, 
+  EGAL: 0x30, OU: 0x35, 
+  ENV_LIRE: 0x50, EXIGER: 0x99
 };
 
 const ENV_EMAIL = 3; // ID pour env.utilisateur.email
 
 // Clé universelle pour les archives publiques
-const PUBLIC_CONTAINER_SEED = "SIVARA_PUBLIC_CONTAINER_V1";
+const GRAINE_CONTENEUR_PUBLIC = "SIVARA_PUBLIC_CONTAINER_V1";
 
-const strToBuf = (str: string) => new TextEncoder().encode(str);
+const strVersBuf = (str: string) => new TextEncoder().encode(str);
 
-// Hachage DJB2 pour les strings (identique au Kernel)
-const hashString = (str: string): number => {
+// Hachage DJB2 pour les chaînes (identique au Noyau)
+const hacherChaine = (str: string): number => {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) hash = ((hash << 5) + hash) + str.charCodeAt(i);
   return hash >>> 0;
 };
 
-const sivaraShuffle = (buffer: Uint8Array, seedString: string): Uint8Array => {
-  let seed = 0;
-  for (let i = 0; i < seedString.length; i++) {
-    seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
-    seed |= 0;
+const melangeSivara = (buffer: Uint8Array, graineChaine: string): Uint8Array => {
+  let graine = 0;
+  for (let i = 0; i < graineChaine.length; i++) {
+    graine = ((graine << 5) - graine) + graineChaine.charCodeAt(i);
+    graine |= 0;
   }
-  const result = new Uint8Array(buffer.length);
+  const resultat = new Uint8Array(buffer.length);
   for (let i = 0; i < buffer.length; i++) {
-    const key = (seed + i) & 0xFF; 
-    result[i] = ((buffer[i] << 2) | (buffer[i] >> 6)) ^ key;
+    const cle = (graine + i) & 0xFF; 
+    resultat[i] = ((buffer[i] << 2) | (buffer[i] >> 6)) ^ cle;
   }
-  return result;
+  return resultat;
 };
 
-const generateGhostBlock = (): Uint8Array[] => {
-  const size = Math.floor(Math.random() * 64) + 16;
-  const noise = crypto.getRandomValues(new Uint8Array(size));
+const genererBlocFantome = (): Uint8Array[] => {
+  const taille = Math.floor(Math.random() * 64) + 16;
+  const bruit = crypto.getRandomValues(new Uint8Array(taille));
   const lenBuffer = new Uint8Array(4);
-  new DataView(lenBuffer.buffer).setUint32(0, size);
-  return [new Uint8Array([OP_CODES.GHOST_BLOCK]), lenBuffer, noise];
+  new DataView(lenBuffer.buffer).setUint32(0, taille);
+  return [new Uint8Array([OP_SBP.BLOC_FANTOME]), lenBuffer, bruit];
 };
 
-// Générateur de Bytecode ACL (Access Control List)
-const generateACLBytecode = (allowedEmails: string[]): Uint8Array => {
+// Générateur de Bytecode ACL (Liste de Contrôle d'Accès)
+const genererBytecodeACL = (emailsAutorises: string[]): Uint8Array => {
     const bytecode: number[] = [];
     
-    // Init: PUSH 0 (False) - État initial "Accès Refusé"
-    bytecode.push(VM.PUSH_NUM, 0, 0, 0, 0); 
+    // Init: EMPI_NUM 0 (Faux) - État initial "Accès Refusé"
+    bytecode.push(OP_VM.EMPI_NUM, 0, 0, 0, 0); 
 
-    for (const email of allowedEmails) {
+    for (const email of emailsAutorises) {
         // 1. Récupérer Email Courant
-        bytecode.push(VM.ENV_GET, 0, 0, 0, ENV_EMAIL);
+        bytecode.push(OP_VM.ENV_LIRE, 0, 0, 0, ENV_EMAIL);
         
-        // 2. PUSH Hash Email Autorisé
-        const hash = hashString(email.toLowerCase().trim());
-        bytecode.push(VM.PUSH_STR, (hash >> 24) & 0xFF, (hash >> 16) & 0xFF, (hash >> 8) & 0xFF, hash & 0xFF);
+        // 2. EMPI Hash Email Autorisé
+        const hash = hacherChaine(email.toLowerCase().trim());
+        bytecode.push(OP_VM.EMPI_TXT, (hash >> 24) & 0xFF, (hash >> 16) & 0xFF, (hash >> 8) & 0xFF, hash & 0xFF);
         
-        // 3. Comparer (EQ)
-        bytecode.push(VM.EQ);
+        // 3. Comparer (EGAL)
+        bytecode.push(OP_VM.EGAL);
         
         // 4. OU Logique (Si c'est bon, on passe à 1)
-        bytecode.push(VM.OR);
+        bytecode.push(OP_VM.OU);
     }
 
-    // Final: ASSERT (Si 0 -> Kernel Panic)
-    bytecode.push(VM.ASSERT);
+    // Final: EXIGER (Si 0 -> Panique Noyau)
+    bytecode.push(OP_VM.EXIGER);
     
     return new Uint8Array(bytecode);
 };
@@ -97,78 +105,77 @@ serve(async (req) => {
     );
 
     // 1. TIMING : 3 Minutes
-    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const troisMinutesAvant = new Date(Date.now() - 3 * 60 * 1000).toISOString();
 
-    const { data: docsToArchive, error: fetchError } = await supabase
+    const { data: docsAArchiver, error: erreurRecup } = await supabase
       .from('documents')
       .select('id, title, content, encryption_iv, owner_id, icon, color, visibility')
-      .eq('type', 'file') // FICHIERS SEULEMENT
+      .eq('type', 'file') // EXCLUSION DES DOSSIERS
       .is('storage_path', null)
       .neq('content', '') 
-      .lt('updated_at', threeMinutesAgo)
-      .limit(15); // Batch size raisonnable
+      .lt('updated_at', troisMinutesAvant)
+      .limit(15);
 
-    if (fetchError) throw fetchError;
+    if (erreurRecup) throw erreurRecup;
 
-    console.log(`[Archiver] ${docsToArchive?.length || 0} fichiers inactifs (>3min) à traiter.`);
+    console.log(`[Archiveur] ${docsAArchiver?.length || 0} fichiers inactifs (>3min) à traiter.`);
 
-    const results = [];
+    const resultats = [];
 
-    for (const doc of docsToArchive || []) {
+    for (const doc of docsAArchiver || []) {
         if (!doc.content) continue;
 
-        // --- LOGIQUE DE SÉCURITÉ (SMART CONTRACT) ---
-        let vmBytecode: Uint8Array;
-        let containerSeed = doc.owner_id;
+        // --- LOGIQUE DE SÉCURITÉ (CONTRAT INTELLIGENT) ---
+        let bytecodeVm: Uint8Array;
+        let graineConteneur = doc.owner_id;
 
         if (doc.visibility === 'public') {
-            // Public : Tout le monde passe, Seed publique
-            containerSeed = PUBLIC_CONTAINER_SEED;
-            // Bytecode: PUSH 1, ASSERT (Toujours vrai)
-            vmBytecode = new Uint8Array([VM.PUSH_NUM, 0, 0, 0, 1, VM.ASSERT]);
+            // Public : Tout le monde passe, Graine publique
+            graineConteneur = GRAINE_CONTENEUR_PUBLIC;
+            // Bytecode: EMPI_NUM 1, EXIGER (Toujours vrai)
+            bytecodeVm = new Uint8Array([OP_VM.EMPI_NUM, 0, 0, 0, 1, OP_VM.EXIGER]);
         } else {
             // Privé / Limité : Liste blanche stricte
-            const allowedEmails: string[] = [];
+            const emailsAutorises: string[] = [];
             
             // A. Récupérer l'email du propriétaire
-            // Note: On utilise profiles car auth.users n'est pas toujours accessible facilement en join
-            const { data: ownerProfile } = await supabase.from('profiles').select('email').eq('id', doc.owner_id).single();
-            if (ownerProfile?.email) allowedEmails.push(ownerProfile.email);
+            const { data: profilProprio } = await supabase.from('profiles').select('email').eq('id', doc.owner_id).single();
+            if (profilProprio?.email) emailsAutorises.push(profilProprio.email);
 
             // B. Récupérer les invités (si limité)
             if (doc.visibility === 'limited') {
-                const { data: accessList } = await supabase.from('document_access').select('email').eq('document_id', doc.id);
-                if (accessList) accessList.forEach((a: any) => allowedEmails.push(a.email));
+                const { data: listeAcces } = await supabase.from('document_access').select('email').eq('document_id', doc.id);
+                if (listeAcces) listeAcces.forEach((a: any) => emailsAutorises.push(a.email));
             }
 
             // Génération du contrat
-            vmBytecode = generateACLBytecode(allowedEmails);
-            console.log(`[Archiver] ACL générée pour ${doc.id} : ${allowedEmails.length} emails autorisés.`);
+            bytecodeVm = genererBytecodeACL(emailsAutorises);
+            console.log(`[Archiveur] ACL générée pour ${doc.id} : ${emailsAutorises.length} emails autorisés.`);
         }
 
         // --- CONSTRUCTION SBP ---
-        const parts: Uint8Array[] = [];
+        const parties: Uint8Array[] = [];
         
-        // Header
-        parts.push(new Uint8Array([0x53, 0x56, 0x52, 0x02])); 
+        // En-tête
+        parties.push(new Uint8Array([0x53, 0x56, 0x52, 0x02])); 
 
-        // VM Block (Le contrat de sécurité)
-        const bcLen = new Uint8Array(4);
-        new DataView(bcLen.buffer).setUint32(0, vmBytecode.length);
-        parts.push(new Uint8Array([OP_CODES.VM_BYTECODE]));
-        parts.push(bcLen);
-        parts.push(vmBytecode);
+        // Bloc VM (Le contrat de sécurité)
+        const lenBc = new Uint8Array(4);
+        new DataView(lenBc.buffer).setUint32(0, bytecodeVm.length);
+        parties.push(new Uint8Array([OP_SBP.BYTECODE_VM]));
+        parties.push(lenBc);
+        parties.push(bytecodeVm);
 
-        // IV Block
-        const ivBinString = atob(doc.encryption_iv);
-        const ivBuf = new Uint8Array(ivBinString.length);
-        for (let i = 0; i < ivBinString.length; i++) ivBuf[i] = ivBinString.charCodeAt(i);
-        parts.push(new Uint8Array([OP_CODES.IV_BLOCK]));
-        parts.push(new Uint8Array([ivBuf.length]));
-        parts.push(ivBuf);
+        // Bloc IV
+        const chaineBinIv = atob(doc.encryption_iv);
+        const bufIv = new Uint8Array(chaineBinIv.length);
+        for (let i = 0; i < chaineBinIv.length; i++) bufIv[i] = chaineBinIv.charCodeAt(i);
+        parties.push(new Uint8Array([OP_SBP.BLOC_IV]));
+        parties.push(new Uint8Array([bufIv.length]));
+        parties.push(bufIv);
 
-        // Metadata
-        const metaJson = JSON.stringify({ 
+        // Métadonnées
+        const jsonMeta = JSON.stringify({ 
             owner_id: doc.owner_id, 
             icon: doc.icon, 
             color: doc.color,
@@ -176,74 +183,74 @@ serve(async (req) => {
             archived_at: new Date().toISOString(),
             type: 'auto-archive'
         });
-        const metaBuf = strToBuf(metaJson);
-        const metaLen = new Uint8Array(4);
-        new DataView(metaLen.buffer).setUint32(0, metaBuf.length);
-        parts.push(new Uint8Array([OP_CODES.META_TAG]));
-        parts.push(metaLen);
-        parts.push(metaBuf);
+        const bufMeta = strVersBuf(jsonMeta);
+        const lenMeta = new Uint8Array(4);
+        new DataView(lenMeta.buffer).setUint32(0, bufMeta.length);
+        parties.push(new Uint8Array([OP_SBP.BALISE_META]));
+        parties.push(lenMeta);
+        parties.push(bufMeta);
 
-        // Ghost Block
-        parts.push(...generateGhostBlock());
+        // Bloc Fantôme
+        parties.push(...genererBlocFantome());
 
-        // Payload
-        const titleBuf = strToBuf(doc.title);
-        const contentBuf = strToBuf(doc.content);
-        const combinedPayload = new Uint8Array(titleBuf.length + 1 + contentBuf.length);
-        combinedPayload.set(titleBuf, 0);
-        combinedPayload[titleBuf.length] = 0x00;
-        combinedPayload.set(contentBuf, titleBuf.length + 1);
+        // Charge Utile
+        const bufTitre = strVersBuf(doc.title);
+        const bufContenu = strVersBuf(doc.content);
+        const chargeUtileCombinee = new Uint8Array(bufTitre.length + 1 + bufContenu.length);
+        chargeUtileCombinee.set(bufTitre, 0);
+        chargeUtileCombinee[bufTitre.length] = 0x00;
+        chargeUtileCombinee.set(bufContenu, bufTitre.length + 1);
 
-        const shuffledPayload = sivaraShuffle(combinedPayload, containerSeed);
-        const payloadLen = new Uint8Array(4);
-        new DataView(payloadLen.buffer).setUint32(0, shuffledPayload.length);
-        parts.push(new Uint8Array([OP_CODES.DATA_CHUNK]));
-        parts.push(payloadLen);
-        parts.push(shuffledPayload);
+        const chargeUtileMelangee = melangeSivara(chargeUtileCombinee, graineConteneur);
+        const lenCharge = new Uint8Array(4);
+        new DataView(lenCharge.buffer).setUint32(0, chargeUtileMelangee.length);
+        parties.push(new Uint8Array([OP_SBP.MORCEAU_DONNEES]));
+        parties.push(lenCharge);
+        parties.push(chargeUtileMelangee);
 
-        // EOF
-        parts.push(new Uint8Array([OP_CODES.EOF]));
+        // Fin de Fichier
+        parties.push(new Uint8Array([OP_SBP.FIN_FICHIER]));
 
         // Assemblage
-        const totalLength = parts.reduce((acc, p) => acc + p.length, 0);
-        const finalBuffer = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const part of parts) { finalBuffer.set(part, offset); offset += part.length; }
+        const longueurTotale = parties.reduce((acc, p) => acc + p.length, 0);
+        const tamponFinal = new Uint8Array(longueurTotale);
+        let decalage = 0;
+        for (const partie of parties) { tamponFinal.set(partie, decalage); decalage += partie.length; }
 
         // Upload
-        const filePath = `${doc.owner_id}/${doc.id}.sivara`;
-        const { error: uploadError } = await supabase.storage
+        const cheminFichier = `${doc.owner_id}/${doc.id}.sivara`;
+        const { error: erreurUpload } = await supabase.storage
             .from('doc-archives')
-            .upload(filePath, finalBuffer, {
+            .upload(cheminFichier, tamponFinal, {
                 contentType: 'application/x-sivara-binary',
                 upsert: true
             });
 
-        if (uploadError) {
-            console.error(`Erreur upload ${doc.id}:`, uploadError);
+        if (erreurUpload) {
+            console.error(`Erreur upload ${doc.id}:`, erreurUpload);
             continue;
         }
 
-        // Update DB (Cold Storage)
-        const { error: updateError } = await supabase
+        // Mise à jour DB (Stockage Froid)
+        const { error: erreurMaj } = await supabase
             .from('documents')
             .update({ 
                 content: '', // Contenu vidé
-                storage_path: filePath 
+                storage_path: cheminFichier 
             })
             .eq('id', doc.id);
 
-        if (!updateError) {
-            results.push(doc.id);
+        if (!erreurMaj) {
+            resultats.push(doc.id);
         }
     }
 
-    return new Response(JSON.stringify({ archived: results.length, ids: results }), { 
+    return new Response(JSON.stringify({ archived: resultats.length, ids: resultats }), { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
 
-  } catch (error) {
-    console.error(error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (erreur) {
+    console.error(erreur);
+    return new Response(JSON.stringify({ error: erreur.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })
