@@ -27,10 +27,10 @@ const OP_SBP = {
 // --- JEU D'INSTRUCTIONS VM (ISA) ---
 const OP_VM = {
   ARRET: 0x00,
-  EMPI_NUM: 0x01, // PUSH float
-  EMPI_TXT: 0x02, // PUSH string hash
-  CHARGER: 0x10,  // LOAD variable
-  STOCKER: 0x11,  // STORE variable
+  EMPI_NUM: 0x01, // Empiler Numérique
+  EMPI_TXT: 0x02, // Empiler Texte (Hash)
+  CHARGER: 0x10,  // Charger variable
+  STOCKER: 0x11,  // Stocker variable
   
   // Mathématiques
   ADD: 0x20, SOUS: 0x21, MULT: 0x22, DIV: 0x23, ABS: 0x24,
