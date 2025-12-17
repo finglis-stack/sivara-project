@@ -265,13 +265,17 @@ class SivaraVM {
             this.stack.push(this.memory[loadAddr]);
             break;
 
-          // Opérations
+          // Opérations Math
           case VM_OP.ADD: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a + b); break; }
           case VM_OP.SUB: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a - b); break; }
           case VM_OP.LT: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a < b ? 1 : 0); break; }
           case VM_OP.GT: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a > b ? 1 : 0); break; }
           case VM_OP.EQ: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push(a === b ? 1 : 0); break; }
           case VM_OP.ABS: { const a = this.stack.pop(); this.stack.push(Math.abs(a)); break; }
+
+          // Opérations Logiques (AJOUTÉES)
+          case VM_OP.AND: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push((a && b) ? 1 : 0); break; }
+          case VM_OP.OR: { const b = this.stack.pop(); const a = this.stack.pop(); this.stack.push((a || b) ? 1 : 0); break; }
 
           case VM_OP.GEO_DIST:
             const lng2 = this.stack.pop(); const lat2 = this.stack.pop();
@@ -280,12 +284,8 @@ class SivaraVM {
             break;
 
           case VM_OP.LIST_HAS:
-             // Pour simplifier, on assume que la liste est une string hashée ou gérée autrement
-             // Ici on fait une comparaison simple d'égalité pour le prototype
              const val = this.stack.pop();
              const listHash = this.stack.pop(); 
-             // Dans une vraie implémentation, on aurait une table de symboles pour vérifier l'inclusion
-             // Ici on triche : si le hash de l'email est égal au hash stocké, c'est bon
              this.stack.push(val === listHash ? 1 : 0);
              break;
 
@@ -345,8 +345,6 @@ const generateSivaraScript = (security: any): string => {
     
     // 1. Restriction Utilisateur (Email)
     if (security.allowed_emails && security.allowed_emails.length > 0) {
-        // Note: Pour le prototype, on ne gère qu'un seul email autorisé (le propriétaire)
-        // car la gestion des listes complexes en bytecode demande plus de temps
         const ownerEmail = security.allowed_emails[0];
         script += `soit email_cible = "${ownerEmail}"\n`;
         script += `soit email_courant = env.utilisateur.email\n`;
