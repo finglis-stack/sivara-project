@@ -277,7 +277,10 @@ const Docs = () => {
         (data || []).map(async (doc) => {
           try {
             const decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
-            const decryptedContent = doc.type === 'file' ? await encryptionService.decrypt(doc.content, doc.encryption_iv) : '';
+            // FIX: On ne déchiffre le contenu que s'il existe (évite l'erreur sur les docs archivés)
+            const decryptedContent = (doc.type === 'file' && doc.content) 
+                ? await encryptionService.decrypt(doc.content, doc.encryption_iv) 
+                : '';
             return { ...doc, decryptedTitle, decryptedContent };
           } catch (error) {
             return { ...doc, decryptedTitle: '🔒 Illisible', decryptedContent: '' };
@@ -523,19 +526,11 @@ const Docs = () => {
     try {
         setIsImporting(true);
         // Appel au Kernel pour extraire le contenu du conteneur SBP
-        const data = await sivaraVM.decompile(file);
+        const data = await sivaraVM.decompile(file, user.id); // FIX: On passe l'ID user
         
         // Si le Kernel renvoie une erreur d'auth (fichier privé d'un autre user), on demande le mot de passe
         if (data.require_auth) {
-             setImportPasswordDialog({ isOpen: true, fileData: data }); // Note: data ici contient peut-être juste l'erreur, à ajuster selon le retour du Kernel
-             // En fait, si require_auth est true, le Kernel n'a PAS renvoyé les données chiffrées.
-             // Il faut que l'utilisateur fournisse le mot de passe pour que le Kernel puisse déchiffrer le conteneur SBP lui-même ?
-             // NON. Le Kernel déchiffre le conteneur SBP. Si c'est public, il réussit. Si c'est privé, il échoue.
-             // Si il échoue, on ne peut rien faire sans la clé privée du propriétaire original.
-             // SAUF SI c'est un export manuel avec mot de passe.
-             
-             // Simplification : Si decompile réussit, on a les données chiffrées (AES).
-             // On passe à processImport qui va tenter de déchiffrer l'AES.
+             setImportPasswordDialog({ isOpen: true, fileData: data }); 
              throw new Error("Ce fichier est protégé et ne peut être ouvert que par son propriétaire.");
         }
 

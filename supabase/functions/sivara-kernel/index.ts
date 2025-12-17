@@ -1,3 +1,4 @@
+Privé).">
 // @ts-ignore: Deno types
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
@@ -51,7 +52,6 @@ serve(async (req) => {
 
     // --- LOCALISATION ---
     if (action === 'locate_me') {
-        // ... (Code existant inchangé pour locate_me)
         const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || '0.0.0.0';
         if (!IP_GEO_KEY) throw new Error("Service de géolocalisation non configuré.");
         const geoRes = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${IP_GEO_KEY}&ip=${clientIp}`);
@@ -66,8 +66,7 @@ serve(async (req) => {
 
     // --- COMPILATION (Export Manuel) ---
     if (action === 'compile') {
-       // ... (Code existant inchangé pour l'export manuel qui utilise ses propres clés)
-       // Pour l'instant on laisse l'export manuel tel quel car il utilise des clés spécifiques
+       // ... (Code existant inchangé pour l'export manuel)
        return new Response(JSON.stringify({ error: "Non implémenté dans cette mise à jour" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -81,10 +80,7 @@ serve(async (req) => {
       
       if (bytes[0] !== 0x53 || bytes[1] !== 0x56 || bytes[2] !== 0x52) throw new Error("Format SBP invalide.");
       
-      // Stratégie de déchiffrement :
-      // 1. Essayer la clé PUBLIQUE
-      // 2. Si échec (JSON invalide), essayer la clé PRIVÉE (context.userId ou owner_id passé)
-      
+      // Fonction de tentative de déchiffrement du conteneur
       const attemptDecompile = (seed: string) => {
           let cursor = 4; // Skip Magic
           const result: any = { header: 'SIVARA_SECURE_DOC_V2' };
@@ -116,13 +112,12 @@ serve(async (req) => {
               const clearChunk = sivaraUnshuffle(chunk, seed);
               try {
                  // C'est ici qu'on valide si le seed est bon
-                 // Si le JSON parse échoue, c'est que le seed est mauvais
                  const jsonStr = bufToStr(clearChunk);
                  metaData = JSON.parse(jsonStr);
                  Object.assign(result, metaData);
               } catch(e) {
                  success = false;
-                 break; // Arrêt immédiat
+                 break; // Arrêt immédiat si JSON invalide
               }
               cursor += len;
             }
@@ -145,24 +140,20 @@ serve(async (req) => {
           return success ? result : null;
       };
 
-      // TENTATIVE 1 : PUBLIC
+      // TENTATIVE 1 : PUBLIC (Clé universelle)
       let finalResult = attemptDecompile(PUBLIC_CONTAINER_SEED);
 
-      // TENTATIVE 2 : PRIVÉ (Si échec et si on a un contexte utilisateur)
-      // Note: Pour l'import manuel, le client envoie parfois le owner_id attendu ou le mot de passe comme seed
-      if (!finalResult && context?.fingerprint) {
-           // Ici on pourrait essayer avec l'ID utilisateur si on l'avait passé dans le contexte
-           // Pour l'instant, si c'est pas public, on renvoie une erreur spécifique pour que le client demande le mot de passe/clé
+      // TENTATIVE 2 : PRIVÉ (Clé utilisateur)
+      // Si la tentative publique a échoué ET qu'on a un ID utilisateur dans le contexte
+      if (!finalResult && context?.userId) {
+           console.log(`[Kernel] Tentative déverrouillage privé pour ${context.userId}`);
+           finalResult = attemptDecompile(context.userId);
       }
 
-      // Si on a réussi à lire les métadonnées mais que c'est pas public, on vérifie
-      // (Cas où on aurait utilisé la clé publique par erreur sur un doc privé mal flaggé, peu probable avec le shuffle)
-      
       if (finalResult) {
           return new Response(JSON.stringify(finalResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else {
-          // Si échec public, on renvoie une erreur spéciale
-          // Le client devra réessayer avec sa propre clé (via sivaraVM.decompile avec password/id)
+          // Si tout échoue, on demande une auth manuelle (mot de passe)
           return new Response(JSON.stringify({ error: "Fichier protégé ou clé invalide", require_auth: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }

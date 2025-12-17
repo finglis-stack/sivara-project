@@ -32,8 +32,10 @@ export const sivaraVM = {
   /**
    * Décompile un fichier .sivara binaire en objet JS chiffré
    * via le Kernel distant.
+   * @param file Le fichier .sivara
+   * @param userId (Optionnel) L'ID de l'utilisateur courant pour tenter de déverrouiller les archives privées
    */
-  async decompile(file: File): Promise<any> {
+  async decompile(file: File, userId?: string): Promise<any> {
     // Capture de l'empreinte locale pour preuve de propriété
     let fingerprint = null;
     try {
@@ -55,7 +57,10 @@ export const sivaraVM = {
                     body: { 
                         action: 'decompile', 
                         fileData: base64Content,
-                        context: { fingerprint } // On passe le contexte de sécurité
+                        context: { 
+                            fingerprint,
+                            userId // On passe l'ID pour le déverrouillage privé
+                        } 
                     }
                 });
 
@@ -70,6 +75,11 @@ export const sivaraVM = {
                 }
                 
                 if (data.error) {
+                    // Si le kernel demande une auth spécifique (mot de passe manuel)
+                    if (data.require_auth) {
+                        resolve(data); // On renvoie l'erreur structurée pour que l'UI gère le prompt
+                        return;
+                    }
                     throw new Error(data.error);
                 }
 
