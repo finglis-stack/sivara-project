@@ -25,10 +25,8 @@ const PUBLIC_CONTAINER_SEED = "SIVARA_PUBLIC_CONTAINER_V1";
 // Utils pour la construction binaire
 const strToBuf = (str: string) => new TextEncoder().encode(str);
 
-// Fonction de mélange (Shuffling) basée sur une graine (Seed)
-// Si le document est public, on utilise une graine connue. Sinon, l'ID du user.
+// Fonction de mélange (Shuffling)
 const sivaraShuffle = (buffer: Uint8Array, seedString: string): Uint8Array => {
-  // Génération d'un seed numérique simple à partir de la string
   let seed = 0;
   for (let i = 0; i < seedString.length; i++) {
     seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
@@ -83,7 +81,6 @@ serve(async (req) => {
         if (!doc.content) continue;
 
         // DÉTERMINATION DE LA CLÉ DU CONTENEUR
-        // Si Public -> Clé Globale. Si Privé -> ID Propriétaire.
         const containerSeed = doc.visibility === 'public' ? PUBLIC_CONTAINER_SEED : doc.owner_id;
 
         const parts: Uint8Array[] = [];
@@ -100,12 +97,12 @@ serve(async (req) => {
         parts.push(new Uint8Array([ivBuf.length]));
         parts.push(ivBuf);
 
-        // 3. Metadata (Icon, Color, Owner, Visibility) - Obfusqué avec le Seed
+        // 3. Metadata
         const metaJson = JSON.stringify({ 
             owner_id: doc.owner_id, 
             icon: doc.icon, 
             color: doc.color,
-            visibility: doc.visibility, // Important pour l'import
+            visibility: doc.visibility,
             archived_at: new Date().toISOString()
         });
         const metaBuf = strToBuf(metaJson);
@@ -120,7 +117,7 @@ serve(async (req) => {
         // 4. Ghost Block
         parts.push(...generateGhostBlock());
 
-        // 5. Payload (Title + Content) - Obfusqué avec le Seed
+        // 5. Payload (Title + Content)
         const titleBuf = strToBuf(doc.title);
         const contentBuf = strToBuf(doc.content);
         
@@ -161,10 +158,11 @@ serve(async (req) => {
         }
 
         // Update DB (Passage en Cold Storage)
+        // IMPORTANT: On ne touche PAS au titre, on vide juste le contenu
         const { error: updateError } = await supabase
             .from('documents')
             .update({ 
-                content: '', 
+                content: '', // On vide le contenu pour libérer la DB
                 storage_path: filePath 
             })
             .eq('id', doc.id);
