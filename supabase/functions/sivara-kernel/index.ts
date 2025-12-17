@@ -1,4 +1,3 @@
-Privé).">
 // @ts-ignore: Deno types
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore: Deno types
