@@ -35,6 +35,7 @@ import DeviceAdmin from "./pages/DeviceAdmin";
 import DeviceCheckout from "./pages/DeviceCheckout";
 import IdentityVerification from "./pages/IdentityVerification";
 import DeviceCustomerDetails from "./pages/DeviceCustomerDetails";
+import EduLanding from "./pages/EduLanding";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +83,7 @@ const AppRoutes = () => {
       if (appParam === 'device') return 'device';
       if (appParam === 'device-admin') return 'device-admin';
       if (appParam === 'id') return 'id';
+      if (appParam === 'edu') return 'edu';
       return 'mobile-launcher';
     }
 
@@ -96,6 +98,7 @@ const AppRoutes = () => {
       if (appParam === 'device-admin') return 'device-admin';
       if (appParam === 'mobile') return 'mobile-launcher';
       if (appParam === 'id') return 'id';
+      if (appParam === 'edu') return 'edu';
       return 'dev-portal';
     }
 
@@ -106,6 +109,7 @@ const AppRoutes = () => {
     if (hostname.startsWith('help.')) return 'help';
     if (hostname.startsWith('device.')) return 'device';
     if (hostname.startsWith('id.')) return 'id';
+    if (hostname.startsWith('edu.')) return 'edu';
     return 'www';
   }, [searchParams, hostname]);
 
@@ -116,6 +120,14 @@ const AppRoutes = () => {
         {/* --- MOBILE LAUNCHER --- */}
         {currentApp === 'mobile-launcher' && (
           <Route path="*" element={<MobileLanding />} />
+        )}
+
+        {/* --- APPLICATION: EDUCATION --- */}
+        {currentApp === 'edu' && (
+          <>
+            <Route path="/" element={<EduLanding />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
         )}
 
         {/* --- APPLICATION: ACCOUNT --- */}
