@@ -19,9 +19,9 @@ const EduLanding = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F7F2] font-sans selection:bg-green-500 selection:text-white flex flex-col">
+    <div className="min-h-screen bg-white font-sans selection:bg-green-500 selection:text-white flex flex-col">
       {/* Navbar */}
-      <nav className="sticky top-0 w-full z-50 transition-all duration-300 bg-[#F9F7F2]/80 backdrop-blur-md border-b border-gray-200">
+      <nav className="sticky top-0 w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-gray-200">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 bg-gray-900 text-white rounded-xl flex items-center justify-center border border-gray-800 shadow-inner">
@@ -33,7 +33,7 @@ const EduLanding = () => {
             <Button 
               variant="ghost" 
               onClick={() => navigateToAuth('/login')}
-              className="text-gray-700 hover:text-black hover:bg-gray-200/50 font-medium tracking-wide rounded-full px-6"
+              className="text-gray-700 hover:text-black hover:bg-gray-100 font-medium tracking-wide rounded-full px-6"
             >
               Connexion
             </Button>
@@ -51,7 +51,7 @@ const EduLanding = () => {
       <div className="flex-1 flex items-center justify-center py-24 sm:py-32">
         <div className="container mx-auto px-6 text-center">
           <div className="max-w-4xl mx-auto">
-            <div className="w-48 h-48 mx-auto">
+            <div className="w-64 h-64 mx-auto">
               <Lottie animationData={catAnimation} loop={true} />
             </div>
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tighter text-gray-900 mt-8 leading-tight">
@@ -67,7 +67,7 @@ const EduLanding = () => {
                 onClick={() => navigateToAuth('/onboarding')}
                 className="h-14 px-10 bg-gray-900 text-white hover:bg-black text-lg rounded-full shadow-xl transition-all duration-300 hover:-translate-y-1 font-medium group"
               >
-                Devenir le chouchou du prof
+                Commencer à étudier (plus intelligemment)
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
             </div>
@@ -76,7 +76,7 @@ const EduLanding = () => {
       </div>
 
       {/* Features Section */}
-      <div className="py-24 bg-white border-t border-gray-100">
+      <div className="py-24 bg-gray-50 border-t border-gray-100">
         <div className="container mx-auto px-6">
           <div className="text-center mb-16 max-w-3xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4 tracking-tight">Étudiez mieux, pas plus longtemps.</h2>
@@ -84,7 +84,7 @@ const EduLanding = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
-            <div className="bg-gray-50/80 p-8 rounded-3xl border border-gray-100">
+            <div className="bg-white p-8 rounded-3xl border border-gray-100">
               <div className="h-12 w-12 bg-green-100 rounded-2xl flex items-center justify-center mb-5">
                 <BrainCircuit className="h-6 w-6 text-green-700" />
               </div>
@@ -94,7 +94,7 @@ const EduLanding = () => {
               </p>
             </div>
 
-            <div className="bg-gray-50/80 p-8 rounded-3xl border border-gray-100">
+            <div className="bg-white p-8 rounded-3xl border border-gray-100">
               <div className="h-12 w-12 bg-blue-100 rounded-2xl flex items-center justify-center mb-5">
                 <CheckSquare className="h-6 w-6 text-blue-700" />
               </div>
@@ -104,7 +104,7 @@ const EduLanding = () => {
               </p>
             </div>
 
-            <div className="bg-gray-50/80 p-8 rounded-3xl border border-gray-100">
+            <div className="bg-white p-8 rounded-3xl border border-gray-100">
               <div className="h-12 w-12 bg-purple-100 rounded-2xl flex items-center justify-center mb-5">
                 <TrendingUp className="h-6 w-6 text-purple-700" />
               </div>
