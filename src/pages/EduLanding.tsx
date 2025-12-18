@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 import Footer from '@/components/Footer';
 import Lottie from 'lottie-react';
-import catAnimation from '../../public/cat-sleeping.json';
+import gameAnimation from '../../public/game-asset.json';
 import { Badge } from '@/components/ui/badge';
 
 const EduLanding = () => {
@@ -53,14 +53,12 @@ const EduLanding = () => {
         <div className="container mx-auto px-6">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div className="text-center lg:text-left animate-in fade-in slide-in-from-left-8 duration-700">
-              <Badge variant="outline" className="mb-6 bg-white border-gray-200 text-gray-600">Pour les étudiants du Québec</Badge>
+              <Badge variant="outline" className="mb-6 bg-white border-gray-200 text-gray-600">Pour les examens du Ministère</Badge>
               <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tighter text-gray-900 leading-tight">
-                Maîtrisez vos examens.
-                <br/>
-                <span className="text-gray-400 font-light">(Ou pas. On vous juge pas.)</span>
+                Maîtrisez vos révisions.
               </h1>
               <p className="text-lg md:text-xl text-gray-600 font-light max-w-xl mx-auto lg:mx-0 mt-6 leading-relaxed">
-                Notre IA adaptative vous aide à réviser. Pendant que vous procrastinez, elle prépare un plan d'étude. C'est presque de la triche.
+                Notre IA adaptative vous aide à vous préparer pour vos examens. Pendant que vous procrastinez, elle prépare un plan d'étude personnalisé.
               </p>
               <div className="mt-10">
                 <Button 
@@ -73,7 +71,7 @@ const EduLanding = () => {
               </div>
             </div>
             <div className="w-full max-w-lg mx-auto animate-in fade-in zoom-in-95 duration-700 delay-200">
-              <Lottie animationData={catAnimation} loop={true} />
+              <Lottie animationData={gameAnimation} loop={true} />
             </div>
           </div>
         </div>
