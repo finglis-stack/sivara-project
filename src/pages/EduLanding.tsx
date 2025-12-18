@@ -25,9 +25,7 @@ const EduLanding = () => {
       <nav className="sticky top-0 w-full z-50 transition-all duration-300 bg-[#FBFBF8]/80 backdrop-blur-md border-b border-gray-200/80">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 bg-gray-900 text-white rounded-xl flex items-center justify-center border border-gray-800 shadow-inner">
-              <span className="font-bold text-lg">É</span>
-            </div>
+            <img src="/sivara-edu-logo.png" alt="Sivara Éducation Logo" className="h-9 w-9" />
             <span className="font-medium text-lg tracking-wide text-gray-900">Sivara Éducation</span>
           </div>
           <div className="flex items-center gap-4 sm:gap-6">
