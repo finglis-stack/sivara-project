@@ -4,7 +4,6 @@ import Footer from '@/components/Footer';
 import Lottie from 'lottie-react';
 import gameAnimation from '../../public/game-asset.json';
 import { Badge } from '@/components/ui/badge';
-import eduLogo from '@/assets/sivara-edu-logo.png';
 
 const EduLanding = () => {
   
@@ -26,7 +25,7 @@ const EduLanding = () => {
       <nav className="sticky top-0 w-full z-50 transition-all duration-300 bg-[#FBFBF8]/80 backdrop-blur-md border-b border-gray-200/80">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={eduLogo} alt="Sivara Éducation Logo" className="h-9 w-9" />
+            <img src="/sivara-edu-logo.png" alt="Sivara Éducation Logo" className="h-9 w-9" />
             <span className="font-medium text-lg tracking-wide text-gray-900">Sivara Éducation</span>
           </div>
           <div className="flex items-center gap-4 sm:gap-6">
