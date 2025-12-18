@@ -36,6 +36,8 @@ import DeviceCheckout from "./pages/DeviceCheckout";
 import IdentityVerification from "./pages/IdentityVerification";
 import DeviceCustomerDetails from "./pages/DeviceCustomerDetails";
 import EduLanding from "./pages/EduLanding";
+import EduOnboarding from "./pages/EduOnboarding";
+import EduDashboard from "./pages/EduDashboard";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +65,30 @@ const ArchiverDaemon = () => {
     }, [user]);
 
     return null;
+};
+
+const EduRouter = () => {
+    const [searchParams] = useSearchParams();
+    const path = searchParams.get('path');
+    
+    // Router interne pour l'app "edu"
+    if (path === '/onboarding') {
+        return (
+            <ProtectedRoute>
+                <EduOnboarding />
+            </ProtectedRoute>
+        );
+    }
+    
+    if (path === '/dash') {
+        return (
+            <ProtectedRoute>
+                <EduDashboard />
+            </ProtectedRoute>
+        );
+    }
+
+    return <EduLanding />;
 };
 
 const AppRoutes = () => {
@@ -125,7 +151,18 @@ const AppRoutes = () => {
         {/* --- APPLICATION: EDUCATION --- */}
         {currentApp === 'edu' && (
           <>
-            <Route path="/" element={<EduLanding />} />
+            <Route path="/" element={<EduRouter />} />
+            {/* Routes directes pour la prod (edu.sivara.ca/dash) */}
+            <Route path="/onboarding" element={
+                <ProtectedRoute>
+                    <EduOnboarding />
+                </ProtectedRoute>
+            } />
+            <Route path="/dash" element={
+                <ProtectedRoute>
+                    <EduDashboard />
+                </ProtectedRoute>
+            } />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
         )}
@@ -272,35 +309,19 @@ const App = () => {
         const hash = window.location.hash;
         if (hash && hash.includes('access_token')) {
           try {
-            // NOTE: Si c'est un lien de recovery, on laisse Supabase le gérer
-            // La page ResetPassword fera le check de session elle-même.
-            if (hash.includes('type=recovery')) {
-                return; 
-            }
+            if (hash.includes('type=recovery')) return; 
 
-            // Extraction manuelle robuste des tokens
-            const params = new URLSearchParams(hash.substring(1)); // Enlève le '#'
+            const params = new URLSearchParams(hash.substring(1));
             const accessToken = params.get('access_token');
             const refreshToken = params.get('refresh_token');
 
             if (accessToken && refreshToken) {
-              console.log("[Auth] Token détecté dans URL, tentative de restauration...");
-              
-              const { error } = await supabase.auth.setSession({
+              await supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken,
               });
-              
-              if (error) {
-                console.error("[Auth] Erreur restauration session:", error);
-              } else {
-                console.log("[Auth] Session restaurée avec succès.");
-                // Nettoyage de l'URL pour la propreté
-                window.history.replaceState(null, '', window.location.pathname + window.location.search);
-                
-                // Forcer un rafraîchissement de l'utilisateur pour être sûr
-                await supabase.auth.getUser();
-              }
+              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+              await supabase.auth.getUser();
             }
           } catch (e) {
             console.error("[Auth] Erreur critique parsing hash", e);
@@ -308,7 +329,6 @@ const App = () => {
         }
       };
       
-      // Petit délai pour laisser le temps au contexte de s'initialiser si besoin
       setTimeout(handleHashSession, 100);
     }
   }, []);
