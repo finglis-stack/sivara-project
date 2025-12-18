@@ -144,6 +144,17 @@ Au-delà de la simple correction orthographique, **Sivara Text** est un moteur c
     *   **Stockage Chiffré (Cloud) :** Pour permettre la continuité entre appareils, le modèle est synchronisé en base de données.
     *   **Confidentialité Absolue :** Avant de quitter le navigateur, le JSON du modèle d'apprentissage est chiffré en **AES-256-GCM** avec la clé maître de l'utilisateur. Le serveur reçoit un blob illisible `text_preferences`. Sivara ne peut techniquement pas savoir quels mots vous utilisez ou quelles fautes vous faites.
 
+### 10. Plateforme Éducative Adaptative - `edu.sivara.ca`
+Une infrastructure d'apprentissage personnalisée propulsée par l'IA, conçue pour maximiser la réussite scolaire sans compromettre la vie privée des étudiants.
+
+*   **Tuteur IA Contextuel :**
+    *   Analyse en temps réel des interactions de l'étudiant pour détecter les micro-lacunes conceptuelles.
+    *   Génération dynamique de quiz et d'explications adaptées au niveau de compréhension courant (Scaffolding).
+*   **Gamification Éthique :**
+    *   Mécaniques d'engagement (XP, Séries) calibrées pour favoriser la constance (Habit Building) plutôt que l'addiction, avec un respect total de l'attention de l'utilisateur.
+*   **Alignement Curriculaire :**
+    *   Architecture de données structurée mappant précisément les compétences requises par le Ministère (ex: Science et Technologie Sec 4, Mathématiques TS).
+
 ---
 
 ## 🔬 Deep Dive : Architecture Moteur "Sivara Titanium"
