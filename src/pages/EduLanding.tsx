@@ -4,8 +4,11 @@ import Footer from '@/components/Footer';
 import Lottie from 'lottie-react';
 import gameAnimation from '../../public/game-asset.json';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
+import UserMenu from '@/components/UserMenu';
 
 const EduLanding = () => {
+  const { user } = useAuth();
   
   const navigateToAuth = (path: string) => {
     const hostname = window.location.hostname;
@@ -24,24 +27,30 @@ const EduLanding = () => {
       {/* Navbar */}
       <nav className="sticky top-0 w-full z-50 transition-all duration-300 bg-[#FBFBF8]/80 backdrop-blur-md border-b border-gray-200/80">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
             <img src="/sivara-education.png" alt="Sivara Éducation Logo" className="h-9 w-9 object-contain" />
             <span className="font-medium text-lg tracking-wide text-gray-900">Sivara Éducation</span>
           </div>
           <div className="flex items-center gap-4 sm:gap-6">
-            <Button 
-              variant="ghost" 
-              onClick={() => navigateToAuth('/login')}
-              className="text-gray-700 hover:text-black hover:bg-gray-200/50 font-medium tracking-wide rounded-full px-6"
-            >
-              Connexion
-            </Button>
-            <Button 
-              onClick={() => navigateToAuth('/onboarding')}
-              className="bg-gray-900 text-white hover:bg-black font-semibold rounded-full px-8 py-3 transition-all hover:scale-105 shadow-lg"
-            >
-              Commencer
-            </Button>
+            {user ? (
+              <UserMenu />
+            ) : (
+              <>
+                <Button 
+                  variant="ghost" 
+                  onClick={() => navigateToAuth('/login')}
+                  className="text-gray-700 hover:text-black hover:bg-gray-200/50 font-medium tracking-wide rounded-full px-6"
+                >
+                  Connexion
+                </Button>
+                <Button 
+                  onClick={() => navigateToAuth('/onboarding')}
+                  className="bg-gray-900 text-white hover:bg-black font-semibold rounded-full px-8 py-3 transition-all hover:scale-105 shadow-lg"
+                >
+                  Commencer
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -59,13 +68,22 @@ const EduLanding = () => {
                 Notre IA adaptative vous aide à vous préparer pour vos examens. Pendant que vous procrastinez, elle prépare un plan d'étude personnalisé.
               </p>
               <div className="mt-10">
-                <Button 
-                  onClick={() => navigateToAuth('/onboarding')}
-                  className="h-14 px-10 bg-gray-900 text-white hover:bg-black text-lg rounded-full shadow-xl transition-all duration-300 hover:-translate-y-1 font-medium group"
-                >
-                  Commencer gratuitement
-                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </Button>
+                {user ? (
+                   <Button 
+                    className="h-14 px-10 bg-gray-900 text-white hover:bg-black text-lg rounded-full shadow-xl transition-all duration-300 hover:-translate-y-1 font-medium group"
+                  >
+                    Accéder à mon tableau de bord
+                    <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={() => navigateToAuth('/onboarding')}
+                    className="h-14 px-10 bg-gray-900 text-white hover:bg-black text-lg rounded-full shadow-xl transition-all duration-300 hover:-translate-y-1 font-medium group"
+                  >
+                    Commencer gratuitement
+                    <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                )}
               </div>
             </div>
             <div className="w-full max-w-lg mx-auto animate-in fade-in zoom-in-95 duration-700 delay-200">
