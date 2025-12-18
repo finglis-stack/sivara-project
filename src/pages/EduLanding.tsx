@@ -6,9 +6,11 @@ import gameAnimation from '../../public/game-asset.json';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from '@/components/UserMenu';
+import { useNavigate } from 'react-router-dom';
 
 const EduLanding = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   
   const navigateToAuth = (path: string) => {
     const hostname = window.location.hostname;
@@ -19,6 +21,19 @@ const EduLanding = () => {
       window.location.href = `/?app=account&path=${path}&returnTo=${encodeURIComponent(returnUrl)}`;
     } else {
       window.location.href = `https://account.sivara.ca${path}?returnTo=${encodeURIComponent(returnUrl)}`;
+    }
+  };
+
+  const handleDashboardAccess = () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    if (isLocal) {
+        // En local, on utilise les query params pour simuler le routing
+        window.location.href = '/?app=edu&path=/dash';
+    } else {
+        // En prod, on utilise le routing propre
+        navigate('/dash');
     }
   };
 
@@ -70,6 +85,7 @@ const EduLanding = () => {
               <div className="mt-10">
                 {user ? (
                    <Button 
+                    onClick={handleDashboardAccess}
                     className="h-14 px-10 bg-gray-900 text-white hover:bg-black text-lg rounded-full shadow-xl transition-all duration-300 hover:-translate-y-1 font-medium group"
                   >
                     Accéder à mon tableau de bord
