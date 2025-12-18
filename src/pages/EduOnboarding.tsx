@@ -36,10 +36,10 @@ const EduOnboarding = () => {
     setStep(3);
 
     const texts = [
-      "Configuration de l'espace de travail...",
-      "Analyse des modules scolaires...",
-      "Génération du plan d'étude...",
-      "Accès autorisé."
+      "Calibrage des propulseurs...",
+      "Chargement du programme...",
+      "Trajectoire calculée...",
+      "Décollage."
     ];
 
     for (let i = 0; i < texts.length; i++) {
@@ -61,7 +61,7 @@ const EduOnboarding = () => {
         particleCount: 150,
         spread: 100,
         origin: { y: 0.6 },
-        colors: ['#ffffff', '#60A5FA', '#3B82F6']
+        colors: ['#3B82F6', '#ffffff', '#FCD34D']
       });
 
       setTimeout(() => {
@@ -74,30 +74,39 @@ const EduOnboarding = () => {
     }
   };
 
-  // Logique d'arrière-plan
-  const getBackgroundImage = () => {
-      if (subject === 'science_st_4') return 'url(/science-bg.jpg)';
-      return 'url(/default-edu-bg.jpg)';
-  };
-
   const isScienceSelected = subject === 'science_st_4';
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 font-sans text-white relative overflow-hidden selection:bg-white/30 selection:text-white">
       
       {/* BACKGROUND DYNAMIQUE */}
-      <div className="absolute inset-0 z-0 bg-black">
+      <div className="absolute inset-0 z-0 bg-black overflow-hidden">
+          {/* Layer Vidéo (Science - Cyclone) */}
+          <div className={`absolute inset-0 transition-opacity duration-1000 ${isScienceSelected ? 'opacity-100' : 'opacity-0'}`}>
+              <video 
+                  autoPlay 
+                  loop 
+                  muted 
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ filter: 'brightness(0.6) blur(2px) contrast(1.1)' }}
+              >
+                  <source src="/science-bg.mp4" type="video/mp4" />
+              </video>
+          </div>
+
+          {/* Layer Image (Défaut - Canard) */}
           <div 
-              className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ease-in-out ${isScienceSelected ? 'scale-105 blur-[2px]' : 'scale-100 blur-0'}`}
+              className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ${!isScienceSelected ? 'opacity-100' : 'opacity-0'}`}
               style={{ 
-                  backgroundImage: getBackgroundImage(),
-                  filter: isScienceSelected ? 'brightness(0.6) blur(3px)' : 'brightness(0.7)'
+                  backgroundImage: 'url(/default-edu-bg.jpg)',
+                  backgroundPosition: 'center 35%', // Ajustement vertical pour le canard
+                  filter: 'brightness(0.5)' // Assombri pour le texte blanc
               }}
           />
-          {/* Overlay global pour lisibilité - Plus sombre pour garantir le contraste blanc */}
-          <div className="absolute inset-0 bg-black/40"></div>
-          {/* Overlay additionnel sombre si Science est sélectionné */}
-          <div className={`absolute inset-0 bg-black/40 transition-opacity duration-1000 ${isScienceSelected ? 'opacity-100' : 'opacity-0'}`}></div>
+          
+          {/* Overlay global pour garantir la lisibilité du texte blanc */}
+          <div className="absolute inset-0 bg-black/30"></div>
       </div>
 
       {/* Logo Minimaliste Fixe */}
@@ -158,7 +167,7 @@ const EduOnboarding = () => {
                         </Select>
                     </div>
                     
-                    {subject === 'science_st_4' && (
+                    {isScienceSelected && (
                         <div className="flex gap-4 items-start animate-in fade-in slide-in-from-top-2 pt-4 bg-black/40 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-lg text-white">
                             <div className="p-3 bg-blue-500/20 rounded-xl border border-blue-400/30"><Atom className="h-6 w-6 text-blue-300" /></div>
                             <div>
