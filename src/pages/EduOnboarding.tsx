@@ -36,10 +36,10 @@ const EduOnboarding = () => {
     setStep(3);
 
     const texts = [
-      "Configuration de l'espace de travail...",
-      "Analyse des modules scolaires...",
-      "Génération du plan d'étude...",
-      "Accès autorisé."
+      "Calibrage des propulseurs...",
+      "Chargement du programme...",
+      "Trajectoire calculée...",
+      "Décollage."
     ];
 
     for (let i = 0; i < texts.length; i++) {
@@ -61,7 +61,7 @@ const EduOnboarding = () => {
         particleCount: 150,
         spread: 100,
         origin: { y: 0.6 },
-        colors: ['#ffffff', '#60A5FA', '#3B82F6']
+        colors: ['#3B82F6', '#ffffff', '#FCD34D']
       });
 
       setTimeout(() => {
@@ -74,36 +74,48 @@ const EduOnboarding = () => {
     }
   };
 
-  // Logique d'arrière-plan
-  const getBackgroundImage = () => {
-      if (subject === 'science_st_4') return 'url(/science-bg.jpg)';
-      return 'url(/default-edu-bg.jpg)';
-  };
-
-  const isScienceSelected = subject === 'science_st_4';
+  const isSpaceTheme = subject === 'science_st_4';
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 font-sans text-white relative overflow-hidden selection:bg-white/30 selection:text-white">
+    <div className={`min-h-screen flex flex-col items-center justify-center p-6 font-sans transition-all duration-1000 ease-in-out relative overflow-hidden ${isSpaceTheme ? 'text-white' : 'bg-white text-black'}`}>
       
       {/* BACKGROUND DYNAMIQUE */}
-      <div className="absolute inset-0 z-0 bg-black">
+      <div className="absolute inset-0 z-0 bg-black overflow-hidden">
+          {/* Layer Vidéo (Science) */}
+          <div className={`absolute inset-0 transition-opacity duration-1000 ${isSpaceTheme ? 'opacity-100' : 'opacity-0'}`}>
+              <video 
+                  autoPlay 
+                  loop 
+                  muted 
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ filter: 'brightness(0.6) blur(2px) contrast(1.1)' }}
+              >
+                  <source src="/science-bg.mp4" type="video/mp4" />
+              </video>
+          </div>
+
+          {/* Layer Image (Défaut/Canard) */}
           <div 
-              className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ease-in-out ${isScienceSelected ? 'scale-105 blur-[2px]' : 'scale-100 blur-0'}`}
+              className={`absolute inset-0 bg-cover transition-opacity duration-1000 ${!isSpaceTheme ? 'opacity-100' : 'opacity-0'}`}
               style={{ 
-                  backgroundImage: getBackgroundImage(),
-                  filter: isScienceSelected ? 'brightness(0.6) blur(3px)' : 'brightness(0.7)'
+                  backgroundImage: 'url(/default-edu-bg.jpg)',
+                  backgroundPosition: 'center 35%', // Image descendue légèrement
+                  filter: 'brightness(0.7)'
               }}
           />
-          {/* Overlay global pour lisibilité */}
+
+          {/* Overlay global pour uniformiser */}
           <div className="absolute inset-0 bg-black/20"></div>
-          {/* Overlay additionnel sombre si Science est sélectionné pour faire ressortir le texte */}
-          <div className={`absolute inset-0 bg-black/40 transition-opacity duration-1000 ${isScienceSelected ? 'opacity-100' : 'opacity-0'}`}></div>
+          
+          {/* Overlay sombre additionnel pour le mode science (lisibilité) */}
+          <div className={`absolute inset-0 bg-black/40 transition-opacity duration-1000 ${isSpaceTheme ? 'opacity-100' : 'opacity-0'}`}></div>
       </div>
 
       {/* Logo Minimaliste Fixe */}
       <div className="absolute top-8 left-8 flex items-center gap-3 animate-in fade-in duration-1000 z-20">
-         <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold border bg-white/10 border-white/20 text-white backdrop-blur-md">S</div>
-         <span className="font-medium tracking-tight text-white/90">Éducation</span>
+         <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold border backdrop-blur-md ${isSpaceTheme ? 'bg-white/10 border-white/20 text-white' : 'bg-black border-transparent text-white'}`}>S</div>
+         <span className={`font-medium tracking-tight ${isSpaceTheme ? 'text-white/80' : 'text-black'}`}>Éducation</span>
       </div>
 
       <div className="w-full max-w-lg mx-auto z-10 relative">
@@ -111,17 +123,17 @@ const EduOnboarding = () => {
         {/* STEP 0: INTRO */}
         {step === 0 && (
             <div className="text-center animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <h1 className="text-5xl md:text-7xl font-bold mb-8 tracking-tighter leading-[0.9] drop-shadow-lg">
+                <h1 className="text-5xl md:text-7xl font-bold mb-8 tracking-tighter leading-[0.9]">
                     L'excellence <br/>
-                    <span className="text-blue-300">académique.</span>
+                    <span className={isSpaceTheme ? 'text-blue-300' : 'text-gray-400'}>académique.</span>
                 </h1>
-                <p className="text-xl text-gray-200 font-light mb-12 leading-relaxed max-w-sm mx-auto drop-shadow-md">
+                <p className={`text-xl font-light mb-12 leading-relaxed max-w-sm mx-auto ${isSpaceTheme ? 'text-gray-300' : 'text-gray-500'}`}>
                     Une approche structurée pour maximiser votre réussite scolaire. <br/>
                     L'intelligence artificielle au service de votre potentiel.
                 </p>
                 <Button 
                     onClick={handleNext} 
-                    className="h-16 px-12 rounded-full text-lg font-medium transition-all hover:scale-105 shadow-xl bg-white text-black hover:bg-gray-100 border-0"
+                    className={`h-16 px-12 rounded-full text-lg font-medium transition-all hover:scale-105 shadow-xl ${isSpaceTheme ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-neutral-800'}`}
                 >
                     Commencer <ArrowRight className="ml-3 h-5 w-5" />
                 </Button>
@@ -132,22 +144,22 @@ const EduOnboarding = () => {
         {step === 1 && (
             <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 space-y-12">
                 <div>
-                    <h2 className="text-3xl font-bold mb-3 drop-shadow-md">Votre parcours</h2>
-                    <p className="text-lg text-gray-200 font-light">Sélectionnez votre programme d'études.</p>
+                    <h2 className="text-3xl font-bold mb-3">Votre mission</h2>
+                    <p className={`text-lg font-light ${isSpaceTheme ? 'text-gray-300' : 'text-gray-500'}`}>Quelle matière voulez-vous maîtriser ?</p>
                 </div>
 
                 <div className="space-y-6">
                     <div className="space-y-2">
-                        <Label className="text-xs uppercase font-bold tracking-widest pl-1 text-white/70">Programme</Label>
+                        <Label className={`text-xs uppercase font-bold tracking-widest pl-1 ${isSpaceTheme ? 'text-blue-300/80' : 'text-gray-400'}`}>Programme</Label>
                         <Select value={subject} onValueChange={setSubject}>
-                            <SelectTrigger className="h-16 text-xl bg-white/10 backdrop-blur-md border-0 border-b-2 border-white/30 rounded-none px-4 focus:ring-0 focus:border-white transition-all font-medium text-white hover:bg-white/20">
-                                <SelectValue placeholder="Sélectionner une matière..." />
+                            <SelectTrigger className={`h-16 text-xl border-0 border-b-2 rounded-none px-0 focus:ring-0 transition-all font-medium ${isSpaceTheme ? 'bg-transparent border-white/30 text-white focus:border-white' : 'bg-transparent border-gray-100 text-black focus:border-black'}`}>
+                                <SelectValue placeholder="Sélectionner..." />
                             </SelectTrigger>
-                            <SelectContent className="bg-zinc-900 border-zinc-800 shadow-xl rounded-xl p-2 text-white">
-                                <SelectItem value="science_st_4" className="text-base py-3 cursor-pointer focus:bg-blue-900/50 focus:text-white rounded-lg group">
+                            <SelectContent className="bg-white border-gray-100 shadow-xl rounded-xl p-2 text-black">
+                                <SelectItem value="science_st_4" className="text-base py-3 cursor-pointer focus:bg-blue-50 rounded-lg group">
                                     <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-blue-500/20 text-blue-400 rounded-md">
-                                            <Dna className="h-5 w-5" />
+                                        <div className="p-2 bg-blue-100 text-blue-700 rounded-md group-hover:bg-blue-200 transition-colors">
+                                            <Rocket className="h-5 w-5" />
                                         </div>
                                         <span>Science et Technologie (ST) - Sec 4</span>
                                     </div>
@@ -159,11 +171,11 @@ const EduOnboarding = () => {
                     </div>
                     
                     {subject === 'science_st_4' && (
-                        <div className="flex gap-4 items-start animate-in fade-in slide-in-from-top-2 pt-4 bg-black/40 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-lg text-white">
-                            <div className="p-3 bg-blue-500/20 rounded-xl border border-blue-400/30"><Atom className="h-6 w-6 text-blue-300" /></div>
+                        <div className="flex gap-4 items-start animate-in fade-in slide-in-from-top-2 pt-4 bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 shadow-lg text-white">
+                            <div className="p-3 bg-blue-500/20 rounded-xl border border-blue-400/30"><Dna className="h-6 w-6 text-blue-300" /></div>
                             <div>
                                 <h4 className="font-bold mb-1">Programme Complet</h4>
-                                <p className="text-sm leading-relaxed text-gray-300">Couvre l'Univers Matériel, Vivant, Terre et Espace. Conforme aux exigences du Ministère de l'Éducation du Québec.</p>
+                                <p className="text-sm leading-relaxed text-gray-300">Inclut l'Univers Matériel, Vivant, Terre et Espace. Conforme au programme du Ministère.</p>
                             </div>
                         </div>
                     )}
@@ -173,7 +185,7 @@ const EduOnboarding = () => {
                     <Button 
                         onClick={handleNext} 
                         disabled={!subject} 
-                        className="w-full h-14 rounded-full text-lg font-medium transition-all bg-white text-black hover:bg-gray-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`w-full h-14 rounded-full text-lg font-medium transition-all ${isSpaceTheme ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-neutral-800'}`}
                     >
                         Suivant
                     </Button>
@@ -185,23 +197,23 @@ const EduOnboarding = () => {
         {step === 2 && (
             <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 space-y-12">
                 <div>
-                    <h2 className="text-3xl font-bold mb-3 drop-shadow-md">Code d'honneur</h2>
-                    <p className="text-lg text-gray-200 font-light">L'intégrité est la base de l'apprentissage.</p>
+                    <h2 className="text-3xl font-bold mb-3">Le pacte</h2>
+                    <p className={`text-lg font-light ${isSpaceTheme ? 'text-gray-300' : 'text-gray-500'}`}>Promettez-nous d'utiliser ce pouvoir pour le bien.</p>
                 </div>
 
                 <div className="space-y-6">
-                    <div className="flex items-start gap-4 p-5 rounded-xl transition-colors cursor-pointer border bg-white/10 border-white/10 hover:bg-white/20 backdrop-blur-md" onClick={() => setAccepted(!accepted)}>
+                    <div className={`flex items-start gap-4 p-4 rounded-xl transition-colors cursor-pointer border ${isSpaceTheme ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'hover:bg-gray-50 border-transparent'}`} onClick={() => setAccepted(!accepted)}>
                         <Checkbox 
                             id="terms" 
                             checked={accepted} 
                             onCheckedChange={(c) => setAccepted(c as boolean)} 
-                            className="mt-1 w-6 h-6 border-2 border-white/50 data-[state=checked]:bg-white data-[state=checked]:text-black transition-all" 
+                            className={`mt-1 w-6 h-6 border-2 transition-all ${isSpaceTheme ? 'border-white/50 data-[state=checked]:bg-white data-[state=checked]:text-black' : 'border-gray-300 data-[state=checked]:bg-black data-[state=checked]:border-black data-[state=checked]:text-white'}`} 
                         />
-                        <label htmlFor="terms" className="text-base text-gray-200 leading-relaxed cursor-pointer select-none">
-                            Je m'engage à respecter les <span className="text-white font-semibold border-b border-white/30 pb-0.5 hover:border-white transition-colors">Conditions d'utilisation</span>.
+                        <label htmlFor="terms" className={`text-base leading-relaxed cursor-pointer select-none ${isSpaceTheme ? 'text-gray-300' : 'text-gray-600'}`}>
+                            J'accepte les <span className={`font-medium border-b pb-0.5 transition-colors ${isSpaceTheme ? 'text-white border-white/50 hover:bg-white/10' : 'text-black border-gray-300 hover:bg-gray-100'}`}>Conditions d'utilisation</span>.
                             <br/><br/>
-                            <span className="text-gray-400 text-sm block mt-2 pl-3 border-l-2 border-white/20 italic">
-                                "Je comprends que cet outil est conçu pour m'aider à comprendre et apprendre, et non pour effectuer le travail à ma place."
+                            <span className={`text-sm block mt-2 ${isSpaceTheme ? 'text-gray-400' : 'text-gray-400'}`}>
+                                "Je comprends que l'IA est un outil d'apprentissage, pas un moyen de triche. L'intégrité académique est ma responsabilité."
                             </span>
                         </label>
                     </div>
@@ -211,9 +223,9 @@ const EduOnboarding = () => {
                     <Button 
                         onClick={handleFinish} 
                         disabled={!accepted} 
-                        className="w-full h-14 rounded-full text-lg font-medium shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 bg-white text-black hover:bg-gray-200 disabled:opacity-50"
+                        className={`w-full h-14 rounded-full text-lg font-medium shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 ${isSpaceTheme ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-neutral-800'}`}
                     >
-                        Accéder à mon espace <Sparkles className="ml-2 h-5 w-5" />
+                        Activer l'accès <Sparkles className="ml-2 h-5 w-5" />
                     </Button>
                 </div>
             </div>
@@ -223,12 +235,9 @@ const EduOnboarding = () => {
         {step === 3 && (
             <div className="flex flex-col items-center justify-center text-center space-y-12 animate-in fade-in duration-1000">
                 <div className="relative">
-                    <div className="w-24 h-24 rounded-full border-4 border-white/10 border-t-white animate-spin duration-1000"></div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <Rocket className="h-8 w-8 text-white animate-pulse" />
-                    </div>
+                    <div className={`w-24 h-24 rounded-full border-4 animate-spin duration-1000 ${isSpaceTheme ? 'border-white/20 border-t-white' : 'border-gray-100 border-t-black'}`}></div>
                 </div>
-                <h3 className="text-2xl font-bold tracking-tight animate-pulse text-white drop-shadow-md">{loadingText}</h3>
+                <h3 className="text-2xl font-bold tracking-tight animate-pulse">{loadingText}</h3>
             </div>
         )}
 
@@ -242,8 +251,8 @@ const EduOnboarding = () => {
                     key={i} 
                     className={`h-1.5 rounded-full transition-all duration-700 ease-out ${
                         i === step 
-                            ? 'w-12 bg-white' 
-                            : 'w-2 bg-white/20'
+                            ? (isSpaceTheme ? 'w-12 bg-white' : 'w-12 bg-black') 
+                            : (isSpaceTheme ? 'w-2 bg-white/20' : 'w-2 bg-gray-200')
                     }`}
                 ></div>
             ))}
