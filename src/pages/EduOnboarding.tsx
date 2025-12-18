@@ -111,7 +111,7 @@ const EduOnboarding = () => {
 
       {/* Logo Minimaliste Fixe */}
       <div className="absolute top-8 left-8 flex items-center gap-3 animate-in fade-in duration-1000 z-20">
-         <img src="/logo.png" alt="Sivara Logo" className="w-8 h-8 object-contain drop-shadow-md" />
+         <img src="/sivara-education.png" alt="Sivara Éducation" className="w-8 h-8 object-contain drop-shadow-md" />
          <span className="font-medium tracking-tight text-white/90">Sivara Éducation</span>
       </div>
 
