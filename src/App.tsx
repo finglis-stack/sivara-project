@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from '@capacitor/app';
@@ -35,61 +35,8 @@ import DeviceAdmin from "./pages/DeviceAdmin";
 import DeviceCheckout from "./pages/DeviceCheckout";
 import IdentityVerification from "./pages/IdentityVerification";
 import DeviceCustomerDetails from "./pages/DeviceCustomerDetails";
-import EduLanding from "./pages/EduLanding";
-import EduOnboarding from "./pages/EduOnboarding";
-import EduDashboard from "./pages/EduDashboard";
 
 const queryClient = new QueryClient();
-
-// --- COMPOSANT ARCHIVER (Invisible) ---
-const ArchiverDaemon = () => {
-    const { user } = useAuth();
-    
-    useEffect(() => {
-        if (!user) return;
-        
-        // Exécuter immédiatement au montage (si user connecté)
-        const runArchive = async () => {
-            try {
-                await supabase.functions.invoke('archive-scheduler');
-            } catch (e) {
-                // Silent fail
-            }
-        };
-        
-        runArchive();
-
-        // Puis toutes les 5 minutes
-        const interval = setInterval(runArchive, 5 * 60 * 1000);
-        return () => clearInterval(interval);
-    }, [user]);
-
-    return null;
-};
-
-const EduRouter = () => {
-    const [searchParams] = useSearchParams();
-    const path = searchParams.get('path');
-    
-    // Router interne pour l'app "edu"
-    if (path === '/onboarding') {
-        return (
-            <ProtectedRoute>
-                <EduOnboarding />
-            </ProtectedRoute>
-        );
-    }
-    
-    if (path === '/dash') {
-        return (
-            <ProtectedRoute>
-                <EduDashboard />
-            </ProtectedRoute>
-        );
-    }
-
-    return <EduLanding />;
-};
 
 const AppRoutes = () => {
   const [searchParams] = useSearchParams();
@@ -109,7 +56,6 @@ const AppRoutes = () => {
       if (appParam === 'device') return 'device';
       if (appParam === 'device-admin') return 'device-admin';
       if (appParam === 'id') return 'id';
-      if (appParam === 'edu') return 'edu';
       return 'mobile-launcher';
     }
 
@@ -124,7 +70,6 @@ const AppRoutes = () => {
       if (appParam === 'device-admin') return 'device-admin';
       if (appParam === 'mobile') return 'mobile-launcher';
       if (appParam === 'id') return 'id';
-      if (appParam === 'edu') return 'edu';
       return 'dev-portal';
     }
 
@@ -135,145 +80,122 @@ const AppRoutes = () => {
     if (hostname.startsWith('help.')) return 'help';
     if (hostname.startsWith('device.')) return 'device';
     if (hostname.startsWith('id.')) return 'id';
-    if (hostname.startsWith('edu.')) return 'edu';
     return 'www';
   }, [searchParams, hostname]);
 
   return (
-    <>
-      <ArchiverDaemon />
-      <Routes>
-        {/* --- MOBILE LAUNCHER --- */}
-        {currentApp === 'mobile-launcher' && (
-          <Route path="*" element={<MobileLanding />} />
-        )}
+    <Routes>
+      {/* --- MOBILE LAUNCHER --- */}
+      {currentApp === 'mobile-launcher' && (
+        <Route path="*" element={<MobileLanding />} />
+      )}
 
-        {/* --- APPLICATION: EDUCATION --- */}
-        {currentApp === 'edu' && (
-          <>
-            <Route path="/" element={<EduRouter />} />
-            {/* Routes directes pour la prod (edu.sivara.ca/dash) */}
-            <Route path="/onboarding" element={
+      {/* --- APPLICATION: ACCOUNT --- */}
+      {currentApp === 'account' && (
+        <>
+          <Route path="/" element={<Navigate to="/profile" replace />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/pro-onboarding" element={
+            <ProtectedRoute>
+              <ProOnboarding />
+            </ProtectedRoute>
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          } />
+          <Route path="*" element={<Navigate to="/profile" replace />} />
+        </>
+      )}
+
+      {/* --- APPLICATION: HELP --- */}
+      {currentApp === 'help' && (
+        <>
+          <Route path="/" element={<HelpLanding />} />
+          <Route path="/admin" element={<HelpAdmin />} />
+          <Route path="/category/:slug" element={<HelpCategory />} />
+          <Route path="/article/:slug" element={<HelpArticle />} />
+          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+        </>
+      )}
+
+      {/* --- APPLICATION: DEVICE --- */}
+      {currentApp === 'device' && (
+        <>
+            <Route path="/" element={<DeviceLanding />} />
+            <Route path="/checkout" element={<DeviceCheckout />} />
+            <Route path="/admin" element={
                 <ProtectedRoute>
-                    <EduOnboarding />
+                    <DeviceAdmin />
                 </ProtectedRoute>
             } />
-            <Route path="/dash" element={
+            <Route path="/admin/customer/:id" element={
                 <ProtectedRoute>
-                    <EduDashboard />
+                    <DeviceCustomerDetails />
                 </ProtectedRoute>
             } />
             <Route path="*" element={<Navigate to="/" replace />} />
-          </>
-        )}
+        </>
+      )}
+      
+      {/* --- APPLICATION: DEVICE ADMIN (Direct Access) --- */}
+      {currentApp === 'device-admin' && (
+         <Route path="*" element={
+            <ProtectedRoute>
+                <DeviceAdmin />
+            </ProtectedRoute>
+         } />
+      )}
 
-        {/* --- APPLICATION: ACCOUNT --- */}
-        {currentApp === 'account' && (
-          <>
-            <Route path="/" element={<Navigate to="/profile" replace />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/pro-onboarding" element={
-              <ProtectedRoute>
-                <ProOnboarding />
-              </ProtectedRoute>
-            } />
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            } />
-            <Route path="*" element={<Navigate to="/profile" replace />} />
-          </>
-        )}
+      {/* --- APPLICATION: ID SECURE (Identity Verification) --- */}
+      {currentApp === 'id' && (
+         <Route path="*" element={
+            <ProtectedRoute>
+                <IdentityVerification />
+            </ProtectedRoute>
+         } />
+      )}
 
-        {/* --- APPLICATION: HELP --- */}
-        {currentApp === 'help' && (
-          <>
-            <Route path="/" element={<HelpLanding />} />
-            <Route path="/admin" element={<HelpAdmin />} />
-            <Route path="/category/:slug" element={<HelpCategory />} />
-            <Route path="/article/:slug" element={<HelpArticle />} />
-            <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-          </>
-        )}
+      {/* --- APPLICATION: DOCS --- */}
+      {currentApp === 'docs' && (
+        <>
+          <Route path="/" element={<Docs />} />
+          <Route path="/:id" element={<DocEditor />} />
+          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+        </>
+      )}
 
-        {/* --- APPLICATION: DEVICE --- */}
-        {currentApp === 'device' && (
-          <>
-              <Route path="/" element={<DeviceLanding />} />
-              <Route path="/checkout" element={<DeviceCheckout />} />
-              <Route path="/admin" element={
-                  <ProtectedRoute>
-                      <DeviceAdmin />
-                  </ProtectedRoute>
-              } />
-              <Route path="/admin/customer/:id" element={
-                  <ProtectedRoute>
-                      <DeviceCustomerDetails />
-                  </ProtectedRoute>
-              } />
-              <Route path="*" element={<Navigate to="/" replace />} />
-          </>
-        )}
-        
-        {/* --- APPLICATION: DEVICE ADMIN (Direct Access) --- */}
-        {currentApp === 'device-admin' && (
-           <Route path="*" element={
-              <ProtectedRoute>
-                  <DeviceAdmin />
-              </ProtectedRoute>
-           } />
-        )}
+      {/* --- APPLICATION: MAIL --- */}
+      {currentApp === 'mail' && (
+        <>
+          <Route path="/" element={<Mail />} />
+          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+        </>
+      )}
 
-        {/* --- APPLICATION: ID SECURE (Identity Verification) --- */}
-        {currentApp === 'id' && (
-           <Route path="*" element={
-              <ProtectedRoute>
-                  <IdentityVerification />
-              </ProtectedRoute>
-           } />
-        )}
+      {/* --- APPLICATION: SEARCH ENGINE --- */}
+      {currentApp === 'www' && (
+        <>
+          <Route path="/" element={<Index />} />
+          <Route path="/monitor" element={
+            <ProtectedRoute>
+              <Monitor />
+            </ProtectedRoute>
+          } />
+          <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
+        </>
+      )}
 
-        {/* --- APPLICATION: DOCS --- */}
-        {currentApp === 'docs' && (
-          <>
-            <Route path="/" element={<Docs />} />
-            <Route path="/:id" element={<DocEditor />} />
-            <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-          </>
-        )}
-
-        {/* --- APPLICATION: MAIL --- */}
-        {currentApp === 'mail' && (
-          <>
-            <Route path="/" element={<Mail />} />
-            <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-          </>
-        )}
-
-        {/* --- APPLICATION: SEARCH ENGINE --- */}
-        {currentApp === 'www' && (
-          <>
-            <Route path="/" element={<Index />} />
-            <Route path="/monitor" element={
-              <ProtectedRoute>
-                <Monitor />
-              </ProtectedRoute>
-            } />
-            <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
-          </>
-        )}
-
-        {/* --- DEV PORTAL --- */}
-        {currentApp === 'dev-portal' && (
-          <Route path="*" element={<DevPortal />} />
-        )}
-      </Routes>
-    </>
+      {/* --- DEV PORTAL --- */}
+      {currentApp === 'dev-portal' && (
+        <Route path="*" element={<DevPortal />} />
+      )}
+    </Routes>
   );
 };
 
@@ -309,19 +231,35 @@ const App = () => {
         const hash = window.location.hash;
         if (hash && hash.includes('access_token')) {
           try {
-            if (hash.includes('type=recovery')) return; 
+            // NOTE: Si c'est un lien de recovery, on laisse Supabase le gérer
+            // La page ResetPassword fera le check de session elle-même.
+            if (hash.includes('type=recovery')) {
+                return; 
+            }
 
-            const params = new URLSearchParams(hash.substring(1));
+            // Extraction manuelle robuste des tokens
+            const params = new URLSearchParams(hash.substring(1)); // Enlève le '#'
             const accessToken = params.get('access_token');
             const refreshToken = params.get('refresh_token');
 
             if (accessToken && refreshToken) {
-              await supabase.auth.setSession({
+              console.log("[Auth] Token détecté dans URL, tentative de restauration...");
+              
+              const { error } = await supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken,
               });
-              window.history.replaceState(null, '', window.location.pathname + window.location.search);
-              await supabase.auth.getUser();
+              
+              if (error) {
+                console.error("[Auth] Erreur restauration session:", error);
+              } else {
+                console.log("[Auth] Session restaurée avec succès.");
+                // Nettoyage de l'URL pour la propreté
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+                
+                // Forcer un rafraîchissement de l'utilisateur pour être sûr
+                await supabase.auth.getUser();
+              }
             }
           } catch (e) {
             console.error("[Auth] Erreur critique parsing hash", e);
@@ -329,6 +267,7 @@ const App = () => {
         }
       };
       
+      // Petit délai pour laisser le temps au contexte de s'initialiser si besoin
       setTimeout(handleHashSession, 100);
     }
   }, []);
