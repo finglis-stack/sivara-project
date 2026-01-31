@@ -179,15 +179,19 @@ serve(async (req) => {
     const cryptoService = new CryptoService()
     await cryptoService.initialize(encryptionKey)
 
-    const { action, page = 1, limit = 20, id, url, title, description, domain } = await req.json()
+    // Lire le body UNE SEULE FOIS
+    const requestBody = await req.json()
+    const { action, page = 1, limit = 20, id, url, title, description, domain, searchQuery } = requestBody
 
     if (action === 'search') {
       // Recherche phonétique dans toutes les pages
-      const { searchQuery, page = 1, limit = 20 } = await req.json()
+      // Utiliser les variables déjà extraites du requestBody
+      const searchPage = page || 1;
+      const searchLimit = limit || 20;
       
       if (!searchQuery || searchQuery.length < 2) {
         return new Response(
-          JSON.stringify({ pages: [], total: 0, page, limit, totalPages: 0 }),
+          JSON.stringify({ pages: [], total: 0, page: searchPage, limit: searchLimit, totalPages: 0 }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
@@ -204,7 +208,7 @@ serve(async (req) => {
         .select('*', { count: 'exact' })
         .overlaps('blind_index', searchTokens)
         .order('crawled_at', { ascending: false })
-        .range((page - 1) * limit, page * limit - 1)
+        .range((searchPage - 1) * searchLimit, searchPage * searchLimit - 1)
 
       if (error) throw error
 
@@ -229,9 +233,9 @@ serve(async (req) => {
         JSON.stringify({ 
           pages: decryptedPages, 
           total: count || 0,
-          page,
-          limit,
-          totalPages: Math.ceil((count || 0) / limit)
+          page: searchPage,
+          limit: searchLimit,
+          totalPages: Math.ceil((count || 0) / searchLimit)
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
