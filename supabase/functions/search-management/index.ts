@@ -181,6 +181,62 @@ serve(async (req) => {
 
     const { action, page = 1, limit = 20, id, url, title, description, domain } = await req.json()
 
+    if (action === 'search') {
+      // Recherche phonétique dans toutes les pages
+      const { searchQuery, page = 1, limit = 20 } = await req.json()
+      
+      if (!searchQuery || searchQuery.length < 2) {
+        return new Response(
+          JSON.stringify({ pages: [], total: 0, page, limit, totalPages: 0 }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`[SEARCH] Searching for: "${searchQuery}"`)
+      
+      // Générer les tokens de recherche
+      const searchTokens = await cryptoService.generateQueryTokens(searchQuery)
+      console.log(`[SEARCH] Generated ${searchTokens.length} search tokens`)
+
+      // Rechercher les pages qui correspondent aux tokens
+      const { data: candidates, error, count } = await supabase
+        .from('crawled_pages')
+        .select('*', { count: 'exact' })
+        .overlaps('blind_index', searchTokens)
+        .order('crawled_at', { ascending: false })
+        .range((page - 1) * limit, page * limit - 1)
+
+      if (error) throw error
+
+      // Décrypter les résultats
+      const decryptedPages = await Promise.all((candidates || []).map(async (page: any) => {
+        return {
+          id: page.id,
+          url: await cryptoService.decrypt(page.url),
+          title: await cryptoService.decrypt(page.title),
+          description: await cryptoService.decrypt(page.description),
+          domain: await cryptoService.decrypt(page.domain),
+          status: page.status,
+          crawled_at: page.crawled_at,
+          updated_at: page.updated_at,
+          blind_index: page.blind_index,
+        }
+      }))
+
+      console.log(`[SEARCH] Found ${decryptedPages.length} results (total: ${count})`)
+
+      return new Response(
+        JSON.stringify({ 
+          pages: decryptedPages, 
+          total: count || 0,
+          page,
+          limit,
+          totalPages: Math.ceil((count || 0) / limit)
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     if (action === 'list') {
       // Récupérer les pages avec pagination
       const { data, error, count } = await supabase

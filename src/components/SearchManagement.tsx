@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Card, CardContent, CardDescription, CardHeader, CardTitle 
 } from '@/components/ui/card';
@@ -57,6 +57,7 @@ const SearchManagement = () => {
   const [filteredPages, setFilteredPages] = useState<CrawledPage[]>([]);
   const [domainGroups, setDomainGroups] = useState<DomainGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPage, setEditingPage] = useState<CrawledPage | null>(null);
@@ -78,22 +79,34 @@ const SearchManagement = () => {
     domain: '',
   });
 
+  // Debounce pour la recherche
   useEffect(() => {
-    fetchPages();
-  }, [currentPage]);
+    const timeoutId = setTimeout(() => {
+      if (searchTerm.trim()) {
+        setCurrentPage(1);
+        handleSearch(searchTerm, 1);
+      } else {
+        fetchPages(1);
+      }
+    }, 500);
 
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  // Charger les pages quand la page change (mais pas au montage initial)
+  const isInitialMount = useRef(true);
   useEffect(() => {
-    if (searchTerm) {
-      const filtered = pages.filter(page => 
-        page.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        page.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        page.domain.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredPages(filtered);
-    } else {
-      setFilteredPages(pages);
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
     }
-  }, [searchTerm, pages]);
+    
+    if (searchTerm.trim()) {
+      handleSearch(searchTerm, currentPage);
+    } else {
+      fetchPages(currentPage);
+    }
+  }, [currentPage]);
 
   useEffect(() => {
     // Regrouper les pages par domaine
@@ -126,7 +139,7 @@ const SearchManagement = () => {
     });
   };
 
-  const fetchPages = async () => {
+  const fetchPages = async (page: number = currentPage) => {
     try {
       setIsLoading(true);
       const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
@@ -137,7 +150,7 @@ const SearchManagement = () => {
         },
         body: JSON.stringify({
           action: 'list',
-          page: currentPage,
+          page: page,
           limit: itemsPerPage,
         }),
       });
@@ -157,6 +170,41 @@ const SearchManagement = () => {
       showError('Erreur lors du chargement des pages');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSearch = async (query: string, page: number = 1) => {
+    try {
+      setIsSearching(true);
+      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
+        },
+        body: JSON.stringify({
+          action: 'search',
+          searchQuery: query,
+          page: page,
+          limit: itemsPerPage,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur lors de la recherche');
+      }
+
+      setPages(data.pages || []);
+      setFilteredPages(data.pages || []);
+      setTotalPages(data.totalPages || 1);
+      setTotalItems(data.total || 0);
+    } catch (error) {
+      console.error('Error searching pages:', error);
+      showError('Erreur lors de la recherche');
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -237,7 +285,13 @@ const SearchManagement = () => {
       
       showSuccess(message);
       handleCloseDialog();
-      fetchPages();
+      
+      // Recharger en tenant compte du mode recherche
+      if (searchTerm.trim()) {
+        handleSearch(searchTerm, currentPage);
+      } else {
+        fetchPages();
+      }
     } catch (error) {
       console.error('Error saving page:', error);
       showError('Erreur lors de la sauvegarde');
@@ -275,10 +329,18 @@ const SearchManagement = () => {
 
       showSuccess('Page supprimée avec succès');
       
-      // Si on est sur la dernière page et qu'il n'y a plus d'éléments, revenir à la page précédente
-      if (filteredPages.length === 1 && currentPage > 1) {
-        setCurrentPage(currentPage - 1);
+      // Recharger en tenant compte du mode recherche
+      if (searchTerm.trim()) {
+        if (filteredPages.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+          handleSearch(searchTerm, currentPage - 1);
+        } else {
+          handleSearch(searchTerm, currentPage);
+        }
       } else {
+        if (filteredPages.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        }
         fetchPages();
       }
     } catch (error) {
@@ -317,7 +379,13 @@ const SearchManagement = () => {
       );
 
       showSuccess(`${group.total} page(s) supprimée(s) avec succès`);
-      fetchPages();
+      
+      // Recharger en tenant compte du mode recherche
+      if (searchTerm.trim()) {
+        handleSearch(searchTerm, currentPage);
+      } else {
+        fetchPages();
+      }
     } catch (error) {
       console.error('Error deleting domain:', error);
       showError('Erreur lors de la suppression');
@@ -338,6 +406,9 @@ const SearchManagement = () => {
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
+      if (searchTerm.trim()) {
+        handleSearch(searchTerm, newPage);
+      }
     }
   };
 
@@ -361,7 +432,10 @@ const SearchManagement = () => {
           </Button>
           <Button
             variant="outline"
-            onClick={fetchPages}
+            onClick={() => {
+              setSearchTerm('');
+              fetchPages(1);
+            }}
             disabled={isLoading}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
@@ -492,12 +566,20 @@ const SearchManagement = () => {
           <div className="relative">
             <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Rechercher par titre, URL ou domaine..."
+              placeholder="Rechercher phonétique (titre, URL, domaine)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
             />
+            {isSearching && (
+              <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 animate-spin" />
+            )}
           </div>
+          {searchTerm && (
+            <p className="text-xs text-gray-500 mt-2">
+              Recherche phonétique activée - {totalItems} résultat{totalItems > 1 ? 's' : ''} trouvé{totalItems > 1 ? 's' : ''}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -506,7 +588,10 @@ const SearchManagement = () => {
         <CardHeader>
           <CardTitle>Pages indexées</CardTitle>
           <CardDescription>
-            {filteredPages.length} page{filteredPages.length > 1 ? 's' : ''} affichée{filteredPages.length > 1 ? 's' : ''} sur {totalItems} au total
+            {searchTerm 
+              ? `${filteredPages.length} résultat${filteredPages.length > 1 ? 's' : ''} trouvé${filteredPages.length > 1 ? 's' : ''} pour "${searchTerm}" sur ${totalItems} au total`
+              : `${filteredPages.length} page${filteredPages.length > 1 ? 's' : ''} affichée${filteredPages.length > 1 ? 's' : ''} sur ${totalItems} au total`
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
