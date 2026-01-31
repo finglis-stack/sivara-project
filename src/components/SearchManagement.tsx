@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { 
   Card, CardContent, CardDescription, CardHeader, CardTitle 
 } from '@/components/ui/card';
@@ -15,8 +14,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '@/components/ui/table';
 import { 
+  Collapsible, CollapsibleContent, CollapsibleTrigger 
+} from '@/components/ui/collapsible';
+import { 
   Plus, Edit, Trash2, Search as SearchIcon, ExternalLink, 
-  Loader2, RefreshCw, Globe, FileText, Calendar, CheckCircle, XCircle
+  Loader2, RefreshCw, Globe, FileText, Calendar, CheckCircle, XCircle,
+  ChevronLeft, ChevronRight, ChevronDown, FolderOpen
 } from 'lucide-react';
 import { showSuccess, showError, showConfirm } from '@/utils/toast';
 import { Badge } from '@/components/ui/badge';
@@ -30,16 +33,41 @@ interface CrawledPage {
   status: string;
   crawled_at: string;
   updated_at: string;
+  blind_index: string[];
+}
+
+interface PaginatedResponse {
+  pages: CrawledPage[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  error?: string;
+}
+
+interface DomainGroup {
+  domain: string;
+  pages: CrawledPage[];
+  total: number;
 }
 
 const SearchManagement = () => {
   const [pages, setPages] = useState<CrawledPage[]>([]);
   const [filteredPages, setFilteredPages] = useState<CrawledPage[]>([]);
+  const [domainGroups, setDomainGroups] = useState<DomainGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPage, setEditingPage] = useState<CrawledPage | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('grouped');
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 20;
   
   // Form state
   const [formData, setFormData] = useState({
@@ -51,7 +79,7 @@ const SearchManagement = () => {
 
   useEffect(() => {
     fetchPages();
-  }, []);
+  }, [currentPage]);
 
   useEffect(() => {
     if (searchTerm) {
@@ -66,18 +94,63 @@ const SearchManagement = () => {
     }
   }, [searchTerm, pages]);
 
+  useEffect(() => {
+    // Regrouper les pages par domaine
+    const groups: { [key: string]: CrawledPage[] } = {};
+    filteredPages.forEach(page => {
+      if (!groups[page.domain]) {
+        groups[page.domain] = [];
+      }
+      groups[page.domain].push(page);
+    });
+
+    const domainGroupsArray: DomainGroup[] = Object.entries(groups).map(([domain, domainPages]) => ({
+      domain,
+      pages: domainPages,
+      total: domainPages.length,
+    })).sort((a, b) => b.total - a.total);
+
+    setDomainGroups(domainGroupsArray);
+  }, [filteredPages]);
+
+  const toggleDomain = (domain: string) => {
+    setExpandedDomains(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(domain)) {
+        newSet.delete(domain);
+      } else {
+        newSet.add(domain);
+      }
+      return newSet;
+    });
+  };
+
   const fetchPages = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('crawled_pages')
-        .select('*')
-        .order('crawled_at', { ascending: false })
-        .limit(100);
+      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
+        },
+        body: JSON.stringify({
+          action: 'list',
+          page: currentPage,
+          limit: itemsPerPage,
+        }),
+      });
 
-      if (error) throw error;
-      setPages(data || []);
-      setFilteredPages(data || []);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur lors du chargement');
+      }
+
+      setPages(data.pages || []);
+      setFilteredPages(data.pages || []);
+      setTotalPages(data.totalPages || 1);
+      setTotalItems(data.total || 0);
     } catch (error) {
       console.error('Error fetching pages:', error);
       showError('Erreur lors du chargement des pages');
@@ -127,40 +200,35 @@ const SearchManagement = () => {
     try {
       setIsSaving(true);
 
+      const action = editingPage ? 'update' : 'create';
+      const body: any = {
+        action,
+        url: formData.url,
+        title: formData.title,
+        description: formData.description,
+        domain: formData.domain,
+      };
+
       if (editingPage) {
-        // Update existing page
-        const { error } = await supabase
-          .from('crawled_pages')
-          .update({
-            url: formData.url,
-            title: formData.title,
-            description: formData.description,
-            domain: formData.domain,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingPage.id);
-
-        if (error) throw error;
-        showSuccess('Page mise à jour avec succès');
-      } else {
-        // Create new page
-        const { error } = await supabase
-          .from('crawled_pages')
-          .insert({
-            url: formData.url,
-            title: formData.title,
-            description: formData.description,
-            domain: formData.domain,
-            status: 'success',
-            content: '',
-            content_vector: null,
-            blind_index: [],
-          });
-
-        if (error) throw error;
-        showSuccess('Page ajoutée avec succès');
+        body.id = editingPage.id;
       }
 
+      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur lors de la sauvegarde');
+      }
+
+      showSuccess(editingPage ? 'Page mise à jour avec succès' : 'Page ajoutée avec succès');
       handleCloseDialog();
       fetchPages();
     } catch (error) {
@@ -180,16 +248,71 @@ const SearchManagement = () => {
     if (!confirmed) return;
 
     try {
-      const { error } = await supabase
-        .from('crawled_pages')
-        .delete()
-        .eq('id', page.id);
+      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
+        },
+        body: JSON.stringify({
+          action: 'delete',
+          id: page.id,
+        }),
+      });
 
-      if (error) throw error;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur lors de la suppression');
+      }
+
       showSuccess('Page supprimée avec succès');
-      fetchPages();
+      
+      // Si on est sur la dernière page et qu'il n'y a plus d'éléments, revenir à la page précédente
+      if (filteredPages.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      } else {
+        fetchPages();
+      }
     } catch (error) {
       console.error('Error deleting page:', error);
+      showError('Erreur lors de la suppression');
+    }
+  };
+
+  const handleDeleteDomain = async (domain: string) => {
+    const confirmed = await showConfirm(
+      `Êtes-vous sûr de vouloir supprimer toutes les pages du domaine "${domain}" ?`,
+      `${domainGroups.find(g => g.domain === domain)?.total || 0} page(s) seront supprimées. Cette action est irréversible.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const group = domainGroups.find(g => g.domain === domain);
+      if (!group) return;
+
+      // Supprimer toutes les pages du domaine
+      await Promise.all(
+        group.pages.map(page =>
+          fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
+            },
+            body: JSON.stringify({
+              action: 'delete',
+              id: page.id,
+            }),
+          })
+        )
+      );
+
+      showSuccess(`${group.total} page(s) supprimée(s) avec succès`);
+      fetchPages();
+    } catch (error) {
+      console.error('Error deleting domain:', error);
       showError('Erreur lors de la suppression');
     }
   };
@@ -205,6 +328,12 @@ const SearchManagement = () => {
     }
   };
 
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -216,6 +345,13 @@ const SearchManagement = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setViewMode(viewMode === 'flat' ? 'grouped' : 'flat')}
+          >
+            {viewMode === 'flat' ? <FolderOpen className="h-4 w-4 mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+            {viewMode === 'flat' ? 'Vue groupée' : 'Vue liste'}
+          </Button>
           <Button
             variant="outline"
             onClick={fetchPages}
@@ -238,8 +374,8 @@ const SearchManagement = () => {
                 </DialogTitle>
                 <DialogDescription>
                   {editingPage 
-                    ? 'Modifiez les informations de cette page indexée.'
-                    : 'Ajoutez une nouvelle page à l\'index de recherche.'}
+                    ? 'Modifiez les informations de cette page indexée. Les données seront ré-encryptées et les tokens NLP régénérés.'
+                    : 'Ajoutez une nouvelle page à l\'index de recherche. Les données seront encryptées et les tokens NLP générés automatiquement.'}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -308,7 +444,7 @@ const SearchManagement = () => {
             <CardTitle className="text-sm font-medium text-gray-500">Total pages</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pages.length}</div>
+            <div className="text-2xl font-bold">{totalItems}</div>
           </CardContent>
         </Card>
         <Card>
@@ -363,7 +499,7 @@ const SearchManagement = () => {
         <CardHeader>
           <CardTitle>Pages indexées</CardTitle>
           <CardDescription>
-            {filteredPages.length} page{filteredPages.length > 1 ? 's' : ''} affichée{filteredPages.length > 1 ? 's' : ''}
+            {filteredPages.length} page{filteredPages.length > 1 ? 's' : ''} affichée{filteredPages.length > 1 ? 's' : ''} sur {totalItems} au total
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -378,75 +514,231 @@ const SearchManagement = () => {
                 {searchTerm ? 'Aucun résultat trouvé' : 'Aucune page indexée'}
               </p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Titre</TableHead>
-                    <TableHead>URL</TableHead>
-                    <TableHead>Domaine</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead>Date d'indexation</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPages.map((page) => (
-                    <TableRow key={page.id}>
-                      <TableCell className="font-medium max-w-xs truncate">
-                        {page.title || 'Sans titre'}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        <a
-                          href={page.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline flex items-center gap-1"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          {page.url}
-                        </a>
-                      </TableCell>
-                      <TableCell>
+          ) : viewMode === 'grouped' ? (
+            // Vue groupée par domaine
+            <div className="space-y-4">
+              {domainGroups.map((group) => (
+                <Collapsible
+                  key={group.domain}
+                  open={expandedDomains.has(group.domain)}
+                  onOpenChange={() => toggleDomain(group.domain)}
+                >
+                  <Card className="border-2">
+                    <CollapsibleTrigger asChild>
+                      <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center gap-4">
+                          <Globe className="h-5 w-5 text-gray-400" />
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{group.domain}</h3>
+                            <p className="text-sm text-gray-500">{group.total} page{group.total > 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
                         <div className="flex items-center gap-2">
-                          <Globe className="h-4 w-4 text-gray-400" />
-                          {page.domain}
+                          <Badge variant="outline">{group.total} pages</Badge>
+                          <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${expandedDomains.has(group.domain) ? 'rotate-180' : ''}`} />
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(page.status)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <Calendar className="h-4 w-4" />
-                          {new Date(page.crawled_at).toLocaleDateString('fr-FR')}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border-t p-4">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Titre</TableHead>
+                              <TableHead>URL</TableHead>
+                              <TableHead>Statut</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.pages.map((page) => (
+                              <TableRow key={page.id}>
+                                <TableCell className="font-medium max-w-xs truncate">
+                                  {page.title || 'Sans titre'}
+                                </TableCell>
+                                <TableCell className="max-w-xs truncate">
+                                  <a
+                                    href={page.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline flex items-center gap-1"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    {page.url}
+                                  </a>
+                                </TableCell>
+                                <TableCell>{getStatusBadge(page.status)}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                                    <Calendar className="h-4 w-4" />
+                                    {new Date(page.crawled_at).toLocaleDateString('fr-FR')}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleOpenDialog(page)}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleDelete(page)}
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        <div className="mt-4 pt-4 border-t flex justify-end">
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenDialog(page)}
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteDomain(group.domain)}
                           >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(page)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Supprimer tout le domaine
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      </div>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              ))}
             </div>
+          ) : (
+            // Vue liste plate
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Titre</TableHead>
+                      <TableHead>URL</TableHead>
+                      <TableHead>Domaine</TableHead>
+                      <TableHead>Statut</TableHead>
+                      <TableHead>Date d'indexation</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPages.map((page) => (
+                      <TableRow key={page.id}>
+                        <TableCell className="font-medium max-w-xs truncate">
+                          {page.title || 'Sans titre'}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          <a
+                            href={page.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            {page.url}
+                          </a>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Globe className="h-4 w-4 text-gray-400" />
+                            {page.domain}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(page.status)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2 text-sm text-gray-500">
+                            <Calendar className="h-4 w-4" />
+                            {new Date(page.crawled_at).toLocaleDateString('fr-FR')}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleOpenDialog(page)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(page)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-6 pt-6 border-t">
+                  <p className="text-sm text-gray-500">
+                    Page {currentPage} sur {totalPages} ({totalItems} éléments au total)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "outline"}
+                            size="icon"
+                            onClick={() => handlePageChange(pageNum)}
+                            className="w-9 h-9"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
