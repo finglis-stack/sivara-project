@@ -12,7 +12,7 @@ Cette plateforme intègre un moteur de recherche sémantique, une suite bureauti
 
 ## 🆕 Nouveautés
 
-### Sivara Text (Le correcteur)
+### Sivara Text
 *   **Correction contextuelle (phrase complète) :** au lieu d'analyser uniquement un mot isolé, le correcteur extrait la phrase autour du curseur et l'envoie à LanguageTool.
 *   **Suggestions filtrées sur le mot ciblé :** Sivara Text ne conserve que les corrections qui recouvrent le mot courant dans la phrase.
 *   **Impact :** moins de suggestions hors-sujet, pas de mots en anglais qui apparaissent quand le texte est en français, et de meilleurs accords (singulier/pluriel, etc.).
