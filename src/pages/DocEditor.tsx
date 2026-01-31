@@ -22,8 +22,8 @@ import {
   ArrowLeft, Download, Share2, Users, Loader2, Star, MoreVertical, Trash2, Copy, Shield, Lock,
   FileText, Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
   Calendar, CheckSquare, MessageSquare, Mail, Phone, Globe, Settings, Heart, Zap, Award,
-  BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, 
-  AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check, 
+  BarChart, PieChart, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
+  AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check,
   Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool,
   MapPin, Laptop, KeyRound, ShieldCheck, Crosshair, BookType, Image as ImageIcon,
   Maximize, Minimize, Wand2, RefreshCcw, Upload
@@ -579,73 +579,98 @@ const DocEditor = () => {
       const { data: doc, error } = await supabase.from('documents').select('*').eq('id', id).single();
       if (error || !doc) {
         if (!user) {
-           const currentUrl = window.location.href;
-           const loginUrl = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`;
-           window.location.href = loginUrl;
-           return;
+          const currentUrl = window.location.href;
+          const loginUrl = `https://account.sivara.ca/login?returnTo=${encodeURIComponent(currentUrl)}`;
+          window.location.href = loginUrl;
+          return;
         }
         throw new Error("Document inaccessible");
       }
-      
-      const hashKey = window.location.hash.replace('#key=', '');
-      if (!hashKey || hashKey === 'share') { await encryptionService.initialize(doc.owner_id); }
-      
+
+      // --- IMPORTANT ---
+      // Gestion robuste de la clé de partage via le hash:
+      // - Supporte #key=XXXX
+      // - Ignore les autres hashes (ex: tokens d'auth)
+      const hash = window.location.hash || '';
+      const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+      const shareKey = params.get('key');
+      const effectiveKey = shareKey && shareKey !== 'share' ? shareKey : doc.owner_id;
+
+      await encryptionService.initialize(effectiveKey);
+
       const isDocOwner = user?.id === doc.owner_id;
       setIsOwner(isDocOwner);
-      
-      let userPermission: 'read' | 'write' = 'read';
-      
-      if (isDocOwner) {
-          userPermission = 'write';
-      } else {
-          let explicitPermission = null;
-          if (user && user.email) {
-             const { data: accessEntries } = await supabase
-                .from('document_access')
-                .select('email, permission')
-                .eq('document_id', id);
-             
-             if (accessEntries) {
-                 const myAccess = accessEntries.find(a => a.email.toLowerCase() === user.email!.toLowerCase());
-                 if (myAccess) {
-                     explicitPermission = myAccess.permission;
-                 }
-             }
-          }
 
-          if (explicitPermission === 'write') userPermission = 'write';
-          else if (doc.visibility === 'public' && doc.public_permission === 'write') userPermission = 'write';
-          else if (explicitPermission === 'read') userPermission = 'read';
-          else if (doc.visibility === 'public') userPermission = 'read';
-          else throw new Error("Document inaccessible");
+      let userPermission: 'read' | 'write' = 'read';
+
+      if (isDocOwner) {
+        userPermission = 'write';
+      } else {
+        let explicitPermission = null;
+        if (user && user.email) {
+          const { data: accessEntries } = await supabase
+            .from('document_access')
+            .select('email, permission')
+            .eq('document_id', id);
+
+          if (accessEntries) {
+            const myAccess = accessEntries.find(
+              (a) => a.email.toLowerCase() === user.email!.toLowerCase()
+            );
+            if (myAccess) {
+              explicitPermission = myAccess.permission;
+            }
+          }
+        }
+
+        if (explicitPermission === 'write') userPermission = 'write';
+        else if (doc.visibility === 'public' && doc.public_permission === 'write') userPermission = 'write';
+        else if (explicitPermission === 'read') userPermission = 'read';
+        else if (doc.visibility === 'public') userPermission = 'read';
+        else throw new Error("Document inaccessible");
       }
-      
+
       setPermission(userPermission);
 
       let decryptedTitle = doc.title;
       let decryptedContent = doc.content;
+
       try {
+        decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
+        decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
+      } catch (e: any) {
+        // Si la clé n'a pas été initialisée correctement (ou hash inattendu),
+        // on tente une dernière fois avec la clé propriétaire (utile pour les lectures publiques).
+        try {
+          await encryptionService.initialize(doc.owner_id);
           decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
           decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
-      } catch (e) { setDecryptionError(true); decryptedTitle = "Document sécurisé"; decryptedContent = ""; }
-      
-      setDocument(doc); 
-      setTitle(decryptedTitle); 
-      contentRef.current = decryptedContent; 
-      setSelectedIcon(doc.icon || 'FileText'); 
-      setSelectedColor(doc.color || '#3B82F6'); 
-      
-      if (editor) {
-          editor.commands.setContent(decryptedContent);
-          editor.setEditable(userPermission === 'write');
+        } catch {
+          setDecryptionError(true);
+          decryptedTitle = "Document sécurisé";
+          decryptedContent = "";
+        }
       }
-      
+
+      setDocument(doc);
+      setTitle(decryptedTitle);
+      contentRef.current = decryptedContent;
+      setSelectedIcon(doc.icon || 'FileText');
+      setSelectedColor(doc.color || '#3B82F6');
+
+      if (editor) {
+        editor.commands.setContent(decryptedContent);
+        editor.setEditable(userPermission === 'write');
+      }
+
       if (isDocOwner) fetchAccessList();
-    } catch (error) { 
-        console.error(error);
-        showError("Document inaccessible ou privé"); 
-        navigate('/'); 
-    } finally { setIsLoading(false); }
+    } catch (error) {
+      console.error(error);
+      showError("Document inaccessible ou privé");
+      navigate('/');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const fetchAccessList = async () => { const { data } = await supabase.from('document_access').select('*').eq('document_id', id); setAccessList(data || []); };
@@ -815,19 +840,43 @@ const DocEditor = () => {
     }
   };
 
-  if (isLoading || authLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
-  if (decryptionError) { return ( <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center"> <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full border border-gray-200"> <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"> <LockKeyhole className="h-8 w-8 text-red-600" /> </div> <h1 className="text-2xl font-bold text-gray-900 mb-2">Contenu sécurisé inaccessible</h1> <p className="text-gray-500 mb-6"> Ce document est chiffré et la clé de déchiffrement n'a pas pu être générée correctement. </p> <Button onClick={() => window.location.reload()} className="w-full">Réessayer</Button> </div> </div> ); }
+  if (isLoading || authLoading)
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
+
+  if (decryptionError) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
+        <div className="bg-white p-8 rounded-xl shadow-sm max-w-md w-full border border-gray-200">
+          <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <LockKeyhole className="h-8 w-8 text-red-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Contenu sécurisé inaccessible</h1>
+          <p className="text-gray-500 mb-6">
+            Ce document est chiffré et la clé de déchiffrement n'a pas pu être générée correctement.
+          </p>
+          <Button onClick={() => window.location.reload()} className="w-full">
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F3F4F6] pt-[env(safe-area-inset-top)]">
-      
-      {/* SIVARA TEXT COMPONENT */}
-      <SivaraText 
-        editor={editor} 
-        isOpen={showSivaraText} 
-        onClose={() => toggleSivaraText()} 
-        userId={user!.id}
-      />
+      {/* SIVARA TEXT COMPONENT (uniquement si connecté) */}
+      {user && (
+        <SivaraText
+          editor={editor}
+          isOpen={showSivaraText}
+          onClose={() => toggleSivaraText()}
+          userId={user.id}
+        />
+      )}
 
       <header className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
         <div className="px-4 sm:px-6 py-3">
