@@ -526,6 +526,11 @@ const DocEditor = () => {
             setCursors(prev => ({ ...prev, [payload.id]: { x: payload.x, y: payload.y, color: payload.color, name: payload.name, last_updated: Date.now() } }));
         }
       })
+      .on('broadcast', { event: 'title_update' }, ({ payload }) => {
+        if (payload.sender !== user.id) {
+           setTitle(payload.title);
+        }
+      })
       .on('broadcast', { event: 'content_update' }, async ({ payload }) => {
         if (payload.sender !== user.id && editor) {
            isUpdatingFromRemoteRef.current = true;
@@ -834,7 +839,30 @@ const DocEditor = () => {
                 <CurrentIcon className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: getIconTextColor(selectedColor) }} />
               </button>
 
-              <Input value={title} onChange={(e) => { setTitle(e.target.value); handleSave('title', e.target.value); }} className="text-base sm:text-lg font-medium border-0 focus-visible:ring-0 px-2 max-w-[150px] sm:max-w-md bg-transparent truncate" readOnly={!isOwner} />
+              <Input 
+                value={title} 
+                onChange={(e) => { 
+                  const newTitle = e.target.value;
+                  setTitle(newTitle); 
+                  
+                  // Broadcast immédiat du titre aux autres utilisateurs
+                  if (channelRef.current && user) {
+                    channelRef.current.send({
+                      type: 'broadcast',
+                      event: 'title_update',
+                      payload: { title: newTitle, sender: user.id }
+                    });
+                  }
+                  
+                  // Sauvegarde avec debounce
+                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                  saveTimeoutRef.current = setTimeout(() => {
+                    handleSave('title', newTitle);
+                  }, 500);
+                }} 
+                className="text-base sm:text-lg font-medium border-0 focus-visible:ring-0 px-2 max-w-[150px] sm:max-w-md bg-transparent truncate" 
+                readOnly={!isOwner} 
+              />
               
               <Badge variant="outline" className="hidden md:flex gap-1">
                  {document?.visibility === 'public' ? <Globe2 className="h-3 w-3" /> : document?.visibility === 'limited' ? <Users className="h-3 w-3" /> : <LockKeyhole className="h-3 w-3" />}
