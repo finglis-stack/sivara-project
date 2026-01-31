@@ -10,6 +10,21 @@ Cette plateforme intègre un moteur de recherche sémantique, une suite bureauti
 
 ---
 
+## 🆕 Nouveautés
+
+### Sivara Text (Le correcteur)
+*   **Correction contextuelle (phrase complète) :** au lieu d'analyser uniquement un mot isolé, le correcteur extrait la phrase autour du curseur et l'envoie à LanguageTool.
+*   **Suggestions filtrées sur le mot ciblé :** Sivara Text ne conserve que les corrections qui recouvrent le mot courant dans la phrase.
+*   **Impact :** moins de suggestions hors-sujet, pas de mots en anglais qui apparaissent quand le texte est en français, et de meilleurs accords (singulier/pluriel, etc.).
+
+### Moteur de recherche
+*   **Recherche unifiée :** un même champ permet de chercher sur le web indexé **et** dans vos documents chiffrés (si connecté).
+*   **NLP "Titanium" (Pro) :** stopwords FR/EN, stemming FR, phonétique (Double Metaphone) et trigrammes pour la tolérance aux fautes et la recherche floue.
+*   **Ranking pondéré :** scoring hybride (exact/racine/phonétique/ngram) côté Edge, puis déchiffrement uniquement des résultats pertinents.
+*   **Interface :** regroupement des résultats web par domaine + section "Vos Documents" directement dans les résultats.
+
+---
+
 ## ⚙️ Ingénierie et Architecture Système
 
 L'écosystème repose sur une architecture distribuée exploitant la puissance du **Edge Computing** et de bases de données relationnelles vectorielles.
@@ -139,6 +154,11 @@ Au-delà de la simple correction orthographique, **Sivara Text** est un moteur c
         *   **Formule de pondération :** `Score = Base + (log(Frequence + 1) * 30)`.
         *   L'utilisation d'une courbe logarithmique permet au système d'apprendre très vite une nouvelle préférence (1 ou 2 utilisations suffisent pour surpasser la suggestion par défaut), tout en plafonnant pour éviter de dériver totalement.
 
+*   **Nouveauté : correction contextuelle (phrase) :**
+    *   Le correcteur extrait la **phrase complète** autour du curseur et l'envoie à LanguageTool (au lieu d'un mot isolé).
+    *   Les suggestions sont ensuite **filtrées** pour ne conserver que celles qui ciblent réellement le mot courant.
+    *   Résultat : accords plus cohérents (singulier/pluriel, genre) et réduction drastique des suggestions hors contexte (ex: mots en anglais dans un texte 100% FR).
+
 *   **Infrastructure de Synchronisation Sécurisée :**
     *   **Priorité Locale (0 Latence) :** Le modèle d'apprentissage est chargé en RAM et persisté dans le `localStorage`. L'analyse est instantanée et fonctionne hors-ligne.
     *   **Stockage Chiffré (Cloud) :** Pour permettre la continuité entre appareils, le modèle est synchronisé en base de données.
@@ -209,6 +229,10 @@ Lorsqu'un utilisateur lance une recherche :
     *   Match Phonétique (Token `PH`) : **50 points**
     *   Match Partiel (Token `TG`) : **5 points**
 5.  **Déchiffrement à la Volée :** Seuls les résultats pertinents sont déchiffrés (AES-Decrypt) avant d'être renvoyés au client JSON.
+
+*   **Nouveauté : recherche "unifiée" web + documents :**
+    *   La recherche web exploite l'index `crawled_pages` (blind index + ranking pondéré).
+    *   La recherche Docs (si authentifié) s'exécute côté Edge et déchiffre à la volée les titres/contenus avec une clé dérivée du compte, permettant un matching texte + phonétique, sans exposer les documents en clair.
 
 ---
 
