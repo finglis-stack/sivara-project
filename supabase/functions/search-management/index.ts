@@ -21,8 +21,8 @@ const corsHeaders = {
 class TitaniumTokenizer {
   static normalize(text: string): string {
     return text.toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
-      .replace(/[^a-z0-9\s]/g, " ") 
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
+      .replace(/[^a-z0-9\s]/g, " ") // Keep only alphanumeric and spaces
       .replace(/\s+/g, " ").trim();
   }
 
@@ -33,17 +33,39 @@ class TitaniumTokenizer {
   }
 
   static getStem(word: string): string {
-    return PorterStemmerFr.stem(word);
+    try {
+      return PorterStemmerFr.stem(word);
+    } catch (e) {
+      console.warn(`[STEMMING] Error stemming "${word}":`, e);
+      return word;
+    }
   }
 
   static getPhoneticFingerprint(word: string): string {
-    const code = DoubleMetaphone.process(word);
-    return code[0]; 
+    try {
+      const code = DoubleMetaphone.process(word);
+      // DoubleMetaphone retourne [primary, secondary], on prend le primary
+      const primary = code[0];
+      // S'assurer qu'on a un code phonétique valide
+      if (primary && primary.length > 0) {
+        return primary;
+      }
+      // Fallback: retourner le mot normalisé si pas de code phonétique
+      return word.toLowerCase();
+    } catch (e) {
+      console.warn(`[PHONETIC] Error generating phonetic for "${word}":`, e);
+      return word.toLowerCase();
+    }
   }
 
   static getTrigrams(word: string): string[] {
     if (word.length <= 3) return [];
-    return NGrams.trigrams(word).map((t: string[]) => t.join(''));
+    try {
+      return NGrams.trigrams(word).map((t: string[]) => t.join(''));
+    } catch (e) {
+      console.warn(`[TRIGRAMS] Error generating trigrams for "${word}":`, e);
+      return [];
+    }
   }
 }
 
@@ -97,22 +119,31 @@ class CryptoService {
     const words = normalizedText.split(' ');
     const usefulWords = TitaniumTokenizer.filterStopwords(words);
 
+    console.log(`[TOKEN GENERATION] Input: "${query}"`);
+    console.log(`[TOKEN GENERATION] Normalized: "${normalizedText}"`);
+    console.log(`[TOKEN GENERATION] Words: ${words.length}, Useful: ${usefulWords.length}`);
+
     for (const rawWord of usefulWords) {
+      // Token exact (match parfait)
       const exactToken = await this.hmacToken(`EX:${rawWord}`);
       tokens.add(exactToken);
 
+      // Token de stemming (racine du mot)
       const stem = TitaniumTokenizer.getStem(rawWord);
       if (stem && stem !== rawWord) {
         const stemToken = await this.hmacToken(`ST:${stem}`);
         tokens.add(stemToken);
       }
 
+      // Token phonétique (recherche par son) - C'EST LE PLUS IMPORTANT
       const phone = TitaniumTokenizer.getPhoneticFingerprint(rawWord);
       if (phone && phone.length > 0) {
         const phoneToken = await this.hmacToken(`PH:${phone}`);
         tokens.add(phoneToken);
+        console.log(`[TOKEN GENERATION] Phonetic: "${rawWord}" -> "${phone}"`);
       }
 
+      // Tokens de trigrams (recherche partielle)
       if (rawWord.length > 3) {
         const trigrams = TitaniumTokenizer.getTrigrams(rawWord);
         for (const tri of trigrams) {
@@ -122,6 +153,7 @@ class CryptoService {
       }
     }
 
+    console.log(`[TOKEN GENERATION] Total tokens generated: ${tokens.size}`);
     return Array.from(tokens);
   }
 
@@ -215,15 +247,20 @@ serve(async (req) => {
     }
 
     if (action === 'create') {
+      console.log('[CREATE] Creating new page with NLP tokens');
+      
       // Créer une nouvelle page avec encryption et tokens NLP
       const encryptedUrl = await cryptoService.encrypt(url)
       const encryptedTitle = await cryptoService.encrypt(title || '')
       const encryptedDescription = await cryptoService.encrypt(description || '')
       const encryptedDomain = await cryptoService.encrypt(domain || '')
 
-      // Générer les tokens NLP
+      // Générer les tokens NLP à partir du contenu complet
       const searchContent = `${title || ''} ${description || ''} ${url}`
+      console.log(`[CREATE] Search content: "${searchContent}"`);
+      
       const tokens = await cryptoService.generateQueryTokens(searchContent)
+      console.log(`[CREATE] Generated ${tokens.length} NLP tokens`);
 
       const { data, error } = await supabase
         .from('crawled_pages')
@@ -240,37 +277,58 @@ serve(async (req) => {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('[CREATE] Error:', error);
+        throw error
+      }
 
+      console.log('[CREATE] Page created successfully with ID:', data.id);
       return new Response(
-        JSON.stringify({ success: true, page: data }),
+        JSON.stringify({ success: true, page: data, tokensCount: tokens.length }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     if (action === 'update') {
+      console.log('[UPDATE] Updating page with ID:', id);
+      
       // Mettre à jour une page avec encryption
       const updates: any = {
         updated_at: new Date().toISOString(),
       }
 
-      if (url !== undefined) updates.url = await cryptoService.encrypt(url)
-      if (title !== undefined) updates.title = await cryptoService.encrypt(title)
-      if (description !== undefined) updates.description = await cryptoService.encrypt(description)
-      if (domain !== undefined) updates.domain = await cryptoService.encrypt(domain)
-
-      // Si le contenu a changé, régénérer les tokens
-      if (title !== undefined || description !== undefined) {
-        const currentPage = await supabase.from('crawled_pages').select('*').eq('id', id).single()
-        if (currentPage.data) {
-          const currentUrl = url !== undefined ? url : await cryptoService.decrypt(currentPage.data.url)
-          const currentTitle = title !== undefined ? title : await cryptoService.decrypt(currentPage.data.title)
-          const currentDescription = description !== undefined ? description : await cryptoService.decrypt(currentPage.data.description)
-          
-          const searchContent = `${currentTitle} ${currentDescription} ${currentUrl}`
-          updates.blind_index = await cryptoService.generateQueryTokens(searchContent)
-        }
+      // Récupérer la page actuelle pour décrypter les valeurs existantes
+      const currentPage = await supabase.from('crawled_pages').select('*').eq('id', id).single()
+      
+      if (!currentPage.data) {
+        throw new Error('Page not found');
       }
+
+      // Décrypter les valeurs actuelles
+      const currentUrl = await cryptoService.decrypt(currentPage.data.url)
+      const currentTitle = await cryptoService.decrypt(currentPage.data.title)
+      const currentDescription = await cryptoService.decrypt(currentPage.data.description)
+      const currentDomain = await cryptoService.decrypt(currentPage.data.domain)
+
+      // Utiliser les nouvelles valeurs ou garder les anciennes
+      const finalUrl = url !== undefined ? url : currentUrl
+      const finalTitle = title !== undefined ? title : currentTitle
+      const finalDescription = description !== undefined ? description : currentDescription
+      const finalDomain = domain !== undefined ? domain : currentDomain
+
+      // Encrypter les nouvelles valeurs
+      updates.url = await cryptoService.encrypt(finalUrl)
+      updates.title = await cryptoService.encrypt(finalTitle)
+      updates.description = await cryptoService.encrypt(finalDescription)
+      updates.domain = await cryptoService.encrypt(finalDomain)
+
+      // TOUJOURS régénérer les tokens NLP si le contenu a changé
+      const searchContent = `${finalTitle} ${finalDescription} ${finalUrl}`
+      console.log(`[UPDATE] Search content: "${searchContent}"`);
+      
+      const tokens = await cryptoService.generateQueryTokens(searchContent)
+      updates.blind_index = tokens
+      console.log(`[UPDATE] Regenerated ${tokens.length} NLP tokens`);
 
       const { data, error } = await supabase
         .from('crawled_pages')
@@ -279,10 +337,14 @@ serve(async (req) => {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('[UPDATE] Error:', error);
+        throw error
+      }
 
+      console.log('[UPDATE] Page updated successfully');
       return new Response(
-        JSON.stringify({ success: true, page: data }),
+        JSON.stringify({ success: true, page: data, tokensCount: tokens.length }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }

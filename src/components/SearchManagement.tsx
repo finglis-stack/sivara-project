@@ -34,6 +34,7 @@ interface CrawledPage {
   crawled_at: string;
   updated_at: string;
   blind_index: string[];
+  tokensCount?: number;
 }
 
 interface PaginatedResponse {
@@ -228,7 +229,13 @@ const SearchManagement = () => {
         throw new Error(data.error || 'Erreur lors de la sauvegarde');
       }
 
-      showSuccess(editingPage ? 'Page mise à jour avec succès' : 'Page ajoutée avec succès');
+      // Afficher le nombre de tokens NLP générés
+      const tokensCount = data.tokensCount || 0;
+      const message = editingPage 
+        ? `Page mise à jour avec succès (${tokensCount} tokens NLP générés)`
+        : `Page ajoutée avec succès (${tokensCount} tokens NLP générés)`;
+      
+      showSuccess(message);
       handleCloseDialog();
       fetchPages();
     } catch (error) {
@@ -546,6 +553,7 @@ const SearchManagement = () => {
                             <TableRow>
                               <TableHead>Titre</TableHead>
                               <TableHead>URL</TableHead>
+                              <TableHead>Tokens NLP</TableHead>
                               <TableHead>Statut</TableHead>
                               <TableHead>Date</TableHead>
                               <TableHead className="text-right">Actions</TableHead>
@@ -567,6 +575,9 @@ const SearchManagement = () => {
                                     <ExternalLink className="h-3 w-3" />
                                     {page.url}
                                   </a>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{page.blind_index?.length || 0} tokens</Badge>
                                 </TableCell>
                                 <TableCell>{getStatusBadge(page.status)}</TableCell>
                                 <TableCell>
@@ -624,8 +635,9 @@ const SearchManagement = () => {
                       <TableHead>Titre</TableHead>
                       <TableHead>URL</TableHead>
                       <TableHead>Domaine</TableHead>
+                      <TableHead>Tokens NLP</TableHead>
                       <TableHead>Statut</TableHead>
-                      <TableHead>Date d'indexation</TableHead>
+                      <TableHead>Date</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -651,6 +663,9 @@ const SearchManagement = () => {
                             <Globe className="h-4 w-4 text-gray-400" />
                             {page.domain}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {page.tokensCount || 0}
                         </TableCell>
                         <TableCell>
                           {getStatusBadge(page.status)}
