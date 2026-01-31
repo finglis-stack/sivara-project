@@ -6,10 +6,16 @@ import { Button } from '@/components/ui/button';
 interface SearchBarProps {
   onSearch: (query: string) => void;
   isLoading?: boolean;
+  value?: string;
+  onChange?: (value: string) => void;
 }
 
-const SearchBar = ({ onSearch, isLoading = false }: SearchBarProps) => {
-  const [query, setQuery] = useState('');
+const SearchBar = ({ onSearch, isLoading = false, value, onChange }: SearchBarProps) => {
+  const [internalQuery, setInternalQuery] = useState('');
+  
+  // Utiliser la valeur contrôlée si fournie, sinon utiliser l'état interne
+  const query = value !== undefined ? value : internalQuery;
+  const setQuery = onChange || setInternalQuery;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

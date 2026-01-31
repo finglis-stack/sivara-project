@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SearchResultType {
   id: string;
@@ -53,14 +54,29 @@ const ICON_MAP: any = {
 
 const Index = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [results, setResults] = useState<SearchResultType[]>([]);
   const [docResults, setDocResults] = useState<DocResultType[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
   const [showManage, setShowManage] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isStaff, setIsStaff] = useState(false);
   
   const gradientRef = useRef<HTMLSpanElement>(null);
+
+  // Vérifier si l'utilisateur est staff
+  useEffect(() => {
+    if (user) {
+      supabase.from('profiles').select('is_staff').eq('id', user.id).single()
+        .then(({ data }) => {
+          if (data?.is_staff) setIsStaff(true);
+        });
+    } else {
+      setIsStaff(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -104,6 +120,7 @@ const Index = () => {
     try {
       setIsSearching(true);
       setHasSearched(true);
+      setSearchQuery(query);
       setDocResults([]);
 
       console.log('Searching for:', query);
@@ -232,6 +249,7 @@ const Index = () => {
                 setResults([]);
                 setTotalResults(0);
                 setDocResults([]);
+                setSearchQuery('');
               }}
               className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
             >
@@ -239,9 +257,11 @@ const Index = () => {
               <span className="text-xl font-bold text-gray-900 tracking-tight">Sivara</span>
             </div>
             <div className="flex items-center gap-4">
-              <button onClick={() => setShowManage(true)} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-all duration-300" title="Gérer l'indexation">
-                <Settings size={20} strokeWidth={1.5} />
-              </button>
+              {isStaff && (
+                <button onClick={() => setShowManage(true)} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-all duration-300" title="Gérer l'indexation">
+                  <Settings size={20} strokeWidth={1.5} />
+                </button>
+              )}
               <UserMenu />
             </div>
           </div>
@@ -264,7 +284,9 @@ const Index = () => {
                   <span className="font-bold text-xl tracking-tight text-gray-900">Sivara</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <button onClick={() => setShowManage(true)} className="text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium hidden sm:block">Contribution</button>
+                  {isStaff && (
+                    <button onClick={() => setShowManage(true)} className="text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium hidden sm:block">Contribution</button>
+                  )}
                   <UserMenu />
                 </div>
               </div>
@@ -282,7 +304,7 @@ const Index = () => {
                 </h1>
                 <p className="text-lg md:text-xl text-gray-500 font-light max-w-xl mx-auto leading-relaxed mb-8">Un moteur de recherche respectueux, rapide et précis. Trouvez ce qui compte vraiment, sans le bruit.</p>
                 <div className="w-full transform transition-all duration-300 hover:scale-[1.01] shadow-xl rounded-full">
-                  <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+                  <SearchBar onSearch={handleSearch} isLoading={isSearching} value={searchQuery} onChange={setSearchQuery} />
                 </div>
                 <div className="flex flex-wrap justify-center gap-3 pt-4">
                   {['Technologie', 'Science', 'Design', 'Actualités'].map((tag) => (
@@ -302,7 +324,7 @@ const Index = () => {
         ) : (
           <div className="container mx-auto px-4 pb-12">
             <div className="max-w-4xl mx-auto mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-              <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+              <SearchBar onSearch={handleSearch} isLoading={isSearching} value={searchQuery} onChange={setSearchQuery} />
             </div>
 
             <div className="max-w-5xl mx-auto">
