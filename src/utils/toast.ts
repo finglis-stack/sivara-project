@@ -15,3 +15,19 @@ export const showLoading = (message: string) => {
 export const dismissToast = (toastId: string) => {
   toast.dismiss(toastId);
 };
+
+export const showConfirm = (title: string, description?: string): Promise<boolean> => {
+  return new Promise((resolve) => {
+    toast(title, {
+      description,
+      action: {
+        label: 'Confirmer',
+        onClick: () => resolve(true),
+      },
+      cancel: {
+        label: 'Annuler',
+        onClick: () => resolve(false),
+      },
+    });
+  });
+};

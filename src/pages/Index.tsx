@@ -3,17 +3,19 @@ import SearchBar from '@/components/SearchBar';
 import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
+import SearchManagement from '@/components/SearchManagement';
+import AdminLayout from '@/components/AdminLayout';
 import UserMenu from '@/components/UserMenu';
 import Footer from '@/components/Footer';
 import { showError } from '@/utils/toast';
 import { 
   Settings, Globe, Zap, Shield, FileText, ArrowRight, Folder,
   Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
-  Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart
+  Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart, Activity
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -63,6 +65,7 @@ const Index = () => {
   const [showManage, setShowManage] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isStaff, setIsStaff] = useState(false);
+  const [adminPage, setAdminPage] = useState('dashboard');
   
   const gradientRef = useRef<HTMLSpanElement>(null);
 
@@ -217,24 +220,88 @@ const Index = () => {
       }
   };
 
+  // Rendu du contenu du centre de contrôle
+  const renderAdminContent = () => {
+    switch (adminPage) {
+      case 'dashboard':
+        return (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Tableau de bord</h1>
+            <StatsDisplay />
+            <CrawlManager />
+          </div>
+        );
+      case 'search':
+        return <SearchManagement />;
+      case 'crawl':
+        return (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Crawling</h1>
+            <CrawlManager />
+          </div>
+        );
+      case 'monitor':
+        return (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center gap-3 mb-6">
+              <Activity className="h-8 w-8 text-blue-600" />
+              <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Monitoring</h1>
+            </div>
+            <Card className="p-8 text-center">
+              <p className="text-gray-500">Le monitoring est disponible via la page dédiée.</p>
+              <button 
+                onClick={() => navigate('/monitor')}
+                className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Ouvrir le Monitoring
+              </button>
+            </Card>
+          </div>
+        );
+      case 'stats':
+        return (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Statistiques</h1>
+            <StatsDisplay />
+          </div>
+        );
+      case 'settings':
+        return (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Paramètres</h1>
+            <Card>
+              <CardHeader>
+                <CardTitle>Paramètres du système</CardTitle>
+                <CardDescription>Configurez les paramètres globaux du système</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Les paramètres seront bientôt disponibles.</p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   if (showManage) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] font-sans">
-        <div className="container mx-auto px-6 py-8">
-          <div className="flex items-center justify-between mb-8">
-            <div onClick={() => setShowManage(false)} className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+      <AdminLayout currentPage={adminPage} onPageChange={setAdminPage}>
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div 
+              onClick={() => setShowManage(false)} 
+              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+            >
               <img src="/sivara-logo.png" alt="Sivara" className="w-8 h-8 object-contain" />
               <span className="text-2xl font-bold text-gray-900 tracking-tight">Sivara</span>
             </div>
             <UserMenu />
           </div>
-          <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h1 className="text-3xl font-bold text-gray-900 mb-6 tracking-tight">Centre de contrôle</h1>
-            <StatsDisplay />
-            <CrawlManager />
-          </div>
+          {renderAdminContent()}
         </div>
-      </div>
+      </AdminLayout>
     );
   }
 
