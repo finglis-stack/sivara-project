@@ -155,11 +155,13 @@ const SearchManagement = () => {
         }),
       });
 
-      const data = await response.json();
-      
+      // Vérifier d'abord si la réponse est OK avant de lire le body
       if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors du chargement');
+        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
+        throw new Error(errorData.error || 'Erreur lors du chargement');
       }
+
+      const data = await response.json();
 
       setPages(data.pages || []);
       setFilteredPages(data.pages || []);
@@ -190,11 +192,13 @@ const SearchManagement = () => {
         }),
       });
 
-      const data = await response.json();
-      
+      // Vérifier d'abord si la réponse est OK avant de lire le body
       if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de la recherche');
+        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
+        throw new Error(errorData.error || 'Erreur lors de la recherche');
       }
+
+      const data = await response.json();
 
       setPages(data.pages || []);
       setFilteredPages(data.pages || []);
@@ -271,11 +275,13 @@ const SearchManagement = () => {
         body: JSON.stringify(body),
       });
 
-      const data = await response.json();
-
+      // Vérifier d'abord si la réponse est OK avant de lire le body
       if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de la sauvegarde');
+        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
+        throw new Error(errorData.error || 'Erreur lors de la sauvegarde');
       }
+
+      const data = await response.json();
 
       // Afficher le nombre de tokens NLP générés
       const tokensCount = data.tokensCount || 0;
@@ -321,10 +327,10 @@ const SearchManagement = () => {
         }),
       });
 
-      const data = await response.json();
-
+      // Vérifier d'abord si la réponse est OK avant de lire le body
       if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de la suppression');
+        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
+        throw new Error(errorData.error || 'Erreur lors de la suppression');
       }
 
       showSuccess('Page supprimée avec succès');
