@@ -7,6 +7,7 @@ import SearchManagement from '@/components/SearchManagement';
 import AdminLayout from '@/components/AdminLayout';
 import UserMenu from '@/components/UserMenu';
 import Footer from '@/components/Footer';
+import CategoryImageButton from '@/components/CategoryImageButton';
 import { showError } from '@/utils/toast';
 import { 
   Settings, Globe, Zap, Shield, FileText, ArrowRight, Folder,
@@ -305,6 +306,29 @@ const Index = () => {
     );
   }
 
+  const quickCategories = [
+    {
+      label: 'Technologie',
+      imageSrc: '/landing-tags/valencia-2154438_1280.jpg',
+      query: 'Technologie',
+    },
+    {
+      label: 'Science',
+      imageSrc: '/landing-tags/landscape-10071292_1280.jpg',
+      query: 'Science',
+    },
+    {
+      label: 'Design',
+      imageSrc: '/landing-tags/tulip-3502171_1920.jpg',
+      query: 'Design',
+    },
+    {
+      label: 'Actualité',
+      imageSrc: '/landing-tags/ganges-10021683_1280.jpg',
+      query: 'Actualité',
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-[#FAFAFA] font-sans selection:bg-yellow-400 selection:text-black flex flex-col">
       {hasSearched && (
@@ -374,8 +398,13 @@ const Index = () => {
                   <SearchBar onSearch={handleSearch} isLoading={isSearching} value={searchQuery} onChange={setSearchQuery} />
                 </div>
                 <div className="flex flex-wrap justify-center gap-3 pt-4">
-                  {['Technologie', 'Science', 'Design', 'Actualités'].map((tag) => (
-                    <button key={tag} onClick={() => handleSearch(tag)} className="px-4 py-1.5 rounded-full bg-white hover:bg-gray-100 border border-gray-100 text-gray-600 text-sm transition-all shadow-sm">{tag}</button>
+                  {quickCategories.map((c) => (
+                    <CategoryImageButton
+                      key={c.label}
+                      label={c.label}
+                      imageSrc={c.imageSrc}
+                      onClick={() => handleSearch(c.query)}
+                    />
                   ))}
                 </div>
               </div>
