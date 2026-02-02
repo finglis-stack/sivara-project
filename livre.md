@@ -5,7 +5,7 @@ Félix Inglis-Chevarie, secondaire 5
 Léa Caouette, secondaire 5
 
 Titre
-Sivara : documentation universitaire intégrale (architecture, sécurité, protocoles et code)
+Sivara : documentation intégrale (architecture, sécurité, protocoles et code)
 
 Résumé
 Ce document présente une étude systématique de Sivara, en tant qu'écosystème applicatif orienté confidentialité et souveraineté numérique. L'analyse couvre la pile web (React + TypeScript), l'architecture multi-app (moteur, docs, mail, help, device, account), l'intégration Supabase (authentification, base de données, stockage, temps réel, fonctions Edge), et des mécanismes propriétaires de protection documentaire (Sivara Binary Protocol, Kernel distant, machine virtuelle, géofencing, verrouillage appareil, listes d'accès). L'ouvrage inclut un inventaire raisonné du code, une exégèse de chaque module, et des annexes contenant des extraits substantiels du corpus source.
