@@ -9,8 +9,8 @@ import UserMenu from '@/components/UserMenu';
 import Footer from '@/components/Footer';
 import CategoryImageButton from '@/components/CategoryImageButton';
 import { showError } from '@/utils/toast';
-import { 
-  Settings, Globe, Zap, Shield, FileText, ArrowRight, Folder,
+import {
+  Settings, Globe, FileText, ArrowRight, Folder,
   Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
   Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart, Activity,
   Presentation
@@ -53,7 +53,7 @@ interface GroupedResult {
 const ICON_MAP: any = {
   FileText, Briefcase, FolderOpen, BookOpen, Lightbulb, Target,
   TrendingUp, UsersIcon, Calendar, CheckSquare, MessageSquare, 
-  Mail, Globe, Settings, Heart, Zap, Award, BarChart, Folder,
+  Mail, Globe, Settings, Heart, Award, BarChart, Folder,
   Presentation
 };
 
@@ -426,13 +426,6 @@ const Index = () => {
               </div>
             </div>
 
-            <div className="relative z-10 w-full py-6 bg-black/30 backdrop-blur-sm border-t border-white/10">
-              <div className="container mx-auto px-6 flex justify-center gap-8 text-xs text-white/70 font-medium uppercase tracking-widest">
-                <span className="flex items-center gap-2 hover:text-white transition-colors"><Shield className="w-3 h-3" /> Privé</span>
-                <span className="flex items-center gap-2 hover:text-white transition-colors"><Zap className="w-3 h-3" /> Rapide</span>
-                <span className="flex items-center gap-2 hover:text-white transition-colors"><Globe className="w-3 h-3" /> Universel</span>
-              </div>
-            </div>
           </div>
         ) : (
           <div className="container mx-auto px-4 pb-12">
