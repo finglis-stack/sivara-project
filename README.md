@@ -1,5 +1,7 @@
 # Sivara - Architecture Numérique Souveraine
 
+> Sivara a été conceptualisé et mis en place par Félix I. et Léa C., École secondaire Marie-Anne.
+
 ![Ecosystem Status](https://img.shields.io/badge/System-Operational-success) ![Compliance](https://img.shields.io/badge/Conformit%C3%A9-Loi%2025%20(QC)-blueviolet)
 
 ## 🌐 Vision Stratégique
