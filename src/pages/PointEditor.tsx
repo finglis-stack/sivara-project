@@ -28,6 +28,8 @@ import {
   SquareArrowOutUpRight,
   Type,
   Upload,
+  Maximize,
+  Minimize,
 } from 'lucide-react';
 
 type PointElementBase = {
@@ -127,6 +129,8 @@ export default function PointEditor() {
   const [selected, setSelected] = useState<SelectedElement>(null);
 
   const [mode, setMode] = useState<'edit' | 'present'>('edit');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const fullscreenRef = useRef<HTMLDivElement | null>(null);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const titleRef = useRef(title);
@@ -451,6 +455,8 @@ export default function PointEditor() {
     if (mode !== 'edit' || permission !== 'write') return;
     if (!point) return;
 
+    e.stopPropagation();
+
     const slide = point.slides.find((s) => s.id === slideId);
     const el = slide?.elements.find((x) => x.id === elementId);
     if (!slide || !el) return;
@@ -498,6 +504,37 @@ export default function PointEditor() {
     dragRef.current = null;
   };
 
+  const handleSelectElement = (e: React.MouseEvent, slideId: string, elementId: string) => {
+    if (mode !== 'edit' || permission !== 'write') return;
+    e.stopPropagation();
+    setSelected({ slideId, elementId });
+  };
+
+  const toggleFullscreen = async () => {
+    const el = fullscreenRef.current;
+    if (!el) return;
+
+    try {
+      if (window.document.fullscreenElement) {
+        await window.document.exitFullscreen();
+      } else {
+        await el.requestFullscreen();
+      }
+    } catch (e) {
+      console.error(e);
+      showError('Plein écran indisponible');
+    }
+  };
+
+  useEffect(() => {
+    const handler = () => {
+      setIsFullscreen(Boolean(window.document.fullscreenElement));
+    };
+    window.document.addEventListener('fullscreenchange', handler);
+    handler();
+    return () => window.document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
   const gotoSlide = (slideId: string) => {
     setActiveSlideId(slideId);
     setSelected(null);
@@ -540,7 +577,10 @@ export default function PointEditor() {
   const isEditable = permission === 'write' && mode === 'edit';
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] pt-[env(safe-area-inset-top)]">
+    <div
+      ref={fullscreenRef}
+      className={`min-h-screen bg-[#F3F4F6] pt-[env(safe-area-inset-top)] ${isFullscreen ? 'h-screen w-screen overflow-hidden' : ''}`}
+    >
       <header className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
@@ -570,6 +610,13 @@ export default function PointEditor() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {mode === 'present' && (
+                <Button variant="outline" onClick={toggleFullscreen} className="gap-2" title="Plein écran">
+                  {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+                  <span className="hidden sm:inline">Plein écran</span>
+                </Button>
+              )}
+
               <Button
                 variant={mode === 'present' ? 'secondary' : 'outline'}
                 onClick={() => setMode((m) => (m === 'edit' ? 'present' : 'edit'))}
@@ -616,112 +663,41 @@ export default function PointEditor() {
         )}
       </header>
 
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[260px_1fr_320px] gap-4 p-4 sm:p-6">
-        {/* Slides */}
-        <Card className="p-3 h-fit lg:sticky lg:top-[92px]">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-sm font-semibold text-gray-900">Pages</div>
-            {permission === 'write' && mode === 'edit' && (
-              <Button variant="ghost" size="sm" onClick={addSlide} className="gap-2">
-                <Plus className="h-4 w-4" /> Ajouter
-              </Button>
-            )}
+      {mode === 'present' ? (
+        <div className={`p-4 sm:p-6 ${isFullscreen ? 'h-[calc(100vh-68px)]' : ''} flex flex-col`}>
+          <div className="flex items-center justify-between max-w-7xl mx-auto w-full mb-3">
+            <Button variant="outline" onClick={gotoPrev} className="gap-2">
+              <ChevronLeft className="h-4 w-4" /> Précédent
+            </Button>
+            <div className="text-sm text-gray-500">
+              {point.slides.findIndex((s) => s.id === activeSlideId) + 1} / {point.slides.length}
+            </div>
+            <Button variant="outline" onClick={gotoNext} className="gap-2">
+              Suivant <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
 
-          <div className="space-y-2">
-            {point.slides.map((s, idx) => {
-              const active = s.id === activeSlideId;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => gotoSlide(s.id)}
-                  className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${
-                    active ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium text-gray-900 truncate">{s.name || `Slide ${idx + 1}`}</div>
-                    <div className="text-[11px] text-gray-400">{idx + 1}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <div className={`flex-1 flex items-center justify-center ${isFullscreen ? 'bg-black' : ''}`}>
+            <div
+              data-point-canvas="1"
+              className={`w-full ${isFullscreen ? 'h-full max-w-none' : 'max-w-5xl'} aspect-video rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden relative`}
+              style={{ backgroundColor: activeSlide.background.color }}
+              onPointerMove={onElementPointerMove}
+              onPointerUp={onElementPointerUp}
+              onPointerCancel={onElementPointerUp}
+              onPointerLeave={onElementPointerUp}
+            >
+              {activeSlide.elements.map((el) => {
+                const style: React.CSSProperties = {
+                  position: 'absolute',
+                  left: `${el.x * 100}%`,
+                  top: `${el.y * 100}%`,
+                  width: `${el.w * 100}%`,
+                  height: `${el.h * 100}%`,
+                };
 
-          {permission === 'write' && mode === 'edit' && (
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => activeSlideId && duplicateSlide(activeSlideId)}
-                disabled={!activeSlideId}
-              >
-                Dupliquer
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => activeSlideId && deleteSlide(activeSlideId)}
-                disabled={!activeSlideId || point.slides.length <= 1}
-                className="text-red-600 hover:text-red-700"
-              >
-                Supprimer
-              </Button>
-            </div>
-          )}
-        </Card>
-
-        {/* Canvas */}
-        <div className="space-y-3">
-          {mode === 'present' && (
-            <div className="flex items-center justify-between">
-              <Button variant="outline" onClick={gotoPrev} className="gap-2">
-                <ChevronLeft className="h-4 w-4" /> Précédent
-              </Button>
-              <div className="text-sm text-gray-500">
-                {point.slides.findIndex((s) => s.id === activeSlideId) + 1} / {point.slides.length}
-              </div>
-              <Button variant="outline" onClick={gotoNext} className="gap-2">
-                Suivant <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-
-          <div
-            data-point-canvas="1"
-            className="w-full aspect-video rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden relative"
-            style={{ backgroundColor: activeSlide.background.color }}
-            onPointerMove={onElementPointerMove}
-            onPointerUp={onElementPointerUp}
-            onPointerCancel={onElementPointerUp}
-            onPointerLeave={onElementPointerUp}
-            onClick={() => isEditable && setSelected(null)}
-          >
-            {activeSlide.elements.map((el) => {
-              const isSelected = selected?.slideId === activeSlide.id && selected?.elementId === el.id;
-
-              const style: React.CSSProperties = {
-                position: 'absolute',
-                left: `${el.x * 100}%`,
-                top: `${el.y * 100}%`,
-                width: `${el.w * 100}%`,
-                height: `${el.h * 100}%`,
-              };
-
-              const commonClass = `group select-none ${isEditable ? 'cursor-move' : ''}`;
-
-              return (
-                <div
-                  key={el.id}
-                  style={style}
-                  className={commonClass}
-                  onPointerDown={(e) => onElementPointerDown(e, activeSlide.id, el.id)}
-                >
-                  <div
-                    className={`w-full h-full ${
-                      isSelected && isEditable ? 'ring-2 ring-orange-400 ring-offset-2 ring-offset-transparent' : ''
-                    }`}
-                  >
+                return (
+                  <div key={el.id} style={style} className="select-none">
                     {el.type === 'text' ? (
                       <div
                         className="w-full h-full flex items-center"
@@ -729,7 +705,8 @@ export default function PointEditor() {
                           color: el.style.color,
                           fontSize: el.style.fontSize,
                           fontWeight: el.style.fontWeight as any,
-                          justifyContent: el.style.align === 'left' ? 'flex-start' : el.style.align === 'right' ? 'flex-end' : 'center',
+                          justifyContent:
+                            el.style.align === 'left' ? 'flex-start' : el.style.align === 'right' ? 'flex-end' : 'center',
                           textAlign: el.style.align,
                           whiteSpace: 'pre-wrap',
                         }}
@@ -737,10 +714,7 @@ export default function PointEditor() {
                         {el.text}
                       </div>
                     ) : el.type === 'image' ? (
-                      <div
-                        className="w-full h-full overflow-hidden"
-                        style={{ borderRadius: el.radius }}
-                      >
+                      <div className="w-full h-full overflow-hidden" style={{ borderRadius: el.radius }}>
                         <img
                           src={el.src}
                           alt=""
@@ -751,353 +725,487 @@ export default function PointEditor() {
                       <button
                         type="button"
                         className="w-full h-full font-semibold border border-white/10 shadow-sm"
-                        style={{
-                          background: el.style.bg,
-                          color: el.style.fg,
-                          borderRadius: el.style.radius,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (mode === 'present') handleButtonClick(el.targetSlideId);
-                        }}
+                        style={{ background: el.style.bg, color: el.style.fg, borderRadius: el.style.radius }}
+                        onClick={() => handleButtonClick(el.targetSlideId)}
                       >
                         {el.label}
                       </button>
                     )}
                   </div>
-
-                  {isEditable && isSelected && (
-                    <div className="absolute -top-9 left-0">
-                      <div className="flex items-center gap-2 bg-white/90 backdrop-blur border border-gray-200 rounded-md px-2 py-1 shadow-sm">
-                        <MousePointer2 className="h-3.5 w-3.5 text-gray-600" />
-                        <span className="text-[11px] text-gray-600">Déplacer</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
-
-        {/* Properties */}
-        <Card className="p-4 h-fit lg:sticky lg:top-[92px]">
-          <div className="text-sm font-semibold text-gray-900">Propriétés</div>
-          <div className="text-xs text-gray-500 mt-1">Sélectionnez un élément pour l\'éditer.</div>
-
-          <Separator className="my-3" />
-
-          {/* Slide properties */}
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>Nom de page</Label>
-              <Input
-                value={activeSlide.name}
-                onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })}
-                disabled={!isEditable}
-              />
+      ) : (
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[260px_1fr_320px] gap-4 p-4 sm:p-6">
+          {/* Slides */}
+          <Card className="p-3 h-fit lg:sticky lg:top-[92px]">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-semibold text-gray-900">Pages</div>
+              {permission === 'write' && mode === 'edit' && (
+                <Button variant="ghost" size="sm" onClick={addSlide} className="gap-2">
+                  <Plus className="h-4 w-4" /> Ajouter
+                </Button>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label>Fond (couleur)</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="color"
-                  value={activeSlide.background.color}
-                  onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
-                  disabled={!isEditable}
-                  className="w-16 p-1"
-                />
-                <Input
-                  value={activeSlide.background.color}
-                  onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
-                  disabled={!isEditable}
-                />
+              {point.slides.map((s, idx) => {
+                const active = s.id === activeSlideId;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => gotoSlide(s.id)}
+                    className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${
+                      active ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium text-gray-900 truncate">{s.name || `Slide ${idx + 1}`}</div>
+                      <div className="text-[11px] text-gray-400">{idx + 1}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {permission === 'write' && mode === 'edit' && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => activeSlideId && duplicateSlide(activeSlideId)}
+                  disabled={!activeSlideId}
+                >
+                  Dupliquer
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => activeSlideId && deleteSlide(activeSlideId)}
+                  disabled={!activeSlideId || point.slides.length <= 1}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  Supprimer
+                </Button>
               </div>
+            )}
+          </Card>
+
+          {/* Canvas */}
+          <div className="space-y-3">
+            <div
+              data-point-canvas="1"
+              className="w-full aspect-video rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden relative"
+              style={{ backgroundColor: activeSlide.background.color }}
+              onPointerMove={onElementPointerMove}
+              onPointerUp={onElementPointerUp}
+              onPointerCancel={onElementPointerUp}
+              onPointerLeave={onElementPointerUp}
+              onClick={() => isEditable && setSelected(null)}
+            >
+              {activeSlide.elements.map((el) => {
+                const isSelected = selected?.slideId === activeSlide.id && selected?.elementId === el.id;
+
+                const style: React.CSSProperties = {
+                  position: 'absolute',
+                  left: `${el.x * 100}%`,
+                  top: `${el.y * 100}%`,
+                  width: `${el.w * 100}%`,
+                  height: `${el.h * 100}%`,
+                };
+
+                const commonClass = `group select-none ${isEditable ? 'cursor-move' : ''}`;
+
+                return (
+                  <div
+                    key={el.id}
+                    style={style}
+                    className={commonClass}
+                    onPointerDown={(e) => onElementPointerDown(e, activeSlide.id, el.id)}
+                    onClick={(e) => handleSelectElement(e, activeSlide.id, el.id)}
+                  >
+                    <div
+                      className={`w-full h-full ${
+                        isSelected && isEditable ? 'ring-2 ring-orange-400 ring-offset-2 ring-offset-transparent' : ''
+                      }`}
+                    >
+                      {el.type === 'text' ? (
+                        <div
+                          className="w-full h-full flex items-center"
+                          style={{
+                            color: el.style.color,
+                            fontSize: el.style.fontSize,
+                            fontWeight: el.style.fontWeight as any,
+                            justifyContent:
+                              el.style.align === 'left' ? 'flex-start' : el.style.align === 'right' ? 'flex-end' : 'center',
+                            textAlign: el.style.align,
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {el.text}
+                        </div>
+                      ) : el.type === 'image' ? (
+                        <div className="w-full h-full overflow-hidden" style={{ borderRadius: el.radius }}>
+                          <img
+                            src={el.src}
+                            alt=""
+                            className={`w-full h-full ${el.fit === 'cover' ? 'object-cover' : 'object-contain'} pointer-events-none`}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="w-full h-full font-semibold border border-white/10 shadow-sm"
+                          style={{
+                            background: el.style.bg,
+                            color: el.style.fg,
+                            borderRadius: el.style.radius,
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // En mode édition, un bouton sert à naviguer EN présentation.
+                            // Ici on garde la sélection sans navigation.
+                            setSelected({ slideId: activeSlide.id, elementId: el.id });
+                          }}
+                        >
+                          {el.label}
+                        </button>
+                      )}
+                    </div>
+
+                    {isEditable && isSelected && (
+                      <div className="absolute -top-9 left-0">
+                        <div className="flex items-center gap-2 bg-white/90 backdrop-blur border border-gray-200 rounded-md px-2 py-1 shadow-sm">
+                          <MousePointer2 className="h-3.5 w-3.5 text-gray-600" />
+                          <span className="text-[11px] text-gray-600">Déplacer</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <Separator className="my-4" />
+          {/* Properties */}
+          <Card className="p-4 h-fit lg:sticky lg:top-[92px]">
+            <div className="text-sm font-semibold text-gray-900">Propriétés</div>
+            <div className="text-xs text-gray-500 mt-1">Sélectionnez un élément pour l\'éditer.</div>
 
-          {selectedElement ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-gray-900 capitalize">{selectedElement.type}</div>
-                {isEditable && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => deleteElement(activeSlide.id, selectedElement.id)}
-                  >
-                    Supprimer
-                  </Button>
-                )}
+            <Separator className="my-3" />
+
+            {/* Slide properties */}
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Nom de page</Label>
+                <Input
+                  value={activeSlide.name}
+                  onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })}
+                  disabled={!isEditable}
+                />
               </div>
 
-              {/* Position & Size */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">X</Label>
+              <div className="space-y-2">
+                <Label>Fond (couleur)</Label>
+                <div className="flex items-center gap-2">
                   <Input
-                    type="number"
-                    value={Math.round(selectedElement.x * 100)}
-                    onChange={(e) => {
-                      const v = clamp01(Number(e.target.value) / 100);
-                      updateElement(activeSlide.id, selectedElement.id, { x: Math.min(v, 1 - selectedElement.w) } as any);
-                    }}
+                    type="color"
+                    value={activeSlide.background.color}
+                    onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
                     disabled={!isEditable}
+                    className="w-16 p-1"
                   />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Y</Label>
                   <Input
-                    type="number"
-                    value={Math.round(selectedElement.y * 100)}
-                    onChange={(e) => {
-                      const v = clamp01(Number(e.target.value) / 100);
-                      updateElement(activeSlide.id, selectedElement.id, { y: Math.min(v, 1 - selectedElement.h) } as any);
-                    }}
-                    disabled={!isEditable}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Largeur</Label>
-                  <Input
-                    type="number"
-                    value={Math.round(selectedElement.w * 100)}
-                    onChange={(e) => {
-                      const w = clamp01(Number(e.target.value) / 100);
-                      updateElement(activeSlide.id, selectedElement.id, { w } as any);
-                    }}
-                    disabled={!isEditable}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Hauteur</Label>
-                  <Input
-                    type="number"
-                    value={Math.round(selectedElement.h * 100)}
-                    onChange={(e) => {
-                      const h = clamp01(Number(e.target.value) / 100);
-                      updateElement(activeSlide.id, selectedElement.id, { h } as any);
-                    }}
+                    value={activeSlide.background.color}
+                    onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
                     disabled={!isEditable}
                   />
                 </div>
               </div>
+            </div>
 
-              {selectedElement.type === 'text' && (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label>Texte</Label>
-                    <Input
-                      value={selectedElement.text}
-                      onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { text: e.target.value } as any)}
-                      disabled={!isEditable}
-                    />
-                  </div>
+            <Separator className="my-4" />
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Couleur</Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="color"
-                          value={selectedElement.style.color}
-                          onChange={(e) =>
-                            updateElement(activeSlide.id, selectedElement.id, {
-                              style: { ...selectedElement.style, color: e.target.value },
-                            } as any)
-                          }
-                          disabled={!isEditable}
-                          className="w-16 p-1"
-                        />
-                        <Input
-                          value={selectedElement.style.color}
-                          onChange={(e) =>
-                            updateElement(activeSlide.id, selectedElement.id, {
-                              style: { ...selectedElement.style, color: e.target.value },
-                            } as any)
-                          }
-                          disabled={!isEditable}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Alignement</Label>
-                      <Select
-                        value={selectedElement.style.align}
-                        onValueChange={(v: any) =>
-                          updateElement(activeSlide.id, selectedElement.id, {
-                            style: { ...selectedElement.style, align: v },
-                          } as any)
-                        }
-                        disabled={!isEditable}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="left">Gauche</SelectItem>
-                          <SelectItem value="center">Centre</SelectItem>
-                          <SelectItem value="right">Droite</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Taille</Label>
-                    <Slider
-                      value={[selectedElement.style.fontSize]}
-                      min={10}
-                      max={96}
-                      step={1}
-                      onValueChange={(v) =>
-                        updateElement(activeSlide.id, selectedElement.id, {
-                          style: { ...selectedElement.style, fontSize: v[0] },
-                        } as any)
-                      }
-                      disabled={!isEditable}
-                    />
-                    <div className="text-xs text-gray-500">{selectedElement.style.fontSize}px</div>
-                  </div>
-                </div>
-              )}
-
-              {selectedElement.type === 'image' && (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label>Source</Label>
-                    <Input
-                      value={selectedElement.src}
-                      onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { src: e.target.value } as any)}
-                      disabled={!isEditable}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Mode</Label>
-                      <Select
-                        value={selectedElement.fit}
-                        onValueChange={(v: any) => updateElement(activeSlide.id, selectedElement.id, { fit: v } as any)}
-                        disabled={!isEditable}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="contain">Contain</SelectItem>
-                          <SelectItem value="cover">Cover</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Arrondi</Label>
-                      <Slider
-                        value={[selectedElement.radius]}
-                        min={0}
-                        max={40}
-                        step={1}
-                        onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { radius: v[0] } as any)}
-                        disabled={!isEditable}
-                      />
-                      <div className="text-xs text-gray-500">{selectedElement.radius}px</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {selectedElement.type === 'button' && (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label>Label</Label>
-                    <Input
-                      value={selectedElement.label}
-                      onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { label: e.target.value } as any)}
-                      disabled={!isEditable}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Destination (page)</Label>
-                    <Select
-                      value={selectedElement.targetSlideId || ''}
-                      onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { targetSlideId: v || null } as any)}
-                      disabled={!isEditable}
+            {selectedElement ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium text-gray-900 capitalize">{selectedElement.type}</div>
+                  {isEditable && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => deleteElement(activeSlide.id, selectedElement.id)}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choisir une page" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {point.slides.map((s, idx) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {idx + 1}. {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      Supprimer
+                    </Button>
+                  )}
+                </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Fond</Label>
-                      <Input
-                        type="color"
-                        value={selectedElement.style.bg}
-                        onChange={(e) =>
-                          updateElement(activeSlide.id, selectedElement.id, {
-                            style: { ...selectedElement.style, bg: e.target.value },
-                          } as any)
-                        }
-                        disabled={!isEditable}
-                        className="w-full p-1 h-10"
-                      />
-                    </div>
+                {/* Position & Size */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">X</Label>
+                    <Input
+                      type="number"
+                      value={Math.round(selectedElement.x * 100)}
+                      onChange={(e) => {
+                        const v = clamp01(Number(e.target.value) / 100);
+                        updateElement(activeSlide.id, selectedElement.id, { x: Math.min(v, 1 - selectedElement.w) } as any);
+                      }}
+                      disabled={!isEditable}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Y</Label>
+                    <Input
+                      type="number"
+                      value={Math.round(selectedElement.y * 100)}
+                      onChange={(e) => {
+                        const v = clamp01(Number(e.target.value) / 100);
+                        updateElement(activeSlide.id, selectedElement.id, { y: Math.min(v, 1 - selectedElement.h) } as any);
+                      }}
+                      disabled={!isEditable}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Largeur</Label>
+                    <Input
+                      type="number"
+                      value={Math.round(selectedElement.w * 100)}
+                      onChange={(e) => {
+                        const w = clamp01(Number(e.target.value) / 100);
+                        updateElement(activeSlide.id, selectedElement.id, { w } as any);
+                      }}
+                      disabled={!isEditable}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Hauteur</Label>
+                    <Input
+                      type="number"
+                      value={Math.round(selectedElement.h * 100)}
+                      onChange={(e) => {
+                        const h = clamp01(Number(e.target.value) / 100);
+                        updateElement(activeSlide.id, selectedElement.id, { h } as any);
+                      }}
+                      disabled={!isEditable}
+                    />
+                  </div>
+                </div>
+
+                {selectedElement.type === 'text' && (
+                  <div className="space-y-3">
                     <div className="space-y-2">
                       <Label>Texte</Label>
                       <Input
-                        type="color"
-                        value={selectedElement.style.fg}
-                        onChange={(e) =>
+                        value={selectedElement.text}
+                        onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { text: e.target.value } as any)}
+                        disabled={!isEditable}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Couleur</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="color"
+                            value={selectedElement.style.color}
+                            onChange={(e) =>
+                              updateElement(activeSlide.id, selectedElement.id, {
+                                style: { ...selectedElement.style, color: e.target.value },
+                              } as any)
+                            }
+                            disabled={!isEditable}
+                            className="w-16 p-1"
+                          />
+                          <Input
+                            value={selectedElement.style.color}
+                            onChange={(e) =>
+                              updateElement(activeSlide.id, selectedElement.id, {
+                                style: { ...selectedElement.style, color: e.target.value },
+                              } as any)
+                            }
+                            disabled={!isEditable}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Alignement</Label>
+                        <Select
+                          value={selectedElement.style.align}
+                          onValueChange={(v: any) =>
+                            updateElement(activeSlide.id, selectedElement.id, {
+                              style: { ...selectedElement.style, align: v },
+                            } as any)
+                          }
+                          disabled={!isEditable}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="left">Gauche</SelectItem>
+                            <SelectItem value="center">Centre</SelectItem>
+                            <SelectItem value="right">Droite</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Taille</Label>
+                      <Slider
+                        value={[selectedElement.style.fontSize]}
+                        min={10}
+                        max={96}
+                        step={1}
+                        onValueChange={(v) =>
                           updateElement(activeSlide.id, selectedElement.id, {
-                            style: { ...selectedElement.style, fg: e.target.value },
+                            style: { ...selectedElement.style, fontSize: v[0] },
                           } as any)
                         }
                         disabled={!isEditable}
-                        className="w-full p-1 h-10"
                       />
+                      <div className="text-xs text-gray-500">{selectedElement.style.fontSize}px</div>
                     </div>
                   </div>
+                )}
 
-                  <div className="space-y-2">
-                    <Label>Arrondi</Label>
-                    <Slider
-                      value={[selectedElement.style.radius]}
-                      min={0}
-                      max={30}
-                      step={1}
-                      onValueChange={(v) =>
-                        updateElement(activeSlide.id, selectedElement.id, {
-                          style: { ...selectedElement.style, radius: v[0] },
-                        } as any)
-                      }
-                      disabled={!isEditable}
-                    />
-                    <div className="text-xs text-gray-500">{selectedElement.style.radius}px</div>
+                {selectedElement.type === 'image' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Source</Label>
+                      <Input
+                        value={selectedElement.src}
+                        onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { src: e.target.value } as any)}
+                        disabled={!isEditable}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Mode</Label>
+                        <Select
+                          value={selectedElement.fit}
+                          onValueChange={(v: any) => updateElement(activeSlide.id, selectedElement.id, { fit: v } as any)}
+                          disabled={!isEditable}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contain">Contain</SelectItem>
+                            <SelectItem value="cover">Cover</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Arrondi</Label>
+                        <Slider
+                          value={[selectedElement.radius]}
+                          min={0}
+                          max={40}
+                          step={1}
+                          onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { radius: v[0] } as any)}
+                          disabled={!isEditable}
+                        />
+                        <div className="text-xs text-gray-500">{selectedElement.radius}px</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-sm text-gray-500">
-              {isEditable ? 'Cliquez un élément (ou ajoutez-en un).' : 'Mode lecture.'}
-            </div>
-          )}
-        </Card>
-      </div>
+                )}
+
+                {selectedElement.type === 'button' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Label</Label>
+                      <Input
+                        value={selectedElement.label}
+                        onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { label: e.target.value } as any)}
+                        disabled={!isEditable}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Destination (page)</Label>
+                      <Select
+                        value={selectedElement.targetSlideId || ''}
+                        onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { targetSlideId: v || null } as any)}
+                        disabled={!isEditable}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choisir une page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {point.slides.map((s, idx) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {idx + 1}. {s.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Fond</Label>
+                        <Input
+                          type="color"
+                          value={selectedElement.style.bg}
+                          onChange={(e) =>
+                            updateElement(activeSlide.id, selectedElement.id, {
+                              style: { ...selectedElement.style, bg: e.target.value },
+                            } as any)
+                          }
+                          disabled={!isEditable}
+                          className="w-full p-1 h-10"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Texte</Label>
+                        <Input
+                          type="color"
+                          value={selectedElement.style.fg}
+                          onChange={(e) =>
+                            updateElement(activeSlide.id, selectedElement.id, {
+                              style: { ...selectedElement.style, fg: e.target.value },
+                            } as any)
+                          }
+                          disabled={!isEditable}
+                          className="w-full p-1 h-10"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Arrondi</Label>
+                      <Slider
+                        value={[selectedElement.style.radius]}
+                        min={0}
+                        max={30}
+                        step={1}
+                        onValueChange={(v) =>
+                          updateElement(activeSlide.id, selectedElement.id, {
+                            style: { ...selectedElement.style, radius: v[0] },
+                          } as any)
+                        }
+                        disabled={!isEditable}
+                      />
+                      <div className="text-xs text-gray-500">{selectedElement.style.radius}px</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">{isEditable ? 'Cliquez un élément (ou ajoutez-en un).' : 'Mode lecture.'}</div>
+            )}
+          </Card>
+        </div>
+      )}
 
       {/* Image dialog */}
       <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
