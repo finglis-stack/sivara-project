@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
@@ -70,8 +70,6 @@ const Index = () => {
   const [isStaff, setIsStaff] = useState(false);
   const [adminPage, setAdminPage] = useState('dashboard');
   
-  const gradientRef = useRef<HTMLSpanElement>(null);
-
   // Vérifier si l'utilisateur est staff
   useEffect(() => {
     if (user) {
@@ -83,17 +81,6 @@ const Index = () => {
       setIsStaff(false);
     }
   }, [user]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!gradientRef.current) return;
-      const x = (e.clientX / window.innerWidth) * 100;
-      const y = (e.clientY / window.innerHeight) * 100;
-      gradientRef.current.style.backgroundPosition = `${x}% ${y}%`;
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
 
   const groupResultsByDomain = (results: SearchResultType[]): GroupedResult[] => {
     if (results.length === 0) return [];
@@ -369,42 +356,55 @@ const Index = () => {
 
       <div className={`flex-1 ${hasSearched ? "pt-24" : ""}`}>
         {!hasSearched ? (
-          <div className="relative min-h-screen w-full overflow-hidden flex flex-col bg-[#FAFAFA]">
-             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[15%] left-[5%] w-32 h-32 bg-gradient-to-tr from-yellow-400/40 to-yellow-300/30 rounded-[2rem] rotate-12 animate-float-square blur-[1px]"></div>
-                <div className="absolute top-[65%] right-[8%] w-48 h-48 bg-gradient-to-bl from-blue-500/20 to-blue-400/10 rounded-[3rem] -rotate-6 animate-float-square-reverse blur-sm"></div>
-                <div className="absolute bottom-[10%] left-[20%] w-20 h-20 bg-yellow-400/30 rounded-2xl rotate-45 animate-float-square animation-delay-2000"></div>
-                <div className="absolute top-[30%] right-[25%] w-16 h-16 bg-blue-400/20 rounded-xl rotate-[15deg] animate-float-square-reverse animation-delay-1000"></div>
-             </div>
-            <nav className="absolute top-0 w-full z-50 bg-[#FAFAFA]/80 backdrop-blur-sm border-b border-transparent">
+          <div className="relative min-h-screen w-full overflow-hidden flex flex-col bg-black">
+            {/* VIDEO BACKGROUND */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute inset-0">
+                {/* Cover technique for 16:9 video */}
+                <iframe
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-[177.78vh] h-[56.25vw]"
+                  src="https://www.youtube-nocookie.com/embed/wQ7grPng_EI?autoplay=1&mute=1&controls=0&rel=0&loop=1&playlist=wQ7grPng_EI&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1"
+                  title="Sivara background"
+                  frameBorder="0"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                />
+              </div>
+              {/* Overlay for readability */}
+              <div className="absolute inset-0 bg-black/55" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/35 to-black/70" />
+            </div>
+
+            <nav className="absolute top-0 w-full z-50 bg-transparent">
               <div className="container mx-auto px-6 h-20 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <img src="/sivara-logo.png" alt="Logo" className="w-10 h-10 object-contain drop-shadow-sm" />
-                  <span className="font-bold text-xl tracking-tight text-gray-900">Sivara</span>
+                  <span className="font-bold text-xl tracking-tight text-white">Sivara</span>
                 </div>
                 <div className="flex items-center gap-4">
                   {isStaff && (
-                    <button onClick={() => setShowManage(true)} className="text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium hidden sm:block">Contribution</button>
+                    <button onClick={() => setShowManage(true)} className="text-white/80 hover:text-white transition-colors text-sm font-medium hidden sm:block">Contribution</button>
                   )}
                   <UserMenu />
                 </div>
               </div>
             </nav>
+
             <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-5xl mx-auto mt-10">
               <div className="w-full max-w-3xl space-y-8 text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-gray-900 leading-[1.1]">
-                  Explorez le web <br/>
-                  <span 
-                    ref={gradientRef} 
-                    className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-600 to-yellow-200 bg-[length:200%_auto] bg-center"
-                  >
-                    autrement.
-                  </span>
+                <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.1] drop-shadow-[0_8px_30px_rgba(0,0,0,0.65)]">
+                  Recherchez le web.
+                  <br />
+                  Sans le bruit.
                 </h1>
-                <p className="text-lg md:text-xl text-gray-500 font-light max-w-xl mx-auto leading-relaxed mb-8">Un moteur de recherche respectueux, rapide et précis. Trouvez ce qui compte vraiment, sans le bruit.</p>
-                <div className="w-full transform transition-all duration-300 hover:scale-[1.01] shadow-xl rounded-full">
+                <p className="text-base md:text-xl text-white/80 font-light max-w-xl mx-auto leading-relaxed">
+                  Sivara vous aide à trouver l'information rapidement, dans une expérience claire et immersive.
+                </p>
+
+                <div className="w-full transform transition-all duration-300 hover:scale-[1.01] shadow-2xl rounded-full">
                   <SearchBar onSearch={handleSearch} isLoading={isSearching} value={searchQuery} onChange={setSearchQuery} />
                 </div>
+
                 <div className="flex flex-wrap justify-center gap-3 pt-4">
                   {quickCategories.map((c) => (
                     <CategoryImageButton
@@ -417,11 +417,12 @@ const Index = () => {
                 </div>
               </div>
             </div>
-            <div className="relative z-10 w-full py-6 bg-white/50 backdrop-blur-sm">
-              <div className="container mx-auto px-6 flex justify-center gap-8 text-xs text-gray-400 font-medium uppercase tracking-widest">
-                <span className="flex items-center gap-2 hover:text-gray-600 transition-colors"><Shield className="w-3 h-3" /> Privé</span>
-                <span className="flex items-center gap-2 hover:text-gray-600 transition-colors"><Zap className="w-3 h-3" /> Rapide</span>
-                <span className="flex items-center gap-2 hover:text-gray-600 transition-colors"><Globe className="w-3 h-3" /> Universel</span>
+
+            <div className="relative z-10 w-full py-6 bg-black/30 backdrop-blur-sm border-t border-white/10">
+              <div className="container mx-auto px-6 flex justify-center gap-8 text-xs text-white/70 font-medium uppercase tracking-widest">
+                <span className="flex items-center gap-2 hover:text-white transition-colors"><Shield className="w-3 h-3" /> Privé</span>
+                <span className="flex items-center gap-2 hover:text-white transition-colors"><Zap className="w-3 h-3" /> Rapide</span>
+                <span className="flex items-center gap-2 hover:text-white transition-colors"><Globe className="w-3 h-3" /> Universel</span>
               </div>
             </div>
           </div>
