@@ -393,9 +393,17 @@ const Index = () => {
             <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-5xl mx-auto mt-10">
               <div className="w-full max-w-3xl space-y-8 text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
                 <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.1] drop-shadow-[0_8px_30px_rgba(0,0,0,0.65)]">
-                  Recherchez le web.
+                  Recherchez le{' '}
+                  <span className="relative inline-block">
+                    web
+                    <span className="absolute -top-10 left-1/2 -translate-x-1/2 rotate-[-7deg] px-3 py-1 rounded-full bg-white/15 border border-white/25 text-white/90 text-[11px] sm:text-xs backdrop-blur-sm shadow-lg max-w-[85vw] whitespace-normal">
+                      Conceptualisé par Félix I. et Léa C., École secondaire Marie-Anne
+                    </span>
+                  </span>
+                  .
                   <br />
-                  Sans le bruit.
+                  Sans surveillance.
+                  <span className="text-white/70 font-medium text-xl md:text-2xl">{' '}(promis)</span>
                 </h1>
                 <p className="text-base md:text-xl text-white/80 font-light max-w-xl mx-auto leading-relaxed">
                   Sivara vous aide à trouver l'information rapidement, dans une expérience claire et immersive.
