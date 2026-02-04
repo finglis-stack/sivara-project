@@ -396,7 +396,7 @@ const Index = () => {
                   Recherchez le{' '}
                   <span className="relative inline-block">
                     web
-                    <span className="absolute -top-10 left-1/2 -translate-x-1/2 rotate-[-7deg] px-3 py-1 rounded-full bg-white/15 border border-white/25 text-white/90 text-[11px] sm:text-xs backdrop-blur-sm shadow-lg max-w-[85vw] whitespace-normal">
+                    <span className="absolute -top-10 left-1/2 -translate-x-1/2 rotate-[7deg] px-4 py-1.5 bg-black/30 border border-white/25 text-white/90 text-[11px] sm:text-xs font-light tracking-wide backdrop-blur-sm shadow-lg max-w-[90vw] whitespace-nowrap">
                       Conceptualisé par Félix I. et Léa C., École secondaire Marie-Anne
                     </span>
                   </span>
