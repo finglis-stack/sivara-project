@@ -12,7 +12,8 @@ import { showError } from '@/utils/toast';
 import { 
   Settings, Globe, Zap, Shield, FileText, ArrowRight, Folder,
   Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
-  Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart, Activity
+  Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart, Activity,
+  Presentation
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -35,7 +36,7 @@ interface DocResultType {
   id: string;
   title: string;
   snippet: string;
-  type: 'file' | 'folder';
+  type: 'file' | 'folder' | 'point';
   updated_at: string;
   icon?: string;
   color?: string;
@@ -52,7 +53,8 @@ interface GroupedResult {
 const ICON_MAP: any = {
   FileText, Briefcase, FolderOpen, BookOpen, Lightbulb, Target,
   TrendingUp, UsersIcon, Calendar, CheckSquare, MessageSquare, 
-  Mail, Globe, Settings, Heart, Zap, Award, BarChart, Folder
+  Mail, Globe, Settings, Heart, Zap, Award, BarChart, Folder,
+  Presentation
 };
 
 const Index = () => {
@@ -210,6 +212,12 @@ const Index = () => {
               window.location.href = `/?app=docs&folder=${doc.id}`;
           } else {
               window.location.href = `https://docs.sivara.ca/?folder=${doc.id}`;
+          }
+      } else if (doc.type === 'point') {
+          if (isLocal) {
+              window.location.href = `/point/${doc.id}?app=docs`;
+          } else {
+              window.location.href = `https://docs.sivara.ca/point/${doc.id}`;
           }
       } else {
           // Si c'est un FICHIER -> On va sur le chemin /ID pour ouvrir l'éditeur

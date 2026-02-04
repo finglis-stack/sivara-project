@@ -36,6 +36,10 @@ import DeviceCheckout from "./pages/DeviceCheckout";
 import IdentityVerification from "./pages/IdentityVerification";
 import DeviceCustomerDetails from "./pages/DeviceCustomerDetails";
 
+// Docs: Point
+import PointCreate from "./pages/PointCreate";
+import PointEditor from "./pages/PointEditor";
+
 const queryClient = new QueryClient();
 
 const AppRoutes = () => {
@@ -165,6 +169,8 @@ const AppRoutes = () => {
       {currentApp === 'docs' && (
         <>
           <Route path="/" element={<Docs />} />
+          <Route path="/point/new" element={<PointCreate />} />
+          <Route path="/point/:id" element={<PointEditor />} />
           <Route path="/:id" element={<DocEditor />} />
           <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
         </>

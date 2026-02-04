@@ -30,7 +30,8 @@ import {
   Image as ImageIcon, Palette, UserCircle, StarOff, Upload, FileJson, Lock,
   // Ajout des icônes manquantes pour correspondre à l'éditeur
   Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
-  Calendar, CheckSquare, MessageSquare, Mail, Globe, Settings, Heart, Zap, Award, BarChart
+  Calendar, CheckSquare, MessageSquare, Mail, Globe, Settings, Heart, Zap, Award, BarChart,
+  Presentation
 } from 'lucide-react';
 
 // DND Imports
@@ -60,7 +61,7 @@ interface Document {
   icon?: string;
   color?: string;
   cover_url?: string;
-  type: 'file' | 'folder';
+  type: 'file' | 'folder' | 'point';
   parent_id: string | null;
 }
 
@@ -94,6 +95,7 @@ const AVAILABLE_ICONS = [
   { name: 'Globe', icon: Globe }, { name: 'Settings', icon: Settings },
   { name: 'Heart', icon: Heart }, { name: 'Zap', icon: Zap },
   { name: 'Award', icon: Award }, { name: 'BarChart', icon: BarChart },
+  { name: 'Presentation', icon: Presentation },
   // Icônes spécifiques aux dossiers ou legacy
   { name: 'Folder', icon: Folder }, 
   { name: 'Star', icon: Star },
@@ -293,7 +295,7 @@ const Docs = () => {
         (data || []).map(async (doc) => {
           try {
             const decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
-            const decryptedContent = doc.type === 'file' ? await encryptionService.decrypt(doc.content, doc.encryption_iv) : '';
+            const decryptedContent = doc.type !== 'folder' ? await encryptionService.decrypt(doc.content, doc.encryption_iv) : '';
             return { ...doc, decryptedTitle, decryptedContent };
           } catch (error) {
             return { ...doc, decryptedTitle: '🔒 Illisible', decryptedContent: '' };
@@ -318,23 +320,60 @@ const Docs = () => {
 
   // --- ACTIONS ---
 
-  const handleNavigate = (id: string) => {
-    // Si c'est en local, on ajoute app=docs
+  const handleNavigate = (id: string, type: Document['type'] = 'file') => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    if (type === 'point') {
+      if (isLocal) {
+        navigate(`/point/${id}?app=docs`);
+      } else {
+        window.location.href = `https://docs.sivara.ca/point/${id}`;
+      }
+      return;
+    }
+
+    // Docs (file)
     if (isLocal) {
-        navigate(`/${id}?app=docs`);
+      navigate(`/${id}?app=docs`);
     } else {
-        window.location.href = `https://docs.sivara.ca/${id}`;
+      window.location.href = `https://docs.sivara.ca/${id}`;
     }
   };
 
-  const createItem = async (type: 'file' | 'folder') => {
+  const createItem = async (type: 'file' | 'folder' | 'point') => {
     if (!user) return;
     try {
-      const title = type === 'folder' ? 'Nouveau dossier' : 'Document sans titre';
+      const title = type === 'folder' ? 'Nouveau dossier' : type === 'point' ? 'Nouveau Point' : 'Document sans titre';
       const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(title);
-      // On initialise le contenu aussi
-      const { encrypted: encryptedContent } = await encryptionService.encrypt('', iv);
+
+      let initialContent = '';
+      if (type === 'point') {
+        initialContent = JSON.stringify({
+          version: 1,
+          slides: [
+            {
+              id: crypto.randomUUID(),
+              name: 'Slide 1',
+              background: { type: 'solid', color: '#0B1220' },
+              elements: [
+                {
+                  id: crypto.randomUUID(),
+                  type: 'text',
+                  x: 0.08,
+                  y: 0.18,
+                  w: 0.84,
+                  h: 0.18,
+                  text: title,
+                  style: { fontSize: 56, fontWeight: 700, color: '#FFFFFF', align: 'center' },
+                },
+              ],
+            },
+          ],
+        });
+      }
+
+      // On initialise le contenu aussi (même IV)
+      const { encrypted: encryptedContent } = await encryptionService.encrypt(initialContent, iv);
 
       const { data, error } = await supabase
         .from('documents')
@@ -344,18 +383,25 @@ const Docs = () => {
           owner_id: user.id,
           is_starred: false,
           encryption_iv: iv,
-          icon: type === 'folder' ? 'Folder' : 'FileText',
-          color: type === 'folder' ? '#6B7280' : '#3B82F6',
+          icon: type === 'folder' ? 'Folder' : type === 'point' ? 'Presentation' : 'FileText',
+          color: type === 'folder' ? '#6B7280' : type === 'point' ? '#F97316' : '#3B82F6',
           cover_url: type === 'folder' ? DEFAULT_COVER : null,
           type: type,
-          parent_id: currentFolderId
+          parent_id: currentFolderId,
+          visibility: 'private',
+          public_permission: 'read',
         })
         .select()
         .single();
 
       if (error) throw error;
-      if (type === 'file') handleNavigate(data.id);
-      else {
+
+      if (type === 'file') handleNavigate(data.id, 'file');
+      else if (type === 'point') {
+        // Rediriger vers l'espace de création (première page)
+        // (On le fait via /point/new si l'utilisateur veut un setup; ici on ouvre directement le Point)
+        handleNavigate(data.id, 'point');
+      } else {
         showSuccess('Dossier créé');
         fetchDocuments();
       }
@@ -748,6 +794,9 @@ const Docs = () => {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => createItem('file')}><FileText className="mr-2 h-4 w-4" /> Document</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate(`/point/new?app=docs${currentFolderId ? `&folder=${currentFolderId}` : ''}`)}>
+                          <Presentation className="mr-2 h-4 w-4" /> Point
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => createItem('folder')}><FolderPlus className="mr-2 h-4 w-4" /> Dossier</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => importInputRef.current?.click()}>
@@ -796,7 +845,7 @@ const Docs = () => {
                   key={doc.id} 
                   doc={doc} 
                   viewMode={viewMode} 
-                  onClick={(d: any) => handleNavigate(d.id)} 
+                  onClick={(d: any) => handleNavigate(d.id, d.type)} 
                   onNavigate={enterFolder}
                 >
                    {viewMode === 'grid' ? (
@@ -811,13 +860,13 @@ const Docs = () => {
                          <div className={`p-4 flex flex-col h-full justify-between z-10 ${doc.type === 'folder' ? 'pt-4' : ''}`}>
                             <div className="flex justify-between items-start">
                                 <div 
-                                    className={`h-10 w-10 rounded-lg flex items-center justify-center shadow-sm ${doc.type === 'folder' ? 'bg-white/10 backdrop-blur-md border border-white/20' : ''}`} 
-                                    style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}
+                                    className={`h-10 w-10 rounded-lg flex items-center justify-center shadow-sm ${doc.type === 'folder' ? 'bg-white/10 backdrop-blur-md border border-white/20' : ''}`}
+                                    style={{ backgroundColor: doc.type !== 'folder' ? (doc.color || (doc.type === 'point' ? '#F97316' : '#3B82F6')) : undefined }}
                                 >
                                    {/* CORRECTION ICONE CONTRASTE */}
-                                   <IconComponent 
-                                      className="h-5 w-5" 
-                                      style={{ color: doc.type === 'folder' ? '#FFFFFF' : getIconTextColor(doc.color || '#3B82F6') }} 
+                                   <IconComponent
+                                      className="h-5 w-5"
+                                      style={{ color: doc.type === 'folder' ? '#FFFFFF' : getIconTextColor(doc.color || (doc.type === 'point' ? '#F97316' : '#3B82F6')) }}
                                    />
                                 </div>
                                 <div className="flex gap-1">
@@ -839,7 +888,7 @@ const Docs = () => {
                             <div className="mt-auto">
                                 <h3 className={`font-medium truncate mb-1 text-lg ${doc.type === 'folder' ? 'text-white font-light tracking-wide' : 'text-gray-900'}`} title={doc.decryptedTitle}>{doc.decryptedTitle}</h3>
                                 <p className={`text-xs ${doc.type === 'folder' ? 'text-white/60 font-light' : 'text-gray-500'}`}>
-                                   {doc.type === 'folder' ? 'Dossier' : new Date(doc.updated_at).toLocaleDateString()}
+                                   {doc.type === 'folder' ? 'Dossier' : doc.type === 'point' ? 'Point' : new Date(doc.updated_at).toLocaleDateString()}
                                 </p>
                             </div>
                          </div>
@@ -847,13 +896,13 @@ const Docs = () => {
                    ) : (
                       <div className="flex items-center p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer group">
                          <div 
-                            className={`h-10 w-10 rounded flex items-center justify-center mr-4 ${doc.type === 'folder' ? 'bg-gray-100' : ''}`} 
-                            style={{ backgroundColor: doc.type === 'file' ? (doc.color || '#3B82F6') : undefined }}
+                            className={`h-10 w-10 rounded flex items-center justify-center mr-4 ${doc.type === 'folder' ? 'bg-gray-100' : ''}`}
+                            style={{ backgroundColor: doc.type !== 'folder' ? (doc.color || (doc.type === 'point' ? '#F97316' : '#3B82F6')) : undefined }}
                          >
                             {doc.type === 'folder' ? <img src={doc.cover_url || DEFAULT_COVER} className="h-full w-full object-cover rounded" /> : (
-                                <IconComponent 
-                                    className="h-5 w-5" 
-                                    style={{ color: getIconTextColor(doc.color || '#3B82F6') }} 
+                                <IconComponent
+                                    className="h-5 w-5"
+                                    style={{ color: getIconTextColor(doc.color || (doc.type === 'point' ? '#F97316' : '#3B82F6')) }}
                                 />
                             )}
                          </div>
@@ -863,7 +912,7 @@ const Docs = () => {
                                 {doc.is_starred && <Star className="h-3 w-3 text-amber-500 fill-current" />}
                             </h3>
                             <div className="flex items-center text-xs text-gray-500 gap-2">
-                               <span>{doc.type === 'folder' ? 'Dossier' : getPreviewText(doc.decryptedContent) || 'Vide'}</span>
+                               <span>{doc.type === 'folder' ? 'Dossier' : doc.type === 'point' ? 'Point sécurisé' : getPreviewText(doc.decryptedContent) || 'Vide'}</span>
                             </div>
                          </div>
                          <div className="text-xs text-gray-400 mr-4 hidden sm:block">{new Date(doc.updated_at).toLocaleDateString()}</div>
