@@ -896,15 +896,7 @@ export default function PointEditor() {
   };
 
   const exitPresentation = async () => {
-    try {
-      if (window.document.fullscreenElement) {
-        await window.document.exitFullscreen();
-      }
-    } catch {
-      // ignore
-    } finally {
-      setMode('edit');
-    }
+    setMode('edit');
   };
 
   useEffect(() => {
@@ -924,22 +916,15 @@ export default function PointEditor() {
   useEffect(() => {
     if (mode !== 'present') return;
 
-    const el = presentRef.current;
-    if (el && !window.document.fullscreenElement) {
-      el.requestFullscreen?.({
-        navigationUI: 'hide'
-      }).catch((err) => {
-        console.warn('Fullscreen non disponible:', err);
-      });
-    }
-
     const onKeyDown = (e: KeyboardEvent) => {
+      // En présentation : SEULEMENT ESC pour quitter, et navigation clavier
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        void exitPresentation();
+        setMode('edit');
         return;
       }
+      // Navigation entre les slides
       if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
         e.stopPropagation();
@@ -952,6 +937,7 @@ export default function PointEditor() {
       }
     };
 
+    // Bloquer le clic droit en mode présentation
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -1042,7 +1028,6 @@ export default function PointEditor() {
   if (mode === 'present') {
     return (
       <div 
-        ref={presentRef} 
         className="fixed inset-0 z-[9999] bg-black overflow-hidden"
         style={{ 
           width: '100vw',
