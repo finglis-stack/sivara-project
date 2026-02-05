@@ -545,7 +545,7 @@ export default function PointEditor() {
     const slide: PointSlide = {
       id: crypto.randomUUID(),
       name: `Slide ${point.slides.length + 1}`,
-      background: { type: 'solid', color: '#0B1220' },
+      background: { type: 'solid', color: '#000000' },
       elements: [],
     };
     const next = { ...point, slides: [...point.slides, slide] };
@@ -1127,88 +1127,15 @@ export default function PointEditor() {
 
   // --- MODE ÉDITION: PLEIN ÉCRAN AVEC PANNEAUX FLOTTANTS ---
   return (
-    <div className="fixed inset-0 bg-[#F3F4F6] overflow-hidden">
-      {/* Barre d'outils en haut */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm">
-        <div className="px-4 py-2">
-          <div className="flex items-center justify-between max-w-full">
-            <div className="flex items-center gap-3 flex-1 overflow-hidden">
-              <Button variant="ghost" size="icon" onClick={() => navigate('/?app=docs')}>
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-
-              <div className="h-8 w-8 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0">
-                <Presentation className="h-4 w-4" />
-              </div>
-
-              <Input
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  scheduleSave();
-                }}
-                className="text-base font-medium border-0 focus-visible:ring-0 px-2 max-w-[300px] bg-transparent truncate"
-                readOnly={!isOwner}
-              />
-
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span className="px-2 py-1 rounded-md bg-gray-100 border border-gray-200">{permission === 'write' ? 'Édition' : 'Lecture'}</span>
-                <span className="px-2 py-1 rounded-md bg-gray-100 border border-gray-200">Chiffré</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                variant="outline"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setMode('present');
-                }}
-                className="gap-2"
-              >
-                <Play className="h-4 w-4" /> Présenter
-              </Button>
-
-              {permission === 'write' && (
-                <Button onClick={manualSave} className="bg-gray-900 hover:bg-black text-white gap-2">
-                  <Save className="h-4 w-4" /> Sauver
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {isEditable && (
-          <div className="border-t border-gray-200 bg-[#F8F9FA] px-4 py-2">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <Button variant="outline" size="sm" onClick={addSlide} className="gap-2">
-                <Plus className="h-4 w-4" /> Nouvelle page
-              </Button>
-              <Separator orientation="vertical" className="h-6" />
-              <Button variant="outline" size="sm" onClick={addText} className="gap-2">
-                <Type className="h-4 w-4" /> Texte
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowImageDialog(true)} className="gap-2">
-                <ImageIcon className="h-4 w-4" /> Image
-              </Button>
-              <Button variant="outline" size="sm" onClick={addButton} className="gap-2">
-                <SquareArrowOutUpRight className="h-4 w-4" /> Bouton (lien)
-              </Button>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {/* Canvas plein écran */}
-      <div className="absolute inset-0 pt-[100px] flex items-center justify-center p-8">
+    <div className="fixed inset-0 bg-black overflow-hidden">
+      {/* Canvas plein écran - prend tout l'espace */}
+      <div className="absolute inset-0 flex items-center justify-center">
         <div
           data-point-canvas="1"
-          className="relative bg-white rounded-xl shadow-2xl overflow-hidden"
+          className="relative bg-white overflow-hidden"
           style={{ 
-            width: '100%',
-            maxWidth: '1600px',
-            aspectRatio: '16/9',
+            width: '100vw',
+            height: '100vh',
             backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000'
           }}
           onPointerMove={onElementPointerMove}
@@ -1421,9 +1348,80 @@ export default function PointEditor() {
         </div>
       </div>
 
-      {/* Panneau flottant: Slides */}
+      {/* Barre d'outils flottante en haut */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur-md rounded-xl shadow-2xl border border-white/20">
+        <div className="px-4 py-2">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/?app=docs')}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+
+            <div className="h-8 w-8 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0">
+              <Presentation className="h-4 w-4" />
+            </div>
+
+            <Input
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                scheduleSave();
+              }}
+              className="text-base font-medium border-0 focus-visible:ring-0 px-2 w-64 bg-transparent truncate"
+              readOnly={!isOwner}
+            />
+
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span className="px-2 py-1 rounded-md bg-gray-100/80 border border-gray-200">{permission === 'write' ? 'Édition' : 'Lecture'}</span>
+            </div>
+
+            <div className="w-px h-6 bg-gray-300" />
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="outline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMode('present');
+                }}
+                className="gap-2"
+              >
+                <Play className="h-4 w-4" /> Présenter
+              </Button>
+
+              {permission === 'write' && (
+                <Button onClick={manualSave} className="bg-gray-900 hover:bg-black text-white gap-2">
+                  <Save className="h-4 w-4" /> Sauver
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {isEditable && (
+          <div className="border-t border-gray-200/50 bg-white/80 px-4 py-2">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <Button variant="outline" size="sm" onClick={addSlide} className="gap-2">
+                <Plus className="h-4 w-4" /> Nouvelle page
+              </Button>
+              <div className="w-px h-6 bg-gray-300" />
+              <Button variant="outline" size="sm" onClick={addText} className="gap-2">
+                <Type className="h-4 w-4" /> Texte
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowImageDialog(true)} className="gap-2">
+                <ImageIcon className="h-4 w-4" /> Image
+              </Button>
+              <Button variant="outline" size="sm" onClick={addButton} className="gap-2">
+                <SquareArrowOutUpRight className="h-4 w-4" /> Bouton (lien)
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Panneau flottant: Slides - Translucide */}
       <div
-        className="fixed z-40 bg-white rounded-lg shadow-xl border border-gray-200"
+        className="fixed z-40 bg-white/80 backdrop-blur-md rounded-lg shadow-2xl border border-white/20"
         style={{
           left: `${panelPositions.slides.x}px`,
           top: `${panelPositions.slides.y}px`,
@@ -1431,7 +1429,7 @@ export default function PointEditor() {
         }}
       >
         <div
-          className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-move rounded-t-lg"
+          className="flex items-center justify-between px-3 py-2 bg-white/50 border-b border-white/20 cursor-move rounded-t-lg"
           onMouseDown={(e) => startPanelDrag('slides', e)}
         >
           <span className="text-sm font-semibold text-gray-900">Pages</span>
@@ -1464,8 +1462,8 @@ export default function PointEditor() {
                     onClick={() => gotoSlide(s.id)}
                     className={`w-full text-left rounded-lg border px-3 py-2 transition-all cursor-pointer ${
                       active 
-                        ? 'bg-orange-50 border-orange-200 ring-2 ring-orange-300' 
-                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                        ? 'bg-orange-50/90 border-orange-200 ring-2 ring-orange-300' 
+                        : 'bg-white/60 border-gray-200/50 hover:bg-white/80'
                     } ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'border-orange-400 border-dashed' : ''}`}
                   >
                     <div className="flex items-center justify-between">
@@ -1511,9 +1509,9 @@ export default function PointEditor() {
         )}
       </div>
 
-      {/* Panneau flottant: Propriétés */}
+      {/* Panneau flottant: Propriétés - Translucide */}
       <div
-        className="fixed z-40 bg-white rounded-lg shadow-xl border border-gray-200"
+        className="fixed z-40 bg-white/80 backdrop-blur-md rounded-lg shadow-2xl border border-white/20"
         style={{
           left: `${panelPositions.properties.x}px`,
           top: `${panelPositions.properties.y}px`,
@@ -1523,7 +1521,7 @@ export default function PointEditor() {
         }}
       >
         <div
-          className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-move rounded-t-lg sticky top-0 bg-opacity-95"
+          className="flex items-center justify-between px-3 py-2 bg-white/50 border-b border-white/20 cursor-move rounded-t-lg sticky top-0 bg-opacity-95"
           onMouseDown={(e) => startPanelDrag('properties', e)}
         >
           <span className="text-sm font-semibold text-gray-900">Propriétés</span>
@@ -1554,7 +1552,7 @@ export default function PointEditor() {
                 <Select
                   value={activeSlide.background.type}
                   onValueChange={(v: any) => {
-                    if (v === 'solid') updateSlide(activeSlide.id, { background: { type: 'solid', color: '#0B1220' } });
+                    if (v === 'solid') updateSlide(activeSlide.id, { background: { type: 'solid', color: '#000000' } });
                     if (v === 'image') updateSlide(activeSlide.id, { background: { type: 'image', url: '' } });
                     if (v === 'youtube') updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: '' } });
                   }}
