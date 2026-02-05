@@ -685,6 +685,70 @@ export default function PointEditor() {
   } | null>(null);
   const dragChangedRef = useRef(false);
 
+  // Guides d'alignement (snap)
+  const [snapGuides, setSnapGuides] = useState<{
+    vertical: number | null;
+    horizontal: number | null;
+  }>({ vertical: null, horizontal: null });
+
+  const SNAP_THRESHOLD = 0.02; // 2% de la taille du canvas
+
+  const findSnapPosition = (
+    targetX: number,
+    targetY: number,
+    targetW: number,
+    targetH: number,
+    elements: PointElement[],
+    excludeId: string
+  ) => {
+    let snapX: number | null = null;
+    let snapY: number | null = null;
+
+    const targetCenterX = targetX + targetW / 2;
+    const targetCenterY = targetY + targetH / 2;
+    const targetRight = targetX + targetW;
+    const targetBottom = targetY + targetH;
+
+    for (const el of elements) {
+      if (el.id === excludeId) continue;
+
+      const elCenterX = el.x + el.w / 2;
+      const elCenterY = el.y + el.h / 2;
+      const elRight = el.x + el.w;
+      const elBottom = el.y + el.h;
+
+      // Alignements horizontaux (X)
+      // Gauche avec gauche
+      if (Math.abs(targetX - el.x) < SNAP_THRESHOLD) snapX = el.x;
+      // Droite avec droite
+      if (Math.abs(targetRight - elRight) < SNAP_THRESHOLD) snapX = elRight - targetW;
+      // Centre avec centre
+      if (Math.abs(targetCenterX - elCenterX) < SNAP_THRESHOLD) snapX = elCenterX - targetW / 2;
+      // Gauche avec droite
+      if (Math.abs(targetX - elRight) < SNAP_THRESHOLD) snapX = elRight;
+      // Droite avec gauche
+      if (Math.abs(targetRight - el.x) < SNAP_THRESHOLD) snapX = el.x - targetW;
+
+      // Alignements verticaux (Y)
+      // Haut avec haut
+      if (Math.abs(targetY - el.y) < SNAP_THRESHOLD) snapY = el.y;
+      // Bas avec bas
+      if (Math.abs(targetBottom - elBottom) < SNAP_THRESHOLD) snapY = elBottom - targetH;
+      // Centre avec centre
+      if (Math.abs(targetCenterY - elCenterY) < SNAP_THRESHOLD) snapY = elCenterY - targetH / 2;
+      // Haut avec bas
+      if (Math.abs(targetY - elBottom) < SNAP_THRESHOLD) snapY = elBottom;
+      // Bas avec haut
+      if (Math.abs(targetBottom - el.y) < SNAP_THRESHOLD) snapY = el.y - targetH;
+    }
+
+    // Alignements avec le centre du canvas
+    if (Math.abs(targetCenterX - 0.5) < SNAP_THRESHOLD) snapX = 0.5 - targetW / 2;
+    if (Math.abs(targetCenterY - 0.5) < SNAP_THRESHOLD) snapY = 0.5 - targetH / 2;
+
+    return { snapX, snapY };
+  };
+
   const onElementPointerDown = (e: React.PointerEvent, slideId: string, elementId: string) => {
     if (mode !== 'edit' || permission !== 'write') return;
     if (!point) return;
@@ -729,8 +793,23 @@ export default function PointEditor() {
     const nextY = clamp01(dr.originY + dy);
 
     // Keep within canvas
-    const clampedX = clamp01(Math.min(nextX, 1 - el.w));
-    const clampedY = clamp01(Math.min(nextY, 1 - el.h));
+    let clampedX = clamp01(Math.min(nextX, 1 - el.w));
+    let clampedY = clamp01(Math.min(nextY, 1 - el.h));
+
+    // Appliquer le snap
+    const { snapX, snapY } = findSnapPosition(clampedX, clampedY, el.w, el.h, slide.elements, el.id);
+    
+    if (snapX !== null) clampedX = snapX;
+    if (snapY !== null) clampedY = snapY;
+
+    // Mettre à jour les guides visuels
+    const elCenterX = clampedX + el.w / 2;
+    const elCenterY = clampedY + el.h / 2;
+    
+    setSnapGuides({
+      vertical: snapX !== null ? elCenterX : null,
+      horizontal: snapY !== null ? elCenterY : null,
+    });
 
     dragChangedRef.current = true;
     updateElement(dr.slideId, dr.elementId, { x: clampedX, y: clampedY } as any, { pushHistory: false });
@@ -738,6 +817,7 @@ export default function PointEditor() {
 
   const onElementPointerUp = () => {
     dragRef.current = null;
+    setSnapGuides({ vertical: null, horizontal: null });
     if (dragChangedRef.current && point) {
       pushHistory(point);
       dragChangedRef.current = false;
@@ -813,8 +893,18 @@ export default function PointEditor() {
       }
     };
 
+    // Bloquer le clic droit en mode présentation
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
     window.addEventListener('keydown', onKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+    window.addEventListener('contextmenu', onContextMenu, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+      window.removeEventListener('contextmenu', onContextMenu, { capture: true });
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, point, activeSlideId]);
 
@@ -904,69 +994,75 @@ export default function PointEditor() {
           top: 0,
           left: 0,
           right: 0,
-          bottom: 0
+          bottom: 0,
+          backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000'
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
         }}
       >
-        <div
-          data-point-canvas="1"
-          className="absolute inset-0 overflow-hidden relative"
-          style={{ backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000' }}
-        >
-          {renderSlideBackground(activeSlide.background)}
-          <div className="absolute inset-0 bg-black/35" />
+        {renderSlideBackground(activeSlide.background)}
+        <div className="absolute inset-0 bg-black/35" />
 
-          {/* Conteneur 16:9 centré */}
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-full max-w-[1200px] aspect-video relative">
-              {activeSlide.elements.map((el) => {
-                const style: React.CSSProperties = {
-                  position: 'absolute',
-                  left: `${el.x * 100}%`,
-                  top: `${el.y * 100}%`,
-                  width: `${el.w * 100}%`,
-                  height: `${el.h * 100}%`,
-                };
+        {/* Conteneur 16:9 centré */}
+        <div className="absolute inset-0 flex items-center justify-center p-4">
+          <div className="w-full max-w-[1200px] aspect-video relative">
+            {activeSlide.elements.map((el) => {
+              const style: React.CSSProperties = {
+                position: 'absolute',
+                left: `${el.x * 100}%`,
+                top: `${el.y * 100}%`,
+                width: `${el.w * 100}%`,
+                height: `${el.h * 100}%`,
+              };
 
-                return (
-                  <div key={el.id} style={style} className="select-none">
-                    {el.type === 'text' ? (
-                      <div
-                        className="w-full h-full flex items-center"
-                        style={{
-                          color: el.style.color,
-                          fontSize: el.style.fontSize,
-                          fontWeight: el.style.fontWeight as any,
-                          fontFamily: el.style.fontFamily || 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
-                          justifyContent:
-                            el.style.align === 'left' ? 'flex-start' : el.style.align === 'right' ? 'flex-end' : 'center',
-                          textAlign: el.style.align,
-                          whiteSpace: 'pre-wrap',
-                        }}
-                      >
-                        {el.text}
-                      </div>
-                    ) : el.type === 'image' ? (
-                      <div className="w-full h-full overflow-hidden" style={{ borderRadius: el.radius }}>
-                        <img
-                          src={el.src}
-                          alt=""
-                          className={`w-full h-full ${el.fit === 'cover' ? 'object-cover' : 'object-contain'} pointer-events-none`}
-                        />
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="w-full h-full font-semibold border border-white/10 shadow-sm"
-                        style={{ background: el.style.bg, color: el.style.fg, borderRadius: el.style.radius }}
-                        onClick={() => handleButtonClick(el.targetSlideId)}
-                      >
-                        {el.label}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+              return (
+                <div key={el.id} style={style} className="select-none" onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}>
+                  {el.type === 'text' ? (
+                    <div
+                      className="w-full h-full flex items-center"
+                      style={{
+                        color: el.style.color,
+                        fontSize: el.style.fontSize,
+                        fontWeight: el.style.fontWeight as any,
+                        fontFamily: el.style.fontFamily || 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+                        justifyContent:
+                          el.style.align === 'left' ? 'flex-start' : el.style.align === 'right' ? 'flex-end' : 'center',
+                        textAlign: el.style.align,
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {el.text}
+                    </div>
+                  ) : el.type === 'image' ? (
+                    <div className="w-full h-full overflow-hidden" style={{ borderRadius: el.radius }}>
+                      <img
+                        src={el.src}
+                        alt=""
+                        className={`w-full h-full ${el.fit === 'cover' ? 'object-cover' : 'object-contain'} pointer-events-none`}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="w-full h-full font-semibold border border-white/10 shadow-sm"
+                      style={{ background: el.style.bg, color: el.style.fg, borderRadius: el.style.radius }}
+                      onClick={() => handleButtonClick(el.targetSlideId)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                    >
+                      {el.label}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1007,7 +1103,11 @@ export default function PointEditor() {
             <div className="flex items-center gap-2 shrink-0">
               <Button
                 variant="outline"
-                onClick={() => setMode('present')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMode('present');
+                }}
                 className="gap-2"
               >
                 <Play className="h-4 w-4" /> Présenter
@@ -1109,9 +1209,27 @@ export default function PointEditor() {
             onPointerCancel={onElementPointerUp}
             onPointerLeave={onElementPointerUp}
             onClick={() => isEditable && setSelected(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
             {renderSlideBackground(activeSlide.background)}
             <div className="absolute inset-0 bg-black/35" />
+
+            {/* Guides d'alignement visuels */}
+            {snapGuides.vertical !== null && (
+              <div
+                className="absolute top-0 bottom-0 w-0.5 bg-orange-500 pointer-events-none z-50"
+                style={{ left: `${snapGuides.vertical * 100}%` }}
+              />
+            )}
+            {snapGuides.horizontal !== null && (
+              <div
+                className="absolute left-0 right-0 h-0.5 bg-orange-500 pointer-events-none z-50"
+                style={{ top: `${snapGuides.horizontal * 100}%` }}
+              />
+            )}
 
             {activeSlide.elements.map((el) => {
               const isSelected = selected?.slideId === activeSlide.id && selected?.elementId === el.id;
@@ -1130,6 +1248,12 @@ export default function PointEditor() {
                   className={`group select-none relative z-10 ${isEditable ? 'cursor-move' : ''}`}
                   onPointerDown={(e) => onElementPointerDown(e, activeSlide.id, el.id)}
                   onClick={(e) => handleSelectElement(e, activeSlide.id, el.id)}
+                  onContextMenu={(e) => {
+                    if (!isEditable) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  }}
                 >
                   <div
                     className={`w-full h-full ${
