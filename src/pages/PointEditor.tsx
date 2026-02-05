@@ -38,7 +38,7 @@ import {
 type SlideBackground =
   | { type: 'solid'; color: string }
   | { type: 'image'; url: string }
-  | { type: 'semiImage'; url: string; color: string }
+  | { type: 'semiImage'; url: string; color: string; posY: number } // posY: 0..100
   | { type: 'youtube'; videoId: string };
 
 type PointElementBase = {
@@ -167,7 +167,12 @@ const safeJsonParse = (value: string): PointDocV1 | null => {
         if (s?.background?.type === 'solid') bg = { type: 'solid', color: s.background.color || '#0B1220' };
         else if (s?.background?.type === 'image') bg = { type: 'image', url: s.background.url || '' };
         else if (s?.background?.type === 'semiImage')
-          bg = { type: 'semiImage', url: s.background.url || '', color: s.background.color || '#0B1220' };
+          bg = {
+            type: 'semiImage',
+            url: s.background.url || '',
+            color: s.background.color || '#0B1220',
+            posY: typeof s.background.posY === 'number' ? s.background.posY : 50,
+          };
         else if (s?.background?.type === 'youtube') bg = { type: 'youtube', videoId: s.background.videoId || '' };
 
         const elements: PointElement[] = Array.isArray(s?.elements)
@@ -943,17 +948,17 @@ export default function PointEditor() {
     if (bg.type === 'semiImage') {
       if (!bg.url) return null;
       return (
-        <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0">
           <div
             className="absolute inset-x-0 top-0 h-1/3"
             style={{
               backgroundImage: `url(${bg.url})`,
               backgroundSize: 'cover',
-              backgroundPosition: 'center',
+              backgroundPosition: `center ${clamp100(bg.posY)}%`,
             }}
           />
           <div
-            className="absolute inset-x-0 top-0 h-1/3"
+            className="absolute inset-x-0 top-0 h-1/3 pointer-events-none"
             style={{
               backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0) 55%, ${bg.color} 100%)`,
             }}
@@ -1023,6 +1028,56 @@ export default function PointEditor() {
   };
 
   const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+  const clamp100 = (v: number) => Math.min(100, Math.max(0, v));
+
+  // Drag vertical pour placer l'image semi-image
+  const bgDragRef = useRef<{ startClientY: number; startPosY: number; rect: DOMRect } | null>(null);
+  const bgDragChangedRef = useRef(false);
+
+  const onSemiImagePointerDown = (e: React.PointerEvent, bg: Extract<SlideBackground, { type: 'semiImage' }>) => {
+    if (mode !== 'edit' || permission !== 'write') return;
+    if (!activeSlide) return;
+
+    e.stopPropagation();
+    bgDragChangedRef.current = false;
+
+    const canvas = (e.currentTarget as HTMLElement).closest('[data-point-canvas="1"]') as HTMLElement | null;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+
+    bgDragRef.current = {
+      startClientY: e.clientY,
+      startPosY: bg.posY,
+      rect,
+    };
+
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onSemiImagePointerMove = (e: React.PointerEvent) => {
+    const dr = bgDragRef.current;
+    if (!dr) return;
+    if (!activeSlide) return;
+
+    const bg = activeSlide.background;
+    if (bg.type !== 'semiImage') return;
+
+    // Le drag se fait dans la zone top 1/3 (approx). On mappe deltaY en pourcentage.
+    const thirdH = Math.max(1, dr.rect.height / 3);
+    const deltaPct = ((e.clientY - dr.startClientY) / thirdH) * 100;
+    const nextPosY = clamp100(dr.startPosY + deltaPct);
+
+    bgDragChangedRef.current = true;
+    updateSlide(activeSlide.id, { background: { ...bg, posY: nextPosY } }, { pushHistory: false });
+  };
+
+  const onSemiImagePointerUp = () => {
+    bgDragRef.current = null;
+    if (bgDragChangedRef.current && point) {
+      pushHistory(point);
+      bgDragChangedRef.current = false;
+    }
+  };
 
   if (isLoading || authLoading) {
     return (
@@ -1054,10 +1109,22 @@ export default function PointEditor() {
             height: '100vh',
             backgroundColor: canvasBgColor,
           }}
-          onPointerMove={mode === 'edit' ? onElementPointerMove : undefined}
-          onPointerUp={mode === 'edit' ? onElementPointerUp : undefined}
-          onPointerCancel={mode === 'edit' ? onElementPointerUp : undefined}
-          onPointerLeave={mode === 'edit' ? onElementPointerUp : undefined}
+          onPointerMove={(e) => {
+            if (mode === 'edit') onElementPointerMove(e);
+            onSemiImagePointerMove(e);
+          }}
+          onPointerUp={() => {
+            if (mode === 'edit') onElementPointerUp();
+            onSemiImagePointerUp();
+          }}
+          onPointerCancel={() => {
+            if (mode === 'edit') onElementPointerUp();
+            onSemiImagePointerUp();
+          }}
+          onPointerLeave={() => {
+            if (mode === 'edit') onElementPointerUp();
+            onSemiImagePointerUp();
+          }}
           onClick={() => mode === 'edit' && isEditable && setSelected(null)}
           onContextMenu={(e) => {
             if (mode === 'present') {
@@ -1068,6 +1135,19 @@ export default function PointEditor() {
         >
           {renderSlideBackground(activeSlide.background)}
           <div className="absolute inset-0 bg-black/35" />
+
+          {/* Zone draggable pour semi-image (top 1/3) - mode édition seulement */}
+          {mode === 'edit' && permission === 'write' && activeSlide.background.type === 'semiImage' && activeSlide.background.url && (
+            <div
+              className="absolute inset-x-0 top-0 h-1/3 z-[5] cursor-ns-resize"
+              onPointerDown={(e) =>
+                onSemiImagePointerDown(e, activeSlide.background as Extract<SlideBackground, { type: 'semiImage' }>)}
+              title="Glisser vers le haut/bas pour positionner l'image"
+              style={{
+                background: 'transparent',
+              }}
+            />
+          )}
 
           {/* Guides d'alignement visuels - seulement en mode édition */}
           {mode === 'edit' && snapGuides.vertical !== null && (
@@ -1559,6 +1639,10 @@ export default function PointEditor() {
                                 : activeSlide.background.type === 'semiImage'
                                   ? activeSlide.background.color
                                   : '#000000',
+                            posY:
+                              activeSlide.background.type === 'semiImage'
+                                ? activeSlide.background.posY
+                                : 50,
                           },
                         });
                       if (v === 'youtube') updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: '' } });
@@ -1612,21 +1696,47 @@ export default function PointEditor() {
                 )}
 
                 {activeSlide.background.type === 'semiImage' && (
-                  <div className="space-y-2">
-                    <Label className="text-white/80">Semi image</Label>
-                    <Input
-                      value={activeSlide.background.url}
-                      onChange={(e) => {
-                        const bg = activeSlide.background;
-                        if (bg.type !== 'semiImage') return;
-                        updateSlide(activeSlide.id, {
-                          background: { type: 'semiImage', url: e.target.value, color: bg.color },
-                        });
-                      }}
-                      disabled={!isEditable}
-                      placeholder="URL de l'image (haut 1/3)"
-                      className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
-                    />
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-white/80">Semi image</Label>
+                      <Input
+                        value={activeSlide.background.url}
+                        onChange={(e) => {
+                          const bg = activeSlide.background;
+                          if (bg.type !== 'semiImage') return;
+                          updateSlide(activeSlide.id, {
+                            background: { type: 'semiImage', url: e.target.value, color: bg.color, posY: bg.posY },
+                          });
+                        }}
+                        disabled={!isEditable}
+                        placeholder="URL de l'image (haut 1/3)"
+                        className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-white/80">Position verticale (image)</Label>
+                      <Slider
+                        value={[activeSlide.background.posY]}
+                        min={0}
+                        max={100}
+                        step={1}
+                        onValueChange={(v) => {
+                          const bg = activeSlide.background;
+                          if (bg.type !== 'semiImage') return;
+                          updateSlide(activeSlide.id, { background: { ...bg, posY: v[0] } }, { pushHistory: false });
+                        }}
+                        onValueCommit={(v) => {
+                          const bg = activeSlide.background;
+                          if (bg.type !== 'semiImage') return;
+                          updateSlide(activeSlide.id, { background: { ...bg, posY: v[0] } });
+                        }}
+                        disabled={!isEditable}
+                      />
+                      <div className="text-xs text-white/60">{Math.round(activeSlide.background.posY)}%</div>
+                      <div className="text-xs text-white/50">Tu peux aussi glisser directement l'image sur le canvas (zone du haut).</div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-white/70 text-xs">Couleur (fondu)</Label>
@@ -1636,9 +1746,7 @@ export default function PointEditor() {
                           onChange={(e) => {
                             const bg = activeSlide.background;
                             if (bg.type !== 'semiImage') return;
-                            updateSlide(activeSlide.id, {
-                              background: { type: 'semiImage', url: bg.url, color: e.target.value },
-                            });
+                            updateSlide(activeSlide.id, { background: { ...bg, color: e.target.value } });
                           }}
                           disabled={!isEditable}
                           className="w-full p-1 bg-white/5 border-white/10"
@@ -1651,15 +1759,14 @@ export default function PointEditor() {
                           onChange={(e) => {
                             const bg = activeSlide.background;
                             if (bg.type !== 'semiImage') return;
-                            updateSlide(activeSlide.id, {
-                              background: { type: 'semiImage', url: bg.url, color: e.target.value },
-                            });
+                            updateSlide(activeSlide.id, { background: { ...bg, color: e.target.value } });
                           }}
                           disabled={!isEditable}
                           className="bg-white/5 border-white/10 !text-white"
                         />
                       </div>
                     </div>
+
                     <div className="text-xs text-white/50">
                       L'image occupe le haut (1/3) et se fond vers cette couleur.
                     </div>
