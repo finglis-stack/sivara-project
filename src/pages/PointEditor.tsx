@@ -32,6 +32,7 @@ import {
   Type,
   Upload,
   Minus,
+  X,
 } from 'lucide-react';
 
 type SlideBackground =
@@ -218,6 +219,9 @@ export default function PointEditor() {
   // Curseur : visible par défaut, masqué après 2s d'inactivité en mode présentation
   const [isCursorHidden, setIsCursorHidden] = useState(false);
   const cursorHideTimerRef = useRef<number | null>(null);
+
+  // Aide F11 (plein écran) : visible à chaque entrée en mode présentation, masquable via X
+  const [showF11Hint, setShowF11Hint] = useState(false);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const titleRef = useRef(title);
@@ -439,6 +443,26 @@ export default function PointEditor() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isEditable, selectedElement, activeSlide, activeSlideId, point]);
+
+  // Toujours reconnaître Échap en mode présentation (même si un élément a le focus)
+  useEffect(() => {
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (mode !== 'present') return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setMode('edit');
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDownCapture, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDownCapture, { capture: true });
+  }, [mode]);
+
+  // Ré-afficher la bulle à chaque entrée en mode présentation
+  useEffect(() => {
+    if (mode === 'present') setShowF11Hint(true);
+  }, [mode]);
 
   const saveNow = async () => {
     if (!id || !point || !docRow) return;
@@ -900,42 +924,6 @@ export default function PointEditor() {
     setMode('edit');
   };
 
-  useEffect(() => {
-    if (mode !== 'present') {
-      setIsCursorHidden(false);
-      if (cursorHideTimerRef.current) {
-        window.clearTimeout(cursorHideTimerRef.current);
-        cursorHideTimerRef.current = null;
-      }
-      return;
-    }
-
-    const armHideTimer = () => {
-      if (cursorHideTimerRef.current) window.clearTimeout(cursorHideTimerRef.current);
-      cursorHideTimerRef.current = window.setTimeout(() => {
-        setIsCursorHidden(true);
-      }, 2000);
-    };
-
-    const onPointerMove = () => {
-      setIsCursorHidden(false);
-      armHideTimer();
-    };
-
-    // Au moment où on entre en présentation
-    setIsCursorHidden(false);
-    armHideTimer();
-
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
-    return () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      if (cursorHideTimerRef.current) {
-        window.clearTimeout(cursorHideTimerRef.current);
-        cursorHideTimerRef.current = null;
-      }
-    };
-  }, [mode]);
-
   const renderSlideBackground = (bg: SlideBackground) => {
     if (bg.type === 'image' && bg.url) {
       return (
@@ -1237,6 +1225,27 @@ export default function PointEditor() {
           })}
         </div>
       </div>
+
+      {/* Bulle d'aide plein écran (F11) - uniquement en mode présentation */}
+      {mode === 'present' && showF11Hint && (
+        <div className="fixed left-4 top-4 z-[60]">
+          <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/55 backdrop-blur-md px-3 py-2 shadow-lg">
+            <div className="text-sm text-white/90">
+              <div className="font-medium">Plein écran</div>
+              <div className="text-white/70">Appuie sur <span className="font-semibold text-white/90">F11</span> pour activer/désactiver.</div>
+              <div className="text-white/60">Échap = quitter la présentation.</div>
+            </div>
+            <button
+              type="button"
+              className="mt-0.5 rounded-md p-1 text-white/70 hover:text-white hover:bg-white/10"
+              onClick={() => setShowF11Hint(false)}
+              aria-label="Fermer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Barre d'outils flottante en haut - masquée en mode présentation */}
       {mode === 'edit' && (
