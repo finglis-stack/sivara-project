@@ -214,9 +214,6 @@ export default function PointEditor() {
   const [selected, setSelected] = useState<SelectedElement>(null);
 
   const [mode, setMode] = useState<'edit' | 'present'>('edit');
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const presentRef = useRef<HTMLDivElement | null>(null);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const titleRef = useRef(title);
@@ -900,20 +897,6 @@ export default function PointEditor() {
   };
 
   useEffect(() => {
-    const onFsChange = () => {
-      const fs = Boolean(window.document.fullscreenElement);
-      setIsFullscreen(fs);
-      if (mode === 'present' && !fs) {
-        setMode('edit');
-      }
-    };
-
-    window.document.addEventListener('fullscreenchange', onFsChange);
-    onFsChange();
-    return () => window.document.removeEventListener('fullscreenchange', onFsChange);
-  }, [mode]);
-
-  useEffect(() => {
     if (mode !== 'present') return;
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1255,10 +1238,15 @@ export default function PointEditor() {
 
       {/* Barre d'outils flottante en haut - masquée en mode présentation */}
       {mode === 'edit' && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900 backdrop-blur-md rounded-xl shadow-2xl border border-gray-700">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 backdrop-blur-md rounded-xl shadow-2xl border border-white/10">
           <div className="px-4 py-2">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => navigate('/?app=docs')} className="text-gray-300 hover:text-white hover:bg-gray-800">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate('/?app=docs')}
+                className="text-white/80 hover:text-white hover:bg-white/10"
+              >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
 
@@ -1272,15 +1260,17 @@ export default function PointEditor() {
                   setTitle(e.target.value);
                   scheduleSave();
                 }}
-                className="text-base font-medium border-0 focus-visible:ring-0 px-2 w-64 bg-transparent truncate text-white"
+                className="text-base font-medium border-0 focus-visible:ring-0 px-2 w-64 bg-transparent truncate text-white placeholder:text-white/40"
                 readOnly={!isOwner}
               />
 
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <span className="px-2 py-1 rounded-md bg-gray-800 border border-gray-700">{permission === 'write' ? 'Édition' : 'Lecture'}</span>
+              <div className="flex items-center gap-2 text-xs text-white/60">
+                <span className="px-2 py-1 rounded-md bg-white/10 border border-white/15 text-white/80">
+                  {permission === 'write' ? 'Édition' : 'Lecture'}
+                </span>
               </div>
 
-              <div className="w-px h-6 bg-gray-700" />
+              <div className="w-px h-6 bg-white/10" />
 
               <div className="flex items-center gap-2 shrink-0">
                 <Button
@@ -1290,7 +1280,7 @@ export default function PointEditor() {
                     e.stopPropagation();
                     setMode('present');
                   }}
-                  className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700"
+                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
                 >
                   <Play className="h-4 w-4" /> Présenter
                 </Button>
@@ -1305,19 +1295,39 @@ export default function PointEditor() {
           </div>
 
           {isEditable && (
-            <div className="border-t border-gray-700 bg-gray-900 px-4 py-2">
+            <div className="border-t border-white/10 bg-black/40 px-4 py-2">
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                <Button variant="outline" size="sm" onClick={addSlide} className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addSlide}
+                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                >
                   <Plus className="h-4 w-4" /> Nouvelle page
                 </Button>
-                <div className="w-px h-6 bg-gray-700" />
-                <Button variant="outline" size="sm" onClick={addText} className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
+                <div className="w-px h-6 bg-white/10" />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addText}
+                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                >
                   <Type className="h-4 w-4" /> Texte
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setShowImageDialog(true)} className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowImageDialog(true)}
+                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                >
                   <ImageIcon className="h-4 w-4" /> Image
                 </Button>
-                <Button variant="outline" size="sm" onClick={addButton} className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addButton}
+                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                >
                   <SquareArrowOutUpRight className="h-4 w-4" /> Bouton (lien)
                 </Button>
               </div>
@@ -1329,7 +1339,7 @@ export default function PointEditor() {
       {/* Panneau flottant: Slides - masqué en mode présentation */}
       {mode === 'edit' && (
         <div
-          className="fixed z-40 bg-gray-900 backdrop-blur-md rounded-lg shadow-2xl border border-gray-700"
+          className="fixed z-40 bg-black/55 backdrop-blur-md rounded-lg shadow-2xl border border-white/10"
           style={{
             left: `${panelPositions.slides.x}px`,
             top: `${panelPositions.slides.y}px`,
@@ -1337,15 +1347,15 @@ export default function PointEditor() {
           }}
         >
           <div
-            className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700 cursor-move rounded-t-lg"
+            className="flex items-center justify-between px-3 py-2 bg-black/35 border-b border-white/10 cursor-move rounded-t-lg"
             onMouseDown={(e) => startPanelDrag('slides', e)}
           >
-            <span className="text-sm font-semibold text-gray-200">Pages</span>
+            <span className="text-sm font-semibold text-white/90">Pages</span>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setPanelPositions(prev => ({ ...prev, slides: { ...prev.slides, collapsed: !prev.slides.collapsed } }))}
-              className="text-gray-400 hover:text-white hover:bg-gray-700"
+              className="text-white/70 hover:text-white hover:bg-white/10"
             >
               {panelPositions.slides.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
             </Button>
@@ -1370,23 +1380,23 @@ export default function PointEditor() {
                       onDragEnd={handleSlideDragEnd}
                       onClick={() => gotoSlide(s.id)}
                       className={`w-full text-left rounded-lg border px-3 py-2 transition-all cursor-pointer ${
-                        active 
-                          ? 'bg-orange-600/20 border-orange-500 ring-2 ring-orange-500' 
-                          : 'bg-gray-800 border-gray-700 hover:bg-gray-700'
+                        active
+                          ? 'bg-orange-500/20 border-orange-400/40 ring-1 ring-orange-400/50'
+                          : 'bg-white/5 border-white/10 hover:bg-white/10'
                       } ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'border-orange-400 border-dashed' : ''}`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           {permission === 'write' && mode === 'edit' && (
-                            <div className="cursor-grab text-gray-500 hover:text-gray-300">
+                            <div className="cursor-grab text-white/40 hover:text-white/70">
                               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
                               </svg>
                             </div>
                           )}
-                          <div className="text-sm font-medium text-gray-200 truncate">{s.name || `Slide ${idx + 1}`}</div>
+                          <div className="text-sm font-medium text-white/90 truncate">{s.name || `Slide ${idx + 1}`}</div>
                         </div>
-                        <div className="text-[11px] text-gray-500 shrink-0">{idx + 1}</div>
+                        <div className="text-[11px] text-white/40 shrink-0">{idx + 1}</div>
                       </div>
                     </div>
                   );
@@ -1400,7 +1410,7 @@ export default function PointEditor() {
                     size="sm"
                     onClick={() => activeSlideId && duplicateSlide(activeSlideId)}
                     disabled={!activeSlideId}
-                    className="bg-gray-800 border-gray-600 text-white hover:bg-gray-700"
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/15"
                   >
                     Dupliquer
                   </Button>
@@ -1409,7 +1419,7 @@ export default function PointEditor() {
                     size="sm"
                     onClick={() => activeSlideId && deleteSlide(activeSlideId)}
                     disabled={!activeSlideId || point.slides.length <= 1}
-                    className="bg-red-900/30 border-red-800 text-red-400 hover:bg-red-900/50 hover:text-red-300"
+                    className="bg-red-500/10 border-red-500/30 text-red-200 hover:bg-red-500/15 hover:text-red-100"
                   >
                     Supprimer
                   </Button>
@@ -1423,7 +1433,7 @@ export default function PointEditor() {
       {/* Panneau flottant: Propriétés - masqué en mode présentation */}
       {mode === 'edit' && (
         <div
-          className="fixed z-40 bg-gray-900 backdrop-blur-md rounded-lg shadow-2xl border border-gray-700"
+          className="fixed z-40 bg-black/55 backdrop-blur-md rounded-lg shadow-2xl border border-white/10"
           style={{
             left: `${panelPositions.properties.x}px`,
             top: `${panelPositions.properties.y}px`,
@@ -1433,15 +1443,15 @@ export default function PointEditor() {
           }}
         >
           <div
-            className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700 cursor-move rounded-t-lg sticky top-0"
+            className="flex items-center justify-between px-3 py-2 bg-black/35 border-b border-white/10 cursor-move rounded-t-lg sticky top-0"
             onMouseDown={(e) => startPanelDrag('properties', e)}
           >
-            <span className="text-sm font-semibold text-gray-200">Propriétés</span>
+            <span className="text-sm font-semibold text-white/90">Propriétés</span>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setPanelPositions(prev => ({ ...prev, properties: { ...prev.properties, collapsed: !prev.properties.collapsed } }))}
-              className="text-gray-400 hover:text-white hover:bg-gray-700"
+              className="text-white/70 hover:text-white hover:bg-white/10"
             >
               {panelPositions.properties.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
             </Button>
@@ -1449,19 +1459,24 @@ export default function PointEditor() {
 
           {!panelPositions.properties.collapsed && (
             <div className="p-4">
-              <div className="text-xs text-gray-500 mb-3">Sélectionnez un élément pour l'éditer.</div>
+              <div className="text-xs text-white/50 mb-3">Sélectionnez un élément pour l'éditer.</div>
 
-              <Separator className="my-3 bg-gray-700" />
+              <Separator className="my-3 bg-white/10" />
 
               {/* Slide properties */}
               <div className="space-y-3 mb-4">
                 <div className="space-y-2">
-                  <Label className="text-gray-300">Nom de page</Label>
-                  <Input value={activeSlide.name} onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })} disabled={!isEditable} className="bg-gray-800 border-gray-700 text-white" />
+                  <Label className="text-white/80">Nom de page</Label>
+                  <Input
+                    value={activeSlide.name}
+                    onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })}
+                    disabled={!isEditable}
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-gray-300">Fond</Label>
+                  <Label className="text-white/80">Fond</Label>
                   <Select
                     value={activeSlide.background.type}
                     onValueChange={(v: any) => {
@@ -1471,10 +1486,10 @@ export default function PointEditor() {
                     }}
                     disabled={!isEditable}
                   >
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectTrigger className="bg-white/5 border-white/10 text-white">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-800 border-gray-700">
+                    <SelectContent className="bg-black/95 border-white/10">
                       <SelectItem value="solid" className="text-white">Couleur</SelectItem>
                       <SelectItem value="image" className="text-white">Image</SelectItem>
                       <SelectItem value="youtube" className="text-white">Vidéo YouTube</SelectItem>
@@ -1484,20 +1499,20 @@ export default function PointEditor() {
 
                 {activeSlide.background.type === 'solid' && (
                   <div className="space-y-2">
-                    <Label className="text-gray-300">Couleur</Label>
+                    <Label className="text-white/80">Couleur</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="color"
                         value={activeSlide.background.color}
                         onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
                         disabled={!isEditable}
-                        className="w-16 p-1 bg-gray-800 border-gray-700"
+                        className="w-16 p-1 bg-white/5 border-white/10"
                       />
                       <Input
                         value={activeSlide.background.color}
                         onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
                         disabled={!isEditable}
-                        className="bg-gray-800 border-gray-700 text-white"
+                        className="bg-white/5 border-white/10 text-white"
                       />
                     </div>
                   </div>
@@ -1505,20 +1520,20 @@ export default function PointEditor() {
 
                 {activeSlide.background.type === 'image' && (
                   <div className="space-y-2">
-                    <Label className="text-gray-300">Image (URL)</Label>
+                    <Label className="text-white/80">Image (URL)</Label>
                     <Input
                       value={activeSlide.background.url}
                       onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'image', url: e.target.value } })}
                       disabled={!isEditable}
                       placeholder="https://..."
-                      className="bg-gray-800 border-gray-700 text-white"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
                     />
                   </div>
                 )}
 
                 {activeSlide.background.type === 'youtube' && (
                   <div className="space-y-2">
-                    <Label className="text-gray-300">Vidéo YouTube (lien)</Label>
+                    <Label className="text-white/80">Vidéo YouTube (lien)</Label>
                     <Input
                       value={activeSlide.background.videoId ? `https://youtu.be/${activeSlide.background.videoId}` : ''}
                       onChange={(e) => {
@@ -1527,24 +1542,24 @@ export default function PointEditor() {
                       }}
                       disabled={!isEditable}
                       placeholder="https://www.youtube.com/watch?v=..."
-                      className="bg-gray-800 border-gray-700 text-white"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
                     />
-                    <div className="text-xs text-gray-500">La vidéo est lue en muet et en boucle.</div>
+                    <div className="text-xs text-white/50">La vidéo est lue en muet et en boucle.</div>
                   </div>
                 )}
               </div>
 
-              <Separator className="my-4 bg-gray-700" />
+              <Separator className="my-4 bg-white/10" />
 
               {selectedElement ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium text-gray-200 capitalize">{selectedElement.type}</div>
+                    <div className="text-sm font-medium text-white/90 capitalize">{selectedElement.type}</div>
                     {isEditable && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="bg-red-900/30 border-red-800 text-red-400 hover:bg-red-900/50 hover:text-red-300"
+                        className="bg-red-500/10 border-red-500/30 text-red-200 hover:bg-red-500/15 hover:text-red-100"
                         onClick={() => deleteElement(activeSlide.id, selectedElement.id)}
                       >
                         Supprimer
@@ -1555,7 +1570,7 @@ export default function PointEditor() {
                   {/* Position & Size */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs text-gray-300">X</Label>
+                      <Label className="text-xs text-white/70">X</Label>
                       <Input
                         type="number"
                         value={Math.round(selectedElement.x * 100)}
@@ -1564,11 +1579,11 @@ export default function PointEditor() {
                           updateElement(activeSlide.id, selectedElement.id, { x: Math.min(v, 1 - selectedElement.w) } as any);
                         }}
                         disabled={!isEditable}
-                        className="bg-gray-800 border-gray-700 text-white"
+                        className="bg-white/5 border-white/10 text-white"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-gray-300">Y</Label>
+                      <Label className="text-xs text-white/70">Y</Label>
                       <Input
                         type="number"
                         value={Math.round(selectedElement.y * 100)}
@@ -1577,11 +1592,11 @@ export default function PointEditor() {
                           updateElement(activeSlide.id, selectedElement.id, { y: Math.min(v, 1 - selectedElement.h) } as any);
                         }}
                         disabled={!isEditable}
-                        className="bg-gray-800 border-gray-700 text-white"
+                        className="bg-white/5 border-white/10 text-white"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-gray-300">Largeur</Label>
+                      <Label className="text-xs text-white/70">Largeur</Label>
                       <Input
                         type="number"
                         value={Math.round(selectedElement.w * 100)}
@@ -1590,11 +1605,11 @@ export default function PointEditor() {
                           updateElement(activeSlide.id, selectedElement.id, { w } as any);
                         }}
                         disabled={!isEditable}
-                        className="bg-gray-800 border-gray-700 text-white"
+                        className="bg-white/5 border-white/10 text-white"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-gray-300">Hauteur</Label>
+                      <Label className="text-xs text-white/70">Hauteur</Label>
                       <Input
                         type="number"
                         value={Math.round(selectedElement.h * 100)}
@@ -1603,7 +1618,7 @@ export default function PointEditor() {
                           updateElement(activeSlide.id, selectedElement.id, { h } as any);
                         }}
                         disabled={!isEditable}
-                        className="bg-gray-800 border-gray-700 text-white"
+                        className="bg-white/5 border-white/10 text-white"
                       />
                     </div>
                   </div>
@@ -1611,7 +1626,7 @@ export default function PointEditor() {
                   {selectedElement.type === 'text' && (
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label className="text-gray-300">Style rapide</Label>
+                        <Label className="text-white/80">Style rapide</Label>
                         <div className="grid grid-cols-2 gap-2">
                           {TEXT_PRESETS.map((preset) => (
                             <Button
@@ -1628,7 +1643,7 @@ export default function PointEditor() {
                                   },
                                 } as any)
                               }
-                              className="text-xs bg-gray-800 border-gray-600 text-white hover:bg-gray-700"
+                              className="text-xs bg-white/10 border-white/20 text-white hover:bg-white/15"
                             >
                               {preset.name}
                             </Button>
@@ -1638,7 +1653,7 @@ export default function PointEditor() {
 
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-2">
-                          <Label className="text-gray-300">Couleur</Label>
+                          <Label className="text-white/80">Couleur</Label>
                           <div className="flex items-center gap-2">
                             <Input
                               type="color"
@@ -1649,7 +1664,7 @@ export default function PointEditor() {
                                 } as any)
                               }
                               disabled={!isEditable}
-                              className="w-16 p-1 bg-gray-800 border-gray-700"
+                              className="w-16 p-1 bg-white/5 border-white/10"
                             />
                             <Input
                               value={selectedElement.style.color}
@@ -1659,12 +1674,12 @@ export default function PointEditor() {
                                 } as any)
                               }
                               disabled={!isEditable}
-                              className="bg-gray-800 border-gray-700 text-white"
+                              className="bg-white/5 border-white/10 text-white"
                             />
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-gray-300">Alignement</Label>
+                          <Label className="text-white/80">Alignement</Label>
                           <Select
                             value={selectedElement.style.align}
                             onValueChange={(v: any) =>
@@ -1674,10 +1689,10 @@ export default function PointEditor() {
                             }
                             disabled={!isEditable}
                           >
-                            <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                            <SelectTrigger className="bg-white/5 border-white/10 text-white">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent className="bg-gray-800 border-gray-700">
+                            <SelectContent className="bg-black/95 border-white/10">
                               <SelectItem value="left" className="text-white">Gauche</SelectItem>
                               <SelectItem value="center" className="text-white">Centre</SelectItem>
                               <SelectItem value="right" className="text-white">Droite</SelectItem>
@@ -1687,7 +1702,7 @@ export default function PointEditor() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-gray-300">Taille</Label>
+                        <Label className="text-white/80">Taille</Label>
                         <Slider
                           value={[selectedElement.style.fontSize]}
                           min={10}
@@ -1700,11 +1715,11 @@ export default function PointEditor() {
                           }
                           disabled={!isEditable}
                         />
-                        <div className="text-xs text-gray-500">{selectedElement.style.fontSize}px</div>
+                        <div className="text-xs text-white/50">{selectedElement.style.fontSize}px</div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-gray-300">Police</Label>
+                        <Label className="text-white/80">Police</Label>
                         <Select
                           value={selectedElement.style.fontFamily || FONT_FAMILIES[0].value}
                           onValueChange={(v: string) =>
@@ -1714,10 +1729,10 @@ export default function PointEditor() {
                           }
                           disabled={!isEditable}
                         >
-                          <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
                             <SelectValue placeholder="Police" />
                           </SelectTrigger>
-                          <SelectContent className="bg-gray-800 border-gray-700">
+                          <SelectContent className="bg-black/95 border-white/10">
                             {FONT_FAMILIES.map((f) => (
                               <SelectItem key={f.value} value={f.value} className="text-white">
                                 {f.name}
@@ -1728,7 +1743,7 @@ export default function PointEditor() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-gray-300">Graisse</Label>
+                        <Label className="text-white/80">Graisse</Label>
                         <Select
                           value={selectedElement.style.fontWeight.toString()}
                           onValueChange={(v: string) =>
@@ -1738,10 +1753,10 @@ export default function PointEditor() {
                           }
                           disabled={!isEditable}
                         >
-                          <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="bg-gray-800 border-gray-700">
+                          <SelectContent className="bg-black/95 border-white/10">
                             <SelectItem value="100" className="text-white">Fin (100)</SelectItem>
                             <SelectItem value="300" className="text-white">Léger (300)</SelectItem>
                             <SelectItem value="400" className="text-white">Normal (400)</SelectItem>
@@ -1759,34 +1774,34 @@ export default function PointEditor() {
                   {selectedElement.type === 'image' && (
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label className="text-gray-300">Source</Label>
+                        <Label className="text-white/80">Source</Label>
                         <Input
                           value={selectedElement.src}
                           onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { src: e.target.value } as any)}
                           disabled={!isEditable}
-                          className="bg-gray-800 border-gray-700 text-white"
+                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
                         />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-2">
-                          <Label className="text-gray-300">Mode</Label>
+                          <Label className="text-white/80">Mode</Label>
                           <Select
                             value={selectedElement.fit}
                             onValueChange={(v: any) => updateElement(activeSlide.id, selectedElement.id, { fit: v } as any)}
                             disabled={!isEditable}
                           >
-                            <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                            <SelectTrigger className="bg-white/5 border-white/10 text-white">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent className="bg-gray-800 border-gray-700">
+                            <SelectContent className="bg-black/95 border-white/10">
                               <SelectItem value="contain" className="text-white">Contain</SelectItem>
                               <SelectItem value="cover" className="text-white">Cover</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-gray-300">Arrondi</Label>
+                          <Label className="text-white/80">Arrondi</Label>
                           <Slider
                             value={[selectedElement.radius]}
                             min={0}
@@ -1795,7 +1810,7 @@ export default function PointEditor() {
                             onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { radius: v[0] } as any)}
                             disabled={!isEditable}
                           />
-                          <div className="text-xs text-gray-500">{selectedElement.radius}px</div>
+                          <div className="text-xs text-white/50">{selectedElement.radius}px</div>
                         </div>
                       </div>
                     </div>
@@ -1804,26 +1819,26 @@ export default function PointEditor() {
                   {selectedElement.type === 'button' && (
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label className="text-gray-300">Label</Label>
+                        <Label className="text-white/80">Label</Label>
                         <Input
                           value={selectedElement.label}
                           onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { label: e.target.value } as any)}
                           disabled={!isEditable}
-                          className="bg-gray-800 border-gray-700 text-white"
+                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-gray-300">Destination (page)</Label>
+                        <Label className="text-white/80">Destination (page)</Label>
                         <Select
                           value={selectedElement.targetSlideId || ''}
                           onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { targetSlideId: v || null } as any)}
                           disabled={!isEditable}
                         >
-                          <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
                             <SelectValue placeholder="Choisir une page" />
                           </SelectTrigger>
-                          <SelectContent className="bg-gray-800 border-gray-700">
+                          <SelectContent className="bg-black/95 border-white/10">
                             {point.slides.map((s, idx) => (
                               <SelectItem key={s.id} value={s.id} className="text-white">
                                 {idx + 1}. {s.name}
@@ -1835,7 +1850,7 @@ export default function PointEditor() {
 
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-2">
-                          <Label className="text-gray-300">Fond</Label>
+                          <Label className="text-white/80">Fond</Label>
                           <Input
                             type="color"
                             value={selectedElement.style.bg}
@@ -1845,11 +1860,11 @@ export default function PointEditor() {
                               } as any)
                             }
                             disabled={!isEditable}
-                            className="w-full p-1 h-10 bg-gray-800 border-gray-700"
+                            className="w-full p-1 h-10 bg-white/5 border-white/10"
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-gray-300">Texte</Label>
+                          <Label className="text-white/80">Texte</Label>
                           <Input
                             type="color"
                             value={selectedElement.style.fg}
@@ -1859,13 +1874,13 @@ export default function PointEditor() {
                               } as any)
                             }
                             disabled={!isEditable}
-                            className="w-full p-1 h-10 bg-gray-800 border-gray-700"
+                            className="w-full p-1 h-10 bg-white/5 border-white/10"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-gray-300">Arrondi</Label>
+                        <Label className="text-white/80">Arrondi</Label>
                         <Slider
                           value={[selectedElement.style.radius]}
                           min={0}
@@ -1878,13 +1893,13 @@ export default function PointEditor() {
                           }
                           disabled={!isEditable}
                         />
-                        <div className="text-xs text-gray-500">{selectedElement.style.radius}px</div>
+                        <div className="text-xs text-white/50">{selectedElement.style.radius}px</div>
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="text-sm text-gray-500">{isEditable ? 'Cliquez un élément (ou ajoutez-en un).' : 'Mode lecture.'}</div>
+                <div className="text-sm text-white/60">{isEditable ? 'Cliquez un élément (ou ajoutez-en un).' : 'Mode lecture.'}</div>
               )}
             </div>
           )}
