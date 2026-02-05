@@ -38,6 +38,7 @@ import {
 type SlideBackground =
   | { type: 'solid'; color: string }
   | { type: 'image'; url: string }
+  | { type: 'semiImage'; url: string; color: string }
   | { type: 'youtube'; videoId: string };
 
 type PointElementBase = {
@@ -165,6 +166,8 @@ const safeJsonParse = (value: string): PointDocV1 | null => {
         let bg: SlideBackground = { type: 'solid', color: '#0B1220' };
         if (s?.background?.type === 'solid') bg = { type: 'solid', color: s.background.color || '#0B1220' };
         else if (s?.background?.type === 'image') bg = { type: 'image', url: s.background.url || '' };
+        else if (s?.background?.type === 'semiImage')
+          bg = { type: 'semiImage', url: s.background.url || '', color: s.background.color || '#0B1220' };
         else if (s?.background?.type === 'youtube') bg = { type: 'youtube', videoId: s.background.videoId || '' };
 
         const elements: PointElement[] = Array.isArray(s?.elements)
@@ -463,6 +466,18 @@ export default function PointEditor() {
   useEffect(() => {
     if (mode === 'present') setShowF11Hint(true);
   }, [mode]);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (window.document.fullscreenElement) {
+        await window.document.exitFullscreen();
+      } else {
+        await window.document.documentElement.requestFullscreen();
+      }
+    } catch {
+      // Certains environnements (iframe / permissions) peuvent bloquer : on ignore.
+    }
+  };
 
   const saveNow = async () => {
     if (!id || !point || !docRow) return;
@@ -925,6 +940,28 @@ export default function PointEditor() {
   };
 
   const renderSlideBackground = (bg: SlideBackground) => {
+    if (bg.type === 'semiImage') {
+      if (!bg.url) return null;
+      return (
+        <div className="absolute inset-0 pointer-events-none">
+          <div
+            className="absolute inset-x-0 top-0 h-1/3"
+            style={{
+              backgroundImage: `url(${bg.url})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+          <div
+            className="absolute inset-x-0 top-0 h-1/3"
+            style={{
+              backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0) 55%, ${bg.color} 100%)`,
+            }}
+          />
+        </div>
+      );
+    }
+
     if (bg.type === 'image' && bg.url) {
       return (
         <div
@@ -997,6 +1034,13 @@ export default function PointEditor() {
 
   if (!point || !docRow || !activeSlide) return null;
 
+  const canvasBgColor =
+    activeSlide.background.type === 'solid'
+      ? activeSlide.background.color
+      : activeSlide.background.type === 'semiImage'
+        ? activeSlide.background.color
+        : '#000000';
+
   // --- MODE ÉDITION ET PRÉSENTATION ---
   return (
     <div className="fixed inset-0 bg-black overflow-hidden">
@@ -1005,10 +1049,10 @@ export default function PointEditor() {
         <div
           data-point-canvas="1"
           className={`relative bg-white overflow-hidden ${mode === 'present' && isCursorHidden ? 'cursor-none' : ''}`}
-          style={{ 
+          style={{
             width: '100vw',
             height: '100vh',
-            backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000'
+            backgroundColor: canvasBgColor,
           }}
           onPointerMove={mode === 'edit' ? onElementPointerMove : undefined}
           onPointerUp={mode === 'edit' ? onElementPointerUp : undefined}
@@ -1229,16 +1273,27 @@ export default function PointEditor() {
       {/* Bulle d'aide plein écran (F11) - uniquement en mode présentation */}
       {mode === 'present' && showF11Hint && (
         <div className="fixed left-4 top-4 z-[60]">
-          <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/55 backdrop-blur-md px-3 py-2 shadow-lg">
-            <div className="text-sm text-white/90">
-              <div className="font-medium">Plein écran</div>
-              <div className="text-white/70">Appuie sur <span className="font-semibold text-white/90">F11</span> pour activer/désactiver.</div>
-              <div className="text-white/60">Échap = quitter la présentation.</div>
-            </div>
+          <div className="relative">
             <button
               type="button"
-              className="mt-0.5 rounded-md p-1 text-white/70 hover:text-white hover:bg-white/10"
-              onClick={() => setShowF11Hint(false)}
+              onClick={toggleFullscreen}
+              className="flex w-full items-start gap-3 rounded-lg border border-white/10 bg-black/55 backdrop-blur-md px-3 py-2 text-left shadow-lg hover:bg-black/65"
+            >
+              <div className="text-sm text-white/90">
+                <div className="font-medium">Plein écran</div>
+                <div className="text-white/70">Clique ici (ou <span className="font-semibold text-white/90">F11</span>)</div>
+                <div className="text-white/60">Échap = quitter la présentation.</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className="absolute right-1 top-1 rounded-md p-1 text-white/70 hover:text-white hover:bg-white/10"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowF11Hint(false);
+              }}
               aria-label="Fermer"
             >
               <X className="h-4 w-4" />
@@ -1493,6 +1548,19 @@ export default function PointEditor() {
                     onValueChange={(v: any) => {
                       if (v === 'solid') updateSlide(activeSlide.id, { background: { type: 'solid', color: '#000000' } });
                       if (v === 'image') updateSlide(activeSlide.id, { background: { type: 'image', url: '' } });
+                      if (v === 'semiImage')
+                        updateSlide(activeSlide.id, {
+                          background: {
+                            type: 'semiImage',
+                            url: '',
+                            color:
+                              activeSlide.background.type === 'solid'
+                                ? activeSlide.background.color
+                                : activeSlide.background.type === 'semiImage'
+                                  ? activeSlide.background.color
+                                  : '#000000',
+                          },
+                        });
                       if (v === 'youtube') updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: '' } });
                     }}
                     disabled={!isEditable}
@@ -1503,6 +1571,7 @@ export default function PointEditor() {
                     <SelectContent className="bg-black/95 border-white/10">
                       <SelectItem value="solid" className="text-white">Couleur</SelectItem>
                       <SelectItem value="image" className="text-white">Image</SelectItem>
+                      <SelectItem value="semiImage" className="text-white">Semi image</SelectItem>
                       <SelectItem value="youtube" className="text-white">Vidéo YouTube</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1539,6 +1608,61 @@ export default function PointEditor() {
                       placeholder="https://..."
                       className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
                     />
+                  </div>
+                )}
+
+                {activeSlide.background.type === 'semiImage' && (
+                  <div className="space-y-2">
+                    <Label className="text-white/80">Semi image</Label>
+                    <Input
+                      value={activeSlide.background.url}
+                      onChange={(e) => {
+                        const bg = activeSlide.background;
+                        if (bg.type !== 'semiImage') return;
+                        updateSlide(activeSlide.id, {
+                          background: { type: 'semiImage', url: e.target.value, color: bg.color },
+                        });
+                      }}
+                      disabled={!isEditable}
+                      placeholder="URL de l'image (haut 1/3)"
+                      className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-white/70 text-xs">Couleur (fondu)</Label>
+                        <Input
+                          type="color"
+                          value={activeSlide.background.color}
+                          onChange={(e) => {
+                            const bg = activeSlide.background;
+                            if (bg.type !== 'semiImage') return;
+                            updateSlide(activeSlide.id, {
+                              background: { type: 'semiImage', url: bg.url, color: e.target.value },
+                            });
+                          }}
+                          disabled={!isEditable}
+                          className="w-full p-1 bg-white/5 border-white/10"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-white/70 text-xs">Hex</Label>
+                        <Input
+                          value={activeSlide.background.color}
+                          onChange={(e) => {
+                            const bg = activeSlide.background;
+                            if (bg.type !== 'semiImage') return;
+                            updateSlide(activeSlide.id, {
+                              background: { type: 'semiImage', url: bg.url, color: e.target.value },
+                            });
+                          }}
+                          disabled={!isEditable}
+                          className="bg-white/5 border-white/10 !text-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-xs text-white/50">
+                      L'image occupe le haut (1/3) et se fond vers cette couleur.
+                    </div>
                   </div>
                 )}
 
