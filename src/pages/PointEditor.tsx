@@ -784,30 +784,37 @@ export default function PointEditor() {
     // Tenter de passer en plein écran sur la scène uniquement
     const el = presentRef.current;
     if (el && !window.document.fullscreenElement) {
-      el.requestFullscreen?.().catch(() => {
+      el.requestFullscreen?.({
+        navigationUI: 'hide'
+      }).catch((err) => {
+        console.warn('Fullscreen non disponible:', err);
         // Si le navigateur refuse, on reste quand même en mode présentation (sans UI)
       });
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
-      // En présentation : ESC pour quitter, et navigation clavier (sans afficher d'UI)
+      // En présentation : SEULEMENT ESC pour quitter, et navigation clavier
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         void exitPresentation();
         return;
       }
+      // Navigation entre les slides
       if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
+        e.stopPropagation();
         gotoNext();
       }
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
+        e.stopPropagation();
         gotoPrev();
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, point, activeSlideId]);
 
@@ -887,20 +894,28 @@ export default function PointEditor() {
   // --- MODE PRÉSENTATION: AUCUNE UI, PLEIN ÉCRAN SUR LA SCÈNE UNIQUEMENT ---
   if (mode === 'present') {
     return (
-      <div ref={presentRef} className="fixed inset-0 z-[100] bg-black">
+      <div 
+        ref={presentRef} 
+        className="fixed inset-0 z-[9999] bg-black overflow-hidden"
+        style={{ 
+          width: '100vw',
+          height: '100vh',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0
+        }}
+      >
         <div
           data-point-canvas="1"
           className="absolute inset-0 overflow-hidden relative"
           style={{ backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000' }}
-          onPointerMove={onElementPointerMove}
-          onPointerUp={onElementPointerUp}
-          onPointerCancel={onElementPointerUp}
-          onPointerLeave={onElementPointerUp}
         >
           {renderSlideBackground(activeSlide.background)}
           <div className="absolute inset-0 bg-black/35" />
 
-          {/* Conteneur 16:9 centré (si pas fullscreen natif, garde le ratio) */}
+          {/* Conteneur 16:9 centré */}
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <div className="w-full max-w-[1200px] aspect-video relative">
               {activeSlide.elements.map((el) => {
