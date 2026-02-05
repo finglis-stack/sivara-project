@@ -125,6 +125,15 @@ const FONT_FAMILIES = [
   { name: 'Monospace', value: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' },
 ];
 
+const TEXT_PRESETS = [
+  { name: 'Titre', fontSize: 56, fontWeight: 800, align: 'center' as const },
+  { name: 'Sous-titre', fontSize: 42, fontWeight: 700, align: 'center' as const },
+  { name: 'Titre gauche', fontSize: 48, fontWeight: 700, align: 'left' as const },
+  { name: 'Paragraphe', fontSize: 20, fontWeight: 400, align: 'left' as const },
+  { name: 'Grand texte', fontSize: 32, fontWeight: 600, align: 'center' as const },
+  { name: 'Petit texte', fontSize: 16, fontWeight: 400, align: 'left' as const },
+];
+
 const clonePoint = (p: PointDocV1): PointDocV1 => {
   // structuredClone est supporté dans les navigateurs modernes
   // et garde mieux les types que JSON stringify.
@@ -693,6 +702,52 @@ export default function PointEditor() {
 
   const SNAP_THRESHOLD = 0.02; // 2% de la taille du canvas
 
+  // Drag and drop pour réorganiser les slides
+  const [draggedSlideId, setDraggedSlideId] = useState<string | null>(null);
+  const [dragOverSlideId, setDragOverSlideId] = useState<string | null>(null);
+
+  const handleSlideDragStart = (e: React.DragEvent, slideId: string) => {
+    setDraggedSlideId(slideId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleSlideDragOver = (e: React.DragEvent, slideId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedSlideId && draggedSlideId !== slideId) {
+      setDragOverSlideId(slideId);
+    }
+  };
+
+  const handleSlideDragLeave = () => {
+    setDragOverSlideId(null);
+  };
+
+  const handleSlideDrop = (e: React.DragEvent, targetSlideId: string) => {
+    e.preventDefault();
+    if (!draggedSlideId || draggedSlideId === targetSlideId || !point) return;
+
+    const slides = [...point.slides];
+    const draggedIndex = slides.findIndex((s) => s.id === draggedSlideId);
+    const targetIndex = slides.findIndex((s) => s.id === targetSlideId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    // Retirer la slide de sa position actuelle
+    const [draggedSlide] = slides.splice(draggedIndex, 1);
+    // L'insérer à la nouvelle position
+    slides.splice(targetIndex, 0, draggedSlide);
+
+    setPointAndSave({ ...point, slides });
+    setDraggedSlideId(null);
+    setDragOverSlideId(null);
+  };
+
+  const handleSlideDragEnd = () => {
+    setDraggedSlideId(null);
+    setDragOverSlideId(null);
+  };
+
   const findSnapPosition = (
     targetX: number,
     targetY: number,
@@ -1158,19 +1213,39 @@ export default function PointEditor() {
           <div className="space-y-2">
             {point.slides.map((s, idx) => {
               const active = s.id === activeSlideId;
+              const isDragging = draggedSlideId === s.id;
+              const isDragOver = dragOverSlideId === s.id;
+
               return (
-                <button
+                <div
                   key={s.id}
+                  draggable={permission === 'write' && mode === 'edit'}
+                  onDragStart={(e) => handleSlideDragStart(e, s.id)}
+                  onDragOver={(e) => handleSlideDragOver(e, s.id)}
+                  onDragLeave={handleSlideDragLeave}
+                  onDrop={(e) => handleSlideDrop(e, s.id)}
+                  onDragEnd={handleSlideDragEnd}
                   onClick={() => gotoSlide(s.id)}
-                  className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${
-                    active ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
+                  className={`w-full text-left rounded-lg border px-3 py-2 transition-all cursor-pointer ${
+                    active 
+                      ? 'bg-orange-50 border-orange-200 ring-2 ring-orange-300' 
+                      : 'bg-white border-gray-200 hover:bg-gray-50'
+                  } ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'border-orange-400 border-dashed' : ''}`}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium text-gray-900 truncate">{s.name || `Slide ${idx + 1}`}</div>
-                    <div className="text-[11px] text-gray-400">{idx + 1}</div>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {permission === 'write' && mode === 'edit' && (
+                        <div className="cursor-grab text-gray-400 hover:text-gray-600">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="text-sm font-medium text-gray-900 truncate">{s.name || `Slide ${idx + 1}`}</div>
+                    </div>
+                    <div className="text-[11px] text-gray-400 shrink-0">{idx + 1}</div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -1506,6 +1581,32 @@ export default function PointEditor() {
               {selectedElement.type === 'text' && (
                 <div className="space-y-3">
                   <div className="space-y-2">
+                    <Label>Style rapide</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {TEXT_PRESETS.map((preset) => (
+                        <Button
+                          key={preset.name}
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            updateElement(activeSlide.id, selectedElement.id, {
+                              style: {
+                                ...selectedElement.style,
+                                fontSize: preset.fontSize,
+                                fontWeight: preset.fontWeight,
+                                align: preset.align,
+                              },
+                            } as any)
+                          }
+                          className="text-xs"
+                        >
+                          {preset.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label>Texte</Label>
                     <Input
                       value={selectedElement.text}
@@ -1604,6 +1705,33 @@ export default function PointEditor() {
                             {f.name}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Graisse</Label>
+                    <Select
+                      value={selectedElement.style.fontWeight.toString()}
+                      onValueChange={(v: string) =>
+                        updateElement(activeSlide.id, selectedElement.id, {
+                          style: { ...selectedElement.style, fontWeight: parseInt(v) },
+                        } as any)
+                      }
+                      disabled={!isEditable}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="100">Fin (100)</SelectItem>
+                        <SelectItem value="300">Léger (300)</SelectItem>
+                        <SelectItem value="400">Normal (400)</SelectItem>
+                        <SelectItem value="500">Moyen (500)</SelectItem>
+                        <SelectItem value="600">Semi-bold (600)</SelectItem>
+                        <SelectItem value="700">Bold (700)</SelectItem>
+                        <SelectItem value="800">Extra-bold (800)</SelectItem>
+                        <SelectItem value="900">Black (900)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
