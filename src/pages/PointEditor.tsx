@@ -1255,7 +1255,7 @@ export default function PointEditor() {
 
       {/* Barre d'outils flottante en haut - masquée en mode présentation */}
       {mode === 'edit' && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900/90 backdrop-blur-md rounded-xl shadow-2xl border border-gray-700">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900 backdrop-blur-md rounded-xl shadow-2xl border border-gray-700">
           <div className="px-4 py-2">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="icon" onClick={() => navigate('/?app=docs')} className="text-gray-300 hover:text-white hover:bg-gray-800">
@@ -1290,7 +1290,7 @@ export default function PointEditor() {
                     e.stopPropagation();
                     setMode('present');
                   }}
-                  className="gap-2 border-gray-600 text-gray-300 hover:text-white hover:bg-gray-800"
+                  className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700"
                 >
                   <Play className="h-4 w-4" /> Présenter
                 </Button>
@@ -1305,19 +1305,19 @@ export default function PointEditor() {
           </div>
 
           {isEditable && (
-            <div className="border-t border-gray-700 bg-gray-900/80 px-4 py-2">
+            <div className="border-t border-gray-700 bg-gray-900 px-4 py-2">
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                <Button variant="outline" size="sm" onClick={addSlide} className="gap-2 border-gray-600 text-gray-300 hover:text-white hover:bg-gray-800">
+                <Button variant="outline" size="sm" onClick={addSlide} className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
                   <Plus className="h-4 w-4" /> Nouvelle page
                 </Button>
                 <div className="w-px h-6 bg-gray-700" />
-                <Button variant="outline" size="sm" onClick={addText} className="gap-2 border-gray-600 text-gray-300 hover:text-white hover:bg-gray-800">
+                <Button variant="outline" size="sm" onClick={addText} className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
                   <Type className="h-4 w-4" /> Texte
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setShowImageDialog(true)} className="gap-2 border-gray-600 text-gray-300 hover:text-white hover:bg-gray-800">
+                <Button variant="outline" size="sm" onClick={() => setShowImageDialog(true)} className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
                   <ImageIcon className="h-4 w-4" /> Image
                 </Button>
-                <Button variant="outline" size="sm" onClick={addButton} className="gap-2 border-gray-600 text-gray-300 hover:text-white hover:bg-gray-800">
+                <Button variant="outline" size="sm" onClick={addButton} className="gap-2 bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
                   <SquareArrowOutUpRight className="h-4 w-4" /> Bouton (lien)
                 </Button>
               </div>
@@ -1329,7 +1329,7 @@ export default function PointEditor() {
       {/* Panneau flottant: Slides - masqué en mode présentation */}
       {mode === 'edit' && (
         <div
-          className="fixed z-40 bg-gray-900/90 backdrop-blur-md rounded-lg shadow-2xl border border-gray-700"
+          className="fixed z-40 bg-gray-900 backdrop-blur-md rounded-lg shadow-2xl border border-gray-700"
           style={{
             left: `${panelPositions.slides.x}px`,
             top: `${panelPositions.slides.y}px`,
@@ -1337,7 +1337,7 @@ export default function PointEditor() {
           }}
         >
           <div
-            className="flex items-center justify-between px-3 py-2 bg-gray-800/90 border-b border-gray-700 cursor-move rounded-t-lg"
+            className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700 cursor-move rounded-t-lg"
             onMouseDown={(e) => startPanelDrag('slides', e)}
           >
             <span className="text-sm font-semibold text-gray-200">Pages</span>
@@ -1345,7 +1345,7 @@ export default function PointEditor() {
               variant="ghost"
               size="sm"
               onClick={() => setPanelPositions(prev => ({ ...prev, slides: { ...prev.slides, collapsed: !prev.slides.collapsed } }))}
-              className="text-gray-400 hover:text-white hover:bg-gray-800"
+              className="text-gray-400 hover:text-white hover:bg-gray-700"
             >
               {panelPositions.slides.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
             </Button>
@@ -1372,7 +1372,7 @@ export default function PointEditor() {
                       className={`w-full text-left rounded-lg border px-3 py-2 transition-all cursor-pointer ${
                         active 
                           ? 'bg-orange-600/20 border-orange-500 ring-2 ring-orange-500' 
-                          : 'bg-gray-800/60 border-gray-700 hover:bg-gray-800'
+                          : 'bg-gray-800 border-gray-700 hover:bg-gray-700'
                       } ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'border-orange-400 border-dashed' : ''}`}
                     >
                       <div className="flex items-center justify-between">
@@ -1400,7 +1400,7 @@ export default function PointEditor() {
                     size="sm"
                     onClick={() => activeSlideId && duplicateSlide(activeSlideId)}
                     disabled={!activeSlideId}
-                    className="border-gray-600 text-gray-300 hover:text-white hover:bg-gray-800"
+                    className="bg-gray-800 border-gray-600 text-white hover:bg-gray-700"
                   >
                     Dupliquer
                   </Button>
@@ -1409,7 +1409,7 @@ export default function PointEditor() {
                     size="sm"
                     onClick={() => activeSlideId && deleteSlide(activeSlideId)}
                     disabled={!activeSlideId || point.slides.length <= 1}
-                    className="text-red-400 hover:text-red-300 hover:bg-red-900/20 border-red-900/50"
+                    className="bg-red-900/30 border-red-800 text-red-400 hover:bg-red-900/50 hover:text-red-300"
                   >
                     Supprimer
                   </Button>
@@ -1423,7 +1423,7 @@ export default function PointEditor() {
       {/* Panneau flottant: Propriétés - masqué en mode présentation */}
       {mode === 'edit' && (
         <div
-          className="fixed z-40 bg-gray-900/90 backdrop-blur-md rounded-lg shadow-2xl border border-gray-700"
+          className="fixed z-40 bg-gray-900 backdrop-blur-md rounded-lg shadow-2xl border border-gray-700"
           style={{
             left: `${panelPositions.properties.x}px`,
             top: `${panelPositions.properties.y}px`,
@@ -1433,7 +1433,7 @@ export default function PointEditor() {
           }}
         >
           <div
-            className="flex items-center justify-between px-3 py-2 bg-gray-800/90 border-b border-gray-700 cursor-move rounded-t-lg sticky top-0 bg-opacity-95"
+            className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700 cursor-move rounded-t-lg sticky top-0"
             onMouseDown={(e) => startPanelDrag('properties', e)}
           >
             <span className="text-sm font-semibold text-gray-200">Propriétés</span>
@@ -1441,7 +1441,7 @@ export default function PointEditor() {
               variant="ghost"
               size="sm"
               onClick={() => setPanelPositions(prev => ({ ...prev, properties: { ...prev.properties, collapsed: !prev.properties.collapsed } }))}
-              className="text-gray-400 hover:text-white hover:bg-gray-800"
+              className="text-gray-400 hover:text-white hover:bg-gray-700"
             >
               {panelPositions.properties.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
             </Button>
@@ -1544,7 +1544,7 @@ export default function PointEditor() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-900/20 border-red-900/50"
+                        className="bg-red-900/30 border-red-800 text-red-400 hover:bg-red-900/50 hover:text-red-300"
                         onClick={() => deleteElement(activeSlide.id, selectedElement.id)}
                       >
                         Supprimer
@@ -1628,7 +1628,7 @@ export default function PointEditor() {
                                   },
                                 } as any)
                               }
-                              className="text-xs border-gray-600 text-gray-300 hover:text-white hover:bg-gray-800"
+                              className="text-xs bg-gray-800 border-gray-600 text-white hover:bg-gray-700"
                             >
                               {preset.name}
                             </Button>
