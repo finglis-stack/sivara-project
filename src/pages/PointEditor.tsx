@@ -215,6 +215,10 @@ export default function PointEditor() {
 
   const [mode, setMode] = useState<'edit' | 'present'>('edit');
 
+  // Curseur : visible par défaut, masqué après 2s d'inactivité en mode présentation
+  const [isCursorHidden, setIsCursorHidden] = useState(false);
+  const cursorHideTimerRef = useRef<number | null>(null);
+
   const saveTimeoutRef = useRef<number | null>(null);
   const titleRef = useRef(title);
   useEffect(() => {
@@ -897,42 +901,40 @@ export default function PointEditor() {
   };
 
   useEffect(() => {
-    if (mode !== 'present') return;
+    if (mode !== 'present') {
+      setIsCursorHidden(false);
+      if (cursorHideTimerRef.current) {
+        window.clearTimeout(cursorHideTimerRef.current);
+        cursorHideTimerRef.current = null;
+      }
+      return;
+    }
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      // En présentation : SEULEMENT ESC pour quitter, et navigation clavier
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        setMode('edit');
-        return;
-      }
-      // Navigation entre les slides
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
-        e.preventDefault();
-        e.stopPropagation();
-        gotoNext();
-      }
-      if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        e.preventDefault();
-        e.stopPropagation();
-        gotoPrev();
-      }
+    const armHideTimer = () => {
+      if (cursorHideTimerRef.current) window.clearTimeout(cursorHideTimerRef.current);
+      cursorHideTimerRef.current = window.setTimeout(() => {
+        setIsCursorHidden(true);
+      }, 2000);
     };
 
-    // Bloquer le clic droit en mode présentation
-    const onContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+    const onPointerMove = () => {
+      setIsCursorHidden(false);
+      armHideTimer();
     };
 
-    window.addEventListener('keydown', onKeyDown, { capture: true });
-    window.addEventListener('contextmenu', onContextMenu, { capture: true });
+    // Au moment où on entre en présentation
+    setIsCursorHidden(false);
+    armHideTimer();
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
     return () => {
-      window.removeEventListener('keydown', onKeyDown, { capture: true });
-      window.removeEventListener('contextmenu', onContextMenu, { capture: true });
+      window.removeEventListener('pointermove', onPointerMove);
+      if (cursorHideTimerRef.current) {
+        window.clearTimeout(cursorHideTimerRef.current);
+        cursorHideTimerRef.current = null;
+      }
     };
-  }, [mode, point, activeSlideId]);
+  }, [mode]);
 
   const renderSlideBackground = (bg: SlideBackground) => {
     if (bg.type === 'image' && bg.url) {
@@ -1014,7 +1016,7 @@ export default function PointEditor() {
       <div className="absolute inset-0 flex items-center justify-center">
         <div
           data-point-canvas="1"
-          className={`relative bg-white overflow-hidden ${mode === 'present' ? 'cursor-none' : ''}`}
+          className={`relative bg-white overflow-hidden ${mode === 'present' && isCursorHidden ? 'cursor-none' : ''}`}
           style={{ 
             width: '100vw',
             height: '100vh',
@@ -1245,7 +1247,7 @@ export default function PointEditor() {
                 variant="ghost"
                 size="icon"
                 onClick={() => navigate('/?app=docs')}
-                className="text-white/80 hover:text-white hover:bg-white/10"
+                className="!text-white/80 hover:!text-white hover:bg-white/10"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
@@ -1280,13 +1282,13 @@ export default function PointEditor() {
                     e.stopPropagation();
                     setMode('present');
                   }}
-                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                  className="gap-2 bg-white/10 border-white/20 !text-white hover:!text-white hover:bg-white/15"
                 >
                   <Play className="h-4 w-4" /> Présenter
                 </Button>
 
                 {permission === 'write' && (
-                  <Button onClick={manualSave} className="bg-orange-600 hover:bg-orange-700 text-white gap-2">
+                  <Button onClick={manualSave} className="bg-orange-600 hover:bg-orange-700 !text-white gap-2">
                     <Save className="h-4 w-4" /> Sauver
                   </Button>
                 )}
@@ -1301,7 +1303,7 @@ export default function PointEditor() {
                   variant="outline"
                   size="sm"
                   onClick={addSlide}
-                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                  className="gap-2 bg-white/10 border-white/20 !text-white hover:!text-white hover:bg-white/15"
                 >
                   <Plus className="h-4 w-4" /> Nouvelle page
                 </Button>
@@ -1310,7 +1312,7 @@ export default function PointEditor() {
                   variant="outline"
                   size="sm"
                   onClick={addText}
-                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                  className="gap-2 bg-white/10 border-white/20 !text-white hover:!text-white hover:bg-white/15"
                 >
                   <Type className="h-4 w-4" /> Texte
                 </Button>
@@ -1318,7 +1320,7 @@ export default function PointEditor() {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowImageDialog(true)}
-                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                  className="gap-2 bg-white/10 border-white/20 !text-white hover:!text-white hover:bg-white/15"
                 >
                   <ImageIcon className="h-4 w-4" /> Image
                 </Button>
@@ -1326,7 +1328,7 @@ export default function PointEditor() {
                   variant="outline"
                   size="sm"
                   onClick={addButton}
-                  className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/15"
+                  className="gap-2 bg-white/10 border-white/20 !text-white hover:!text-white hover:bg-white/15"
                 >
                   <SquareArrowOutUpRight className="h-4 w-4" /> Bouton (lien)
                 </Button>
@@ -1355,7 +1357,7 @@ export default function PointEditor() {
               variant="ghost"
               size="sm"
               onClick={() => setPanelPositions(prev => ({ ...prev, slides: { ...prev.slides, collapsed: !prev.slides.collapsed } }))}
-              className="text-white/70 hover:text-white hover:bg-white/10"
+              className="!text-white/70 hover:!text-white hover:bg-white/10"
             >
               {panelPositions.slides.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
             </Button>
@@ -1410,7 +1412,7 @@ export default function PointEditor() {
                     size="sm"
                     onClick={() => activeSlideId && duplicateSlide(activeSlideId)}
                     disabled={!activeSlideId}
-                    className="bg-white/10 border-white/20 text-white hover:bg-white/15"
+                    className="bg-white/10 border-white/20 !text-white hover:!text-white hover:bg-white/15"
                   >
                     Dupliquer
                   </Button>
@@ -1419,7 +1421,7 @@ export default function PointEditor() {
                     size="sm"
                     onClick={() => activeSlideId && deleteSlide(activeSlideId)}
                     disabled={!activeSlideId || point.slides.length <= 1}
-                    className="bg-red-500/10 border-red-500/30 text-red-200 hover:bg-red-500/15 hover:text-red-100"
+                    className="bg-red-500/10 border-red-500/30 !text-red-100 hover:!text-red-50 hover:bg-red-500/15"
                   >
                     Supprimer
                   </Button>
@@ -1451,7 +1453,7 @@ export default function PointEditor() {
               variant="ghost"
               size="sm"
               onClick={() => setPanelPositions(prev => ({ ...prev, properties: { ...prev.properties, collapsed: !prev.properties.collapsed } }))}
-              className="text-white/70 hover:text-white hover:bg-white/10"
+              className="!text-white/70 hover:!text-white hover:bg-white/10"
             >
               {panelPositions.properties.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
             </Button>
@@ -1471,7 +1473,7 @@ export default function PointEditor() {
                     value={activeSlide.name}
                     onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })}
                     disabled={!isEditable}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                    className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
                   />
                 </div>
 
@@ -1486,7 +1488,7 @@ export default function PointEditor() {
                     }}
                     disabled={!isEditable}
                   >
-                    <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                    <SelectTrigger className="bg-white/5 border-white/10 !text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-black/95 border-white/10">
@@ -1512,7 +1514,7 @@ export default function PointEditor() {
                         value={activeSlide.background.color}
                         onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
                         disabled={!isEditable}
-                        className="bg-white/5 border-white/10 text-white"
+                        className="bg-white/5 border-white/10 !text-white"
                       />
                     </div>
                   </div>
@@ -1526,7 +1528,7 @@ export default function PointEditor() {
                       onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'image', url: e.target.value } })}
                       disabled={!isEditable}
                       placeholder="https://..."
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                      className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
                     />
                   </div>
                 )}
@@ -1542,7 +1544,7 @@ export default function PointEditor() {
                       }}
                       disabled={!isEditable}
                       placeholder="https://www.youtube.com/watch?v=..."
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                      className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
                     />
                     <div className="text-xs text-white/50">La vidéo est lue en muet et en boucle.</div>
                   </div>
@@ -1559,7 +1561,7 @@ export default function PointEditor() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="bg-red-500/10 border-red-500/30 text-red-200 hover:bg-red-500/15 hover:text-red-100"
+                        className="bg-red-500/10 border-red-500/30 !text-red-100 hover:!text-red-50 hover:bg-red-500/15"
                         onClick={() => deleteElement(activeSlide.id, selectedElement.id)}
                       >
                         Supprimer
@@ -1579,7 +1581,7 @@ export default function PointEditor() {
                           updateElement(activeSlide.id, selectedElement.id, { x: Math.min(v, 1 - selectedElement.w) } as any);
                         }}
                         disabled={!isEditable}
-                        className="bg-white/5 border-white/10 text-white"
+                        className="bg-white/5 border-white/10 !text-white"
                       />
                     </div>
                     <div className="space-y-1">
@@ -1592,7 +1594,7 @@ export default function PointEditor() {
                           updateElement(activeSlide.id, selectedElement.id, { y: Math.min(v, 1 - selectedElement.h) } as any);
                         }}
                         disabled={!isEditable}
-                        className="bg-white/5 border-white/10 text-white"
+                        className="bg-white/5 border-white/10 !text-white"
                       />
                     </div>
                     <div className="space-y-1">
@@ -1605,7 +1607,7 @@ export default function PointEditor() {
                           updateElement(activeSlide.id, selectedElement.id, { w } as any);
                         }}
                         disabled={!isEditable}
-                        className="bg-white/5 border-white/10 text-white"
+                        className="bg-white/5 border-white/10 !text-white"
                       />
                     </div>
                     <div className="space-y-1">
@@ -1618,7 +1620,7 @@ export default function PointEditor() {
                           updateElement(activeSlide.id, selectedElement.id, { h } as any);
                         }}
                         disabled={!isEditable}
-                        className="bg-white/5 border-white/10 text-white"
+                        className="bg-white/5 border-white/10 !text-white"
                       />
                     </div>
                   </div>
@@ -1643,7 +1645,7 @@ export default function PointEditor() {
                                   },
                                 } as any)
                               }
-                              className="text-xs bg-white/10 border-white/20 text-white hover:bg-white/15"
+                              className="text-xs bg-white/10 border-white/20 !text-white hover:!text-white hover:bg-white/15"
                             >
                               {preset.name}
                             </Button>
@@ -1674,7 +1676,7 @@ export default function PointEditor() {
                                 } as any)
                               }
                               disabled={!isEditable}
-                              className="bg-white/5 border-white/10 text-white"
+                              className="bg-white/5 border-white/10 !text-white"
                             />
                           </div>
                         </div>
@@ -1689,7 +1691,7 @@ export default function PointEditor() {
                             }
                             disabled={!isEditable}
                           >
-                            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                            <SelectTrigger className="bg-white/5 border-white/10 !text-white">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-black/95 border-white/10">
@@ -1729,7 +1731,7 @@ export default function PointEditor() {
                           }
                           disabled={!isEditable}
                         >
-                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectTrigger className="bg-white/5 border-white/10 !text-white">
                             <SelectValue placeholder="Police" />
                           </SelectTrigger>
                           <SelectContent className="bg-black/95 border-white/10">
@@ -1753,7 +1755,7 @@ export default function PointEditor() {
                           }
                           disabled={!isEditable}
                         >
-                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectTrigger className="bg-white/5 border-white/10 !text-white">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-black/95 border-white/10">
@@ -1779,7 +1781,7 @@ export default function PointEditor() {
                           value={selectedElement.src}
                           onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { src: e.target.value } as any)}
                           disabled={!isEditable}
-                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                          className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
                         />
                       </div>
 
@@ -1791,7 +1793,7 @@ export default function PointEditor() {
                             onValueChange={(v: any) => updateElement(activeSlide.id, selectedElement.id, { fit: v } as any)}
                             disabled={!isEditable}
                           >
-                            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                            <SelectTrigger className="bg-white/5 border-white/10 !text-white">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-black/95 border-white/10">
@@ -1824,7 +1826,7 @@ export default function PointEditor() {
                           value={selectedElement.label}
                           onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { label: e.target.value } as any)}
                           disabled={!isEditable}
-                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                          className="bg-white/5 border-white/10 !text-white placeholder:text-white/40"
                         />
                       </div>
 
@@ -1835,7 +1837,7 @@ export default function PointEditor() {
                           onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { targetSlideId: v || null } as any)}
                           disabled={!isEditable}
                         >
-                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectTrigger className="bg-white/5 border-white/10 !text-white">
                             <SelectValue placeholder="Choisir une page" />
                           </SelectTrigger>
                           <SelectContent className="bg-black/95 border-white/10">
