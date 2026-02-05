@@ -1024,126 +1024,42 @@ export default function PointEditor() {
 
   if (!point || !docRow || !activeSlide) return null;
 
-  // --- MODE PRÉSENTATION ---
-  if (mode === 'present') {
-    return (
-      <div 
-        className="fixed inset-0 z-[9999] bg-black overflow-hidden"
-        style={{ 
-          width: '100vw',
-          height: '100vh',
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000'
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-      >
-        {renderSlideBackground(activeSlide.background)}
-        <div className="absolute inset-0 bg-black/35" />
-
-        <div className="absolute inset-0 flex items-center justify-center p-4">
-          <div className="w-full max-w-[1200px] aspect-video relative">
-            {activeSlide.elements.map((el) => {
-              const style: React.CSSProperties = {
-                position: 'absolute',
-                left: `${el.x * 100}%`,
-                top: `${el.y * 100}%`,
-                width: `${el.w * 100}%`,
-                height: `${el.h * 100}%`,
-              };
-
-              return (
-                <div key={el.id} style={style} className="select-none" onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}>
-                  {el.type === 'text' ? (
-                    <div
-                      className="w-full h-full flex items-center"
-                      style={{
-                        color: el.style.color,
-                        fontSize: el.style.fontSize,
-                        fontWeight: el.style.fontWeight as any,
-                        fontFamily: el.style.fontFamily || 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
-                        justifyContent:
-                          el.style.align === 'left' ? 'flex-start' : el.style.align === 'right' ? 'flex-end' : 'center',
-                        textAlign: el.style.align,
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {el.text}
-                    </div>
-                  ) : el.type === 'image' ? (
-                    <div className="w-full h-full overflow-hidden" style={{ borderRadius: el.radius }}>
-                      <img
-                        src={el.src}
-                        alt=""
-                        className={`w-full h-full ${el.fit === 'cover' ? 'object-cover' : 'object-contain'} pointer-events-none`}
-                      />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="w-full h-full font-semibold border border-white/10 shadow-sm"
-                      style={{ background: el.style.bg, color: el.style.fg, borderRadius: el.style.radius }}
-                      onClick={() => handleButtonClick(el.targetSlideId)}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                    >
-                      {el.label}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --- MODE ÉDITION: PLEIN ÉCRAN AVEC PANNEAUX FLOTTANTS ---
+  // --- MODE ÉDITION ET PRÉSENTATION ---
   return (
     <div className="fixed inset-0 bg-black overflow-hidden">
       {/* Canvas plein écran - prend tout l'espace */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div
           data-point-canvas="1"
-          className="relative bg-white overflow-hidden"
+          className={`relative bg-white overflow-hidden ${mode === 'present' ? 'cursor-none' : ''}`}
           style={{ 
             width: '100vw',
             height: '100vh',
             backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000'
           }}
-          onPointerMove={onElementPointerMove}
-          onPointerUp={onElementPointerUp}
-          onPointerCancel={onElementPointerUp}
-          onPointerLeave={onElementPointerUp}
-          onClick={() => isEditable && setSelected(null)}
+          onPointerMove={mode === 'edit' ? onElementPointerMove : undefined}
+          onPointerUp={mode === 'edit' ? onElementPointerUp : undefined}
+          onPointerCancel={mode === 'edit' ? onElementPointerUp : undefined}
+          onPointerLeave={mode === 'edit' ? onElementPointerUp : undefined}
+          onClick={() => mode === 'edit' && isEditable && setSelected(null)}
           onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            if (mode === 'present') {
+              e.preventDefault();
+              e.stopPropagation();
+            }
           }}
         >
           {renderSlideBackground(activeSlide.background)}
           <div className="absolute inset-0 bg-black/35" />
 
-          {/* Guides d'alignement visuels */}
-          {snapGuides.vertical !== null && (
+          {/* Guides d'alignement visuels - seulement en mode édition */}
+          {mode === 'edit' && snapGuides.vertical !== null && (
             <div
               className="absolute top-0 bottom-0 w-0.5 bg-orange-500 pointer-events-none z-50"
               style={{ left: `${snapGuides.vertical * 100}%` }}
             />
           )}
-          {snapGuides.horizontal !== null && (
+          {mode === 'edit' && snapGuides.horizontal !== null && (
             <div
               className="absolute left-0 right-0 h-0.5 bg-orange-500 pointer-events-none z-50"
               style={{ top: `${snapGuides.horizontal * 100}%` }}
@@ -1165,12 +1081,12 @@ export default function PointEditor() {
             const elementNode = (
               <div
                 style={style}
-                className={`group select-none relative z-10 ${isEditable ? 'cursor-move' : ''}`}
-                onPointerDown={(e) => onElementPointerDown(e, activeSlide.id, el.id)}
-                onClick={(e) => handleSelectElement(e, activeSlide.id, el.id)}
-                onDoubleClick={(e) => handleElementDoubleClick(e, el.id)}
+                className={`group select-none relative z-10 ${mode === 'edit' && isEditable ? 'cursor-move' : ''}`}
+                onPointerDown={mode === 'edit' ? (e) => onElementPointerDown(e, activeSlide.id, el.id) : undefined}
+                onClick={mode === 'edit' ? (e) => handleSelectElement(e, activeSlide.id, el.id) : undefined}
+                onDoubleClick={mode === 'edit' ? (e) => handleElementDoubleClick(e, el.id) : undefined}
                 onContextMenu={(e) => {
-                  if (!isEditable) {
+                  if (mode === 'present') {
                     e.preventDefault();
                     e.stopPropagation();
                   }
@@ -1178,11 +1094,11 @@ export default function PointEditor() {
               >
                 <div
                   className={`w-full h-full ${
-                    isSelected && isEditable ? 'ring-2 ring-orange-400 ring-offset-2 ring-offset-transparent' : ''
+                    mode === 'edit' && isSelected && isEditable ? 'ring-2 ring-orange-400 ring-offset-2 ring-offset-transparent' : ''
                   }`}
                 >
                   {el.type === 'text' ? (
-                    isEditing ? (
+                    mode === 'edit' && isEditing ? (
                       <textarea
                         autoFocus
                         className="w-full h-full bg-transparent resize-none outline-none"
@@ -1222,7 +1138,7 @@ export default function PointEditor() {
                       </div>
                     )
                   ) : el.type === 'image' ? (
-                    isEditing ? (
+                    mode === 'edit' && isEditing ? (
                       <div className="w-full h-full flex items-center justify-center bg-black/50">
                         <Input
                           autoFocus
@@ -1250,7 +1166,7 @@ export default function PointEditor() {
                       </div>
                     )
                   ) : (
-                    isEditing ? (
+                    mode === 'edit' && isEditing ? (
                       <div className="w-full h-full flex items-center justify-center bg-black/50">
                         <Input
                           autoFocus
@@ -1278,8 +1194,12 @@ export default function PointEditor() {
                           borderRadius: el.style.radius,
                         }}
                         onClick={(e) => {
-                          e.stopPropagation();
-                          setSelected({ slideId: activeSlide.id, elementId: el.id });
+                          if (mode === 'edit') {
+                            e.stopPropagation();
+                            setSelected({ slideId: activeSlide.id, elementId: el.id });
+                          } else {
+                            handleButtonClick(el.targetSlideId);
+                          }
                         }}
                       >
                         {el.label}
@@ -1288,7 +1208,7 @@ export default function PointEditor() {
                   )}
                 </div>
 
-                {isEditable && isSelected && !isEditing && (
+                {mode === 'edit' && isEditable && isSelected && !isEditing && (
                   <div className="absolute -top-9 left-0">
                     <div className="flex items-center gap-2 bg-white/90 backdrop-blur border border-gray-200 rounded-md px-2 py-1 shadow-sm">
                       <MousePointer2 className="h-3.5 w-3.5 text-gray-600" />
@@ -1299,7 +1219,7 @@ export default function PointEditor() {
               </div>
             );
 
-            if (!isEditable) {
+            if (mode !== 'edit' || !isEditable) {
               return <div key={el.id}>{elementNode}</div>;
             }
 
@@ -1333,624 +1253,630 @@ export default function PointEditor() {
         </div>
       </div>
 
-      {/* Barre d'outils flottante en haut */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur-md rounded-xl shadow-2xl border border-white/20">
-        <div className="px-4 py-2">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/?app=docs')}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+      {/* Barre d'outils flottante en haut - masquée en mode présentation */}
+      {mode === 'edit' && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur-md rounded-xl shadow-2xl border border-white/20">
+          <div className="px-4 py-2">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => navigate('/?app=docs')}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
 
-            <div className="h-8 w-8 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0">
-              <Presentation className="h-4 w-4" />
-            </div>
+              <div className="h-8 w-8 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0">
+                <Presentation className="h-4 w-4" />
+              </div>
 
-            <Input
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                scheduleSave();
-              }}
-              className="text-base font-medium border-0 focus-visible:ring-0 px-2 w-64 bg-transparent truncate"
-              readOnly={!isOwner}
-            />
-
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="px-2 py-1 rounded-md bg-gray-100/80 border border-gray-200">{permission === 'write' ? 'Édition' : 'Lecture'}</span>
-            </div>
-
-            <div className="w-px h-6 bg-gray-300" />
-
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                variant="outline"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setMode('present');
+              <Input
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  scheduleSave();
                 }}
-                className="gap-2"
-              >
-                <Play className="h-4 w-4" /> Présenter
-              </Button>
+                className="text-base font-medium border-0 focus-visible:ring-0 px-2 w-64 bg-transparent truncate"
+                readOnly={!isOwner}
+              />
 
-              {permission === 'write' && (
-                <Button onClick={manualSave} className="bg-gray-900 hover:bg-black text-white gap-2">
-                  <Save className="h-4 w-4" /> Sauver
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="px-2 py-1 rounded-md bg-gray-100/80 border border-gray-200">{permission === 'write' ? 'Édition' : 'Lecture'}</span>
+              </div>
 
-        {isEditable && (
-          <div className="border-t border-gray-200/50 bg-white/80 px-4 py-2">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <Button variant="outline" size="sm" onClick={addSlide} className="gap-2">
-                <Plus className="h-4 w-4" /> Nouvelle page
-              </Button>
               <div className="w-px h-6 bg-gray-300" />
-              <Button variant="outline" size="sm" onClick={addText} className="gap-2">
-                <Type className="h-4 w-4" /> Texte
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowImageDialog(true)} className="gap-2">
-                <ImageIcon className="h-4 w-4" /> Image
-              </Button>
-              <Button variant="outline" size="sm" onClick={addButton} className="gap-2">
-                <SquareArrowOutUpRight className="h-4 w-4" /> Bouton (lien)
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Panneau flottant: Slides - Translucide */}
-      <div
-        className="fixed z-40 bg-white/80 backdrop-blur-md rounded-lg shadow-2xl border border-white/20"
-        style={{
-          left: `${panelPositions.slides.x}px`,
-          top: `${panelPositions.slides.y}px`,
-          width: panelPositions.slides.collapsed ? 'auto' : '280px',
-        }}
-      >
-        <div
-          className="flex items-center justify-between px-3 py-2 bg-white/50 border-b border-white/20 cursor-move rounded-t-lg"
-          onMouseDown={(e) => startPanelDrag('slides', e)}
-        >
-          <span className="text-sm font-semibold text-gray-900">Pages</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setPanelPositions(prev => ({ ...prev, slides: { ...prev.slides, collapsed: !prev.slides.collapsed } }))}
-          >
-            {panelPositions.slides.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        {!panelPositions.slides.collapsed && (
-          <div className="p-3">
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {point.slides.map((s, idx) => {
-                const active = s.id === activeSlideId;
-                const isDragging = draggedSlideId === s.id;
-                const isDragOver = dragOverSlideId === s.id;
-
-                return (
-                  <div
-                    key={s.id}
-                    draggable={permission === 'write' && mode === 'edit'}
-                    onDragStart={(e) => handleSlideDragStart(e, s.id)}
-                    onDragOver={(e) => handleSlideDragOver(e, s.id)}
-                    onDragLeave={handleSlideDragLeave}
-                    onDrop={(e) => handleSlideDrop(e, s.id)}
-                    onDragEnd={handleSlideDragEnd}
-                    onClick={() => gotoSlide(s.id)}
-                    className={`w-full text-left rounded-lg border px-3 py-2 transition-all cursor-pointer ${
-                      active 
-                        ? 'bg-orange-50/90 border-orange-200 ring-2 ring-orange-300' 
-                        : 'bg-white/60 border-gray-200/50 hover:bg-white/80'
-                    } ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'border-orange-400 border-dashed' : ''}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        {permission === 'write' && mode === 'edit' && (
-                          <div className="cursor-grab text-gray-400 hover:text-gray-600">
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                            </svg>
-                          </div>
-                        )}
-                        <div className="text-sm font-medium text-gray-900 truncate">{s.name || `Slide ${idx + 1}`}</div>
-                      </div>
-                      <div className="text-[11px] text-gray-400 shrink-0">{idx + 1}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {permission === 'write' && mode === 'edit' && (
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Button
                   variant="outline"
-                  size="sm"
-                  onClick={() => activeSlideId && duplicateSlide(activeSlideId)}
-                  disabled={!activeSlideId}
-                >
-                  Dupliquer
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => activeSlideId && deleteSlide(activeSlideId)}
-                  disabled={!activeSlideId || point.slides.length <= 1}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  Supprimer
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Panneau flottant: Propriétés - Translucide */}
-      <div
-        className="fixed z-40 bg-white/80 backdrop-blur-md rounded-lg shadow-2xl border border-white/20"
-        style={{
-          left: `${panelPositions.properties.x}px`,
-          top: `${panelPositions.properties.y}px`,
-          width: panelPositions.properties.collapsed ? 'auto' : '320px',
-          maxHeight: '80vh',
-          overflowY: 'auto',
-        }}
-      >
-        <div
-          className="flex items-center justify-between px-3 py-2 bg-white/50 border-b border-white/20 cursor-move rounded-t-lg sticky top-0 bg-opacity-95"
-          onMouseDown={(e) => startPanelDrag('properties', e)}
-        >
-          <span className="text-sm font-semibold text-gray-900">Propriétés</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setPanelPositions(prev => ({ ...prev, properties: { ...prev.properties, collapsed: !prev.properties.collapsed } }))}
-          >
-            {panelPositions.properties.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        {!panelPositions.properties.collapsed && (
-          <div className="p-4">
-            <div className="text-xs text-gray-500 mb-3">Sélectionnez un élément pour l'éditer.</div>
-
-            <Separator className="my-3" />
-
-            {/* Slide properties */}
-            <div className="space-y-3 mb-4">
-              <div className="space-y-2">
-                <Label>Nom de page</Label>
-                <Input value={activeSlide.name} onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })} disabled={!isEditable} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Fond</Label>
-                <Select
-                  value={activeSlide.background.type}
-                  onValueChange={(v: any) => {
-                    if (v === 'solid') updateSlide(activeSlide.id, { background: { type: 'solid', color: '#000000' } });
-                    if (v === 'image') updateSlide(activeSlide.id, { background: { type: 'image', url: '' } });
-                    if (v === 'youtube') updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: '' } });
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMode('present');
                   }}
-                  disabled={!isEditable}
+                  className="gap-2"
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="solid">Couleur</SelectItem>
-                    <SelectItem value="image">Image</SelectItem>
-                    <SelectItem value="youtube">Vidéo YouTube</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Play className="h-4 w-4" /> Présenter
+                </Button>
+
+                {permission === 'write' && (
+                  <Button onClick={manualSave} className="bg-gray-900 hover:bg-black text-white gap-2">
+                    <Save className="h-4 w-4" /> Sauver
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {isEditable && (
+            <div className="border-t border-gray-200/50 bg-white/80 px-4 py-2">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <Button variant="outline" size="sm" onClick={addSlide} className="gap-2">
+                  <Plus className="h-4 w-4" /> Nouvelle page
+                </Button>
+                <div className="w-px h-6 bg-gray-300" />
+                <Button variant="outline" size="sm" onClick={addText} className="gap-2">
+                  <Type className="h-4 w-4" /> Texte
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowImageDialog(true)} className="gap-2">
+                  <ImageIcon className="h-4 w-4" /> Image
+                </Button>
+                <Button variant="outline" size="sm" onClick={addButton} className="gap-2">
+                  <SquareArrowOutUpRight className="h-4 w-4" /> Bouton (lien)
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Panneau flottant: Slides - masqué en mode présentation */}
+      {mode === 'edit' && (
+        <div
+          className="fixed z-40 bg-white/80 backdrop-blur-md rounded-lg shadow-2xl border border-white/20"
+          style={{
+            left: `${panelPositions.slides.x}px`,
+            top: `${panelPositions.slides.y}px`,
+            width: panelPositions.slides.collapsed ? 'auto' : '280px',
+          }}
+        >
+          <div
+            className="flex items-center justify-between px-3 py-2 bg-white/50 border-b border-white/20 cursor-move rounded-t-lg"
+            onMouseDown={(e) => startPanelDrag('slides', e)}
+          >
+            <span className="text-sm font-semibold text-gray-900">Pages</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPanelPositions(prev => ({ ...prev, slides: { ...prev.slides, collapsed: !prev.slides.collapsed } }))}
+            >
+              {panelPositions.slides.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {!panelPositions.slides.collapsed && (
+            <div className="p-3">
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {point.slides.map((s, idx) => {
+                  const active = s.id === activeSlideId;
+                  const isDragging = draggedSlideId === s.id;
+                  const isDragOver = dragOverSlideId === s.id;
+
+                  return (
+                    <div
+                      key={s.id}
+                      draggable={permission === 'write' && mode === 'edit'}
+                      onDragStart={(e) => handleSlideDragStart(e, s.id)}
+                      onDragOver={(e) => handleSlideDragOver(e, s.id)}
+                      onDragLeave={handleSlideDragLeave}
+                      onDrop={(e) => handleSlideDrop(e, s.id)}
+                      onDragEnd={handleSlideDragEnd}
+                      onClick={() => gotoSlide(s.id)}
+                      className={`w-full text-left rounded-lg border px-3 py-2 transition-all cursor-pointer ${
+                        active 
+                          ? 'bg-orange-50/90 border-orange-200 ring-2 ring-orange-300' 
+                          : 'bg-white/60 border-gray-200/50 hover:bg-white/80'
+                      } ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'border-orange-400 border-dashed' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          {permission === 'write' && mode === 'edit' && (
+                            <div className="cursor-grab text-gray-400 hover:text-gray-600">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                              </svg>
+                            </div>
+                          )}
+                          <div className="text-sm font-medium text-gray-900 truncate">{s.name || `Slide ${idx + 1}`}</div>
+                        </div>
+                        <div className="text-[11px] text-gray-400 shrink-0">{idx + 1}</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              {activeSlide.background.type === 'solid' && (
-                <div className="space-y-2">
-                  <Label>Couleur</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="color"
-                      value={activeSlide.background.color}
-                      onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
-                      disabled={!isEditable}
-                      className="w-16 p-1"
-                    />
-                    <Input
-                      value={activeSlide.background.color}
-                      onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
-                      disabled={!isEditable}
-                    />
-                  </div>
+              {permission === 'write' && mode === 'edit' && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => activeSlideId && duplicateSlide(activeSlideId)}
+                    disabled={!activeSlideId}
+                  >
+                    Dupliquer
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => activeSlideId && deleteSlide(activeSlideId)}
+                    disabled={!activeSlideId || point.slides.length <= 1}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    Supprimer
+                  </Button>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
 
-              {activeSlide.background.type === 'image' && (
+      {/* Panneau flottant: Propriétés - masqué en mode présentation */}
+      {mode === 'edit' && (
+        <div
+          className="fixed z-40 bg-white/80 backdrop-blur-md rounded-lg shadow-2xl border border-white/20"
+          style={{
+            left: `${panelPositions.properties.x}px`,
+            top: `${panelPositions.properties.y}px`,
+            width: panelPositions.properties.collapsed ? 'auto' : '320px',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+          }}
+        >
+          <div
+            className="flex items-center justify-between px-3 py-2 bg-white/50 border-b border-white/20 cursor-move rounded-t-lg sticky top-0 bg-opacity-95"
+            onMouseDown={(e) => startPanelDrag('properties', e)}
+          >
+            <span className="text-sm font-semibold text-gray-900">Propriétés</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPanelPositions(prev => ({ ...prev, properties: { ...prev.properties, collapsed: !prev.properties.collapsed } }))}
+            >
+              {panelPositions.properties.collapsed ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {!panelPositions.properties.collapsed && (
+            <div className="p-4">
+              <div className="text-xs text-gray-500 mb-3">Sélectionnez un élément pour l'éditer.</div>
+
+              <Separator className="my-3" />
+
+              {/* Slide properties */}
+              <div className="space-y-3 mb-4">
                 <div className="space-y-2">
-                  <Label>Image (URL)</Label>
-                  <Input
-                    value={activeSlide.background.url}
-                    onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'image', url: e.target.value } })}
-                    disabled={!isEditable}
-                    placeholder="https://..."
-                  />
+                  <Label>Nom de page</Label>
+                  <Input value={activeSlide.name} onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })} disabled={!isEditable} />
                 </div>
-              )}
 
-              {activeSlide.background.type === 'youtube' && (
                 <div className="space-y-2">
-                  <Label>Vidéo YouTube (lien)</Label>
-                  <Input
-                    value={activeSlide.background.videoId ? `https://youtu.be/${activeSlide.background.videoId}` : ''}
-                    onChange={(e) => {
-                      const id = extractYoutubeId(e.target.value) || '';
-                      updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: id } });
+                  <Label>Fond</Label>
+                  <Select
+                    value={activeSlide.background.type}
+                    onValueChange={(v: any) => {
+                      if (v === 'solid') updateSlide(activeSlide.id, { background: { type: 'solid', color: '#000000' } });
+                      if (v === 'image') updateSlide(activeSlide.id, { background: { type: 'image', url: '' } });
+                      if (v === 'youtube') updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: '' } });
                     }}
                     disabled={!isEditable}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                  />
-                  <div className="text-xs text-gray-500">La vidéo est lue en muet et en boucle.</div>
-                </div>
-              )}
-            </div>
-
-            <Separator className="my-4" />
-
-            {selectedElement ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium text-gray-900 capitalize">{selectedElement.type}</div>
-                  {isEditable && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700"
-                      onClick={() => deleteElement(activeSlide.id, selectedElement.id)}
-                    >
-                      Supprimer
-                    </Button>
-                  )}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="solid">Couleur</SelectItem>
+                      <SelectItem value="image">Image</SelectItem>
+                      <SelectItem value="youtube">Vidéo YouTube</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Position & Size */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">X</Label>
-                    <Input
-                      type="number"
-                      value={Math.round(selectedElement.x * 100)}
-                      onChange={(e) => {
-                        const v = clamp01(Number(e.target.value) / 100);
-                        updateElement(activeSlide.id, selectedElement.id, { x: Math.min(v, 1 - selectedElement.w) } as any);
-                      }}
-                      disabled={!isEditable}
-                    />
+                {activeSlide.background.type === 'solid' && (
+                  <div className="space-y-2">
+                    <Label>Couleur</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="color"
+                        value={activeSlide.background.color}
+                        onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
+                        disabled={!isEditable}
+                        className="w-16 p-1"
+                      />
+                      <Input
+                        value={activeSlide.background.color}
+                        onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
+                        disabled={!isEditable}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Y</Label>
-                    <Input
-                      type="number"
-                      value={Math.round(selectedElement.y * 100)}
-                      onChange={(e) => {
-                        const v = clamp01(Number(e.target.value) / 100);
-                        updateElement(activeSlide.id, selectedElement.id, { y: Math.min(v, 1 - selectedElement.h) } as any);
-                      }}
-                      disabled={!isEditable}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Largeur</Label>
-                    <Input
-                      type="number"
-                      value={Math.round(selectedElement.w * 100)}
-                      onChange={(e) => {
-                        const w = clamp01(Number(e.target.value) / 100);
-                        updateElement(activeSlide.id, selectedElement.id, { w } as any);
-                      }}
-                      disabled={!isEditable}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Hauteur</Label>
-                    <Input
-                      type="number"
-                      value={Math.round(selectedElement.h * 100)}
-                      onChange={(e) => {
-                        const h = clamp01(Number(e.target.value) / 100);
-                        updateElement(activeSlide.id, selectedElement.id, { h } as any);
-                      }}
-                      disabled={!isEditable}
-                    />
-                  </div>
-                </div>
+                )}
 
-                {selectedElement.type === 'text' && (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label>Style rapide</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {TEXT_PRESETS.map((preset) => (
-                          <Button
-                            key={preset.name}
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
+                {activeSlide.background.type === 'image' && (
+                  <div className="space-y-2">
+                    <Label>Image (URL)</Label>
+                    <Input
+                      value={activeSlide.background.url}
+                      onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'image', url: e.target.value } })}
+                      disabled={!isEditable}
+                      placeholder="https://..."
+                    />
+                  </div>
+                )}
+
+                {activeSlide.background.type === 'youtube' && (
+                  <div className="space-y-2">
+                    <Label>Vidéo YouTube (lien)</Label>
+                    <Input
+                      value={activeSlide.background.videoId ? `https://youtu.be/${activeSlide.background.videoId}` : ''}
+                      onChange={(e) => {
+                        const id = extractYoutubeId(e.target.value) || '';
+                        updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: id } });
+                      }}
+                      disabled={!isEditable}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                    />
+                    <div className="text-xs text-gray-500">La vidéo est lue en muet et en boucle.</div>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="my-4" />
+
+              {selectedElement ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-900 capitalize">{selectedElement.type}</div>
+                    {isEditable && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => deleteElement(activeSlide.id, selectedElement.id)}
+                      >
+                        Supprimer
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Position & Size */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">X</Label>
+                      <Input
+                        type="number"
+                        value={Math.round(selectedElement.x * 100)}
+                        onChange={(e) => {
+                          const v = clamp01(Number(e.target.value) / 100);
+                          updateElement(activeSlide.id, selectedElement.id, { x: Math.min(v, 1 - selectedElement.w) } as any);
+                        }}
+                        disabled={!isEditable}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Y</Label>
+                      <Input
+                        type="number"
+                        value={Math.round(selectedElement.y * 100)}
+                        onChange={(e) => {
+                          const v = clamp01(Number(e.target.value) / 100);
+                          updateElement(activeSlide.id, selectedElement.id, { y: Math.min(v, 1 - selectedElement.h) } as any);
+                        }}
+                        disabled={!isEditable}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Largeur</Label>
+                      <Input
+                        type="number"
+                        value={Math.round(selectedElement.w * 100)}
+                        onChange={(e) => {
+                          const w = clamp01(Number(e.target.value) / 100);
+                          updateElement(activeSlide.id, selectedElement.id, { w } as any);
+                        }}
+                        disabled={!isEditable}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Hauteur</Label>
+                      <Input
+                        type="number"
+                        value={Math.round(selectedElement.h * 100)}
+                        onChange={(e) => {
+                          const h = clamp01(Number(e.target.value) / 100);
+                          updateElement(activeSlide.id, selectedElement.id, { h } as any);
+                        }}
+                        disabled={!isEditable}
+                      />
+                    </div>
+                  </div>
+
+                  {selectedElement.type === 'text' && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>Style rapide</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {TEXT_PRESETS.map((preset) => (
+                            <Button
+                              key={preset.name}
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                updateElement(activeSlide.id, selectedElement.id, {
+                                  style: {
+                                    ...selectedElement.style,
+                                    fontSize: preset.fontSize,
+                                    fontWeight: preset.fontWeight,
+                                    align: preset.align,
+                                  },
+                                } as any)
+                              }
+                              className="text-xs"
+                            >
+                              {preset.name}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Couleur</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="color"
+                              value={selectedElement.style.color}
+                              onChange={(e) =>
+                                updateElement(activeSlide.id, selectedElement.id, {
+                                  style: { ...selectedElement.style, color: e.target.value },
+                                } as any)
+                              }
+                              disabled={!isEditable}
+                              className="w-16 p-1"
+                            />
+                            <Input
+                              value={selectedElement.style.color}
+                              onChange={(e) =>
+                                updateElement(activeSlide.id, selectedElement.id, {
+                                  style: { ...selectedElement.style, color: e.target.value },
+                                } as any)
+                              }
+                              disabled={!isEditable}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Alignement</Label>
+                          <Select
+                            value={selectedElement.style.align}
+                            onValueChange={(v: any) =>
                               updateElement(activeSlide.id, selectedElement.id, {
-                                style: {
-                                  ...selectedElement.style,
-                                  fontSize: preset.fontSize,
-                                  fontWeight: preset.fontWeight,
-                                  align: preset.align,
-                                },
+                                style: { ...selectedElement.style, align: v },
                               } as any)
                             }
-                            className="text-xs"
+                            disabled={!isEditable}
                           >
-                            {preset.name}
-                          </Button>
-                        ))}
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="left">Gauche</SelectItem>
+                              <SelectItem value="center">Centre</SelectItem>
+                              <SelectItem value="right">Droite</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Taille</Label>
+                        <Slider
+                          value={[selectedElement.style.fontSize]}
+                          min={10}
+                          max={96}
+                          step={1}
+                          onValueChange={(v) =>
+                            updateElement(activeSlide.id, selectedElement.id, {
+                              style: { ...selectedElement.style, fontSize: v[0] },
+                            } as any)
+                          }
+                          disabled={!isEditable}
+                        />
+                        <div className="text-xs text-gray-500">{selectedElement.style.fontSize}px</div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Police</Label>
+                        <Select
+                          value={selectedElement.style.fontFamily || FONT_FAMILIES[0].value}
+                          onValueChange={(v: string) =>
+                            updateElement(activeSlide.id, selectedElement.id, {
+                              style: { ...selectedElement.style, fontFamily: v },
+                            } as any)
+                          }
+                          disabled={!isEditable}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Police" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FONT_FAMILIES.map((f) => (
+                              <SelectItem key={f.value} value={f.value}>
+                                {f.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Graisse</Label>
+                        <Select
+                          value={selectedElement.style.fontWeight.toString()}
+                          onValueChange={(v: string) =>
+                            updateElement(activeSlide.id, selectedElement.id, {
+                              style: { ...selectedElement.style, fontWeight: parseInt(v) },
+                            } as any)
+                          }
+                          disabled={!isEditable}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="100">Fin (100)</SelectItem>
+                            <SelectItem value="300">Léger (300)</SelectItem>
+                            <SelectItem value="400">Normal (400)</SelectItem>
+                            <SelectItem value="500">Moyen (500)</SelectItem>
+                            <SelectItem value="600">Semi-bold (600)</SelectItem>
+                            <SelectItem value="700">Bold (700)</SelectItem>
+                            <SelectItem value="800">Extra-bold (800)</SelectItem>
+                            <SelectItem value="900">Black (900)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-2 gap-3">
+                  {selectedElement.type === 'image' && (
+                    <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label>Couleur</Label>
-                        <div className="flex items-center gap-2">
+                        <Label>Source</Label>
+                        <Input
+                          value={selectedElement.src}
+                          onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { src: e.target.value } as any)}
+                          disabled={!isEditable}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Mode</Label>
+                          <Select
+                            value={selectedElement.fit}
+                            onValueChange={(v: any) => updateElement(activeSlide.id, selectedElement.id, { fit: v } as any)}
+                            disabled={!isEditable}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="contain">Contain</SelectItem>
+                              <SelectItem value="cover">Cover</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Arrondi</Label>
+                          <Slider
+                            value={[selectedElement.radius]}
+                            min={0}
+                            max={40}
+                            step={1}
+                            onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { radius: v[0] } as any)}
+                            disabled={!isEditable}
+                          />
+                          <div className="text-xs text-gray-500">{selectedElement.radius}px</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedElement.type === 'button' && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>Label</Label>
+                        <Input
+                          value={selectedElement.label}
+                          onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { label: e.target.value } as any)}
+                          disabled={!isEditable}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Destination (page)</Label>
+                        <Select
+                          value={selectedElement.targetSlideId || ''}
+                          onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { targetSlideId: v || null } as any)}
+                          disabled={!isEditable}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choisir une page" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {point.slides.map((s, idx) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {idx + 1}. {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Fond</Label>
                           <Input
                             type="color"
-                            value={selectedElement.style.color}
+                            value={selectedElement.style.bg}
                             onChange={(e) =>
                               updateElement(activeSlide.id, selectedElement.id, {
-                                style: { ...selectedElement.style, color: e.target.value },
+                                style: { ...selectedElement.style, bg: e.target.value },
                               } as any)
                             }
                             disabled={!isEditable}
-                            className="w-16 p-1"
+                            className="w-full p-1 h-10"
                           />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Texte</Label>
                           <Input
-                            value={selectedElement.style.color}
+                            type="color"
+                            value={selectedElement.style.fg}
                             onChange={(e) =>
                               updateElement(activeSlide.id, selectedElement.id, {
-                                style: { ...selectedElement.style, color: e.target.value },
+                                style: { ...selectedElement.style, fg: e.target.value },
                               } as any)
                             }
                             disabled={!isEditable}
+                            className="w-full p-1 h-10"
                           />
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Alignement</Label>
-                        <Select
-                          value={selectedElement.style.align}
-                          onValueChange={(v: any) =>
-                            updateElement(activeSlide.id, selectedElement.id, {
-                              style: { ...selectedElement.style, align: v },
-                            } as any)
-                          }
-                          disabled={!isEditable}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="left">Gauche</SelectItem>
-                            <SelectItem value="center">Centre</SelectItem>
-                            <SelectItem value="right">Droite</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
 
-                    <div className="space-y-2">
-                      <Label>Taille</Label>
-                      <Slider
-                        value={[selectedElement.style.fontSize]}
-                        min={10}
-                        max={96}
-                        step={1}
-                        onValueChange={(v) =>
-                          updateElement(activeSlide.id, selectedElement.id, {
-                            style: { ...selectedElement.style, fontSize: v[0] },
-                          } as any)
-                        }
-                        disabled={!isEditable}
-                      />
-                      <div className="text-xs text-gray-500">{selectedElement.style.fontSize}px</div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Police</Label>
-                      <Select
-                        value={selectedElement.style.fontFamily || FONT_FAMILIES[0].value}
-                        onValueChange={(v: string) =>
-                          updateElement(activeSlide.id, selectedElement.id, {
-                            style: { ...selectedElement.style, fontFamily: v },
-                          } as any)
-                        }
-                        disabled={!isEditable}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Police" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FONT_FAMILIES.map((f) => (
-                            <SelectItem key={f.value} value={f.value}>
-                              {f.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Graisse</Label>
-                      <Select
-                        value={selectedElement.style.fontWeight.toString()}
-                        onValueChange={(v: string) =>
-                          updateElement(activeSlide.id, selectedElement.id, {
-                            style: { ...selectedElement.style, fontWeight: parseInt(v) },
-                          } as any)
-                        }
-                        disabled={!isEditable}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="100">Fin (100)</SelectItem>
-                          <SelectItem value="300">Léger (300)</SelectItem>
-                          <SelectItem value="400">Normal (400)</SelectItem>
-                          <SelectItem value="500">Moyen (500)</SelectItem>
-                          <SelectItem value="600">Semi-bold (600)</SelectItem>
-                          <SelectItem value="700">Bold (700)</SelectItem>
-                          <SelectItem value="800">Extra-bold (800)</SelectItem>
-                          <SelectItem value="900">Black (900)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-
-                {selectedElement.type === 'image' && (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label>Source</Label>
-                      <Input
-                        value={selectedElement.src}
-                        onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { src: e.target.value } as any)}
-                        disabled={!isEditable}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label>Mode</Label>
-                        <Select
-                          value={selectedElement.fit}
-                          onValueChange={(v: any) => updateElement(activeSlide.id, selectedElement.id, { fit: v } as any)}
-                          disabled={!isEditable}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="contain">Contain</SelectItem>
-                            <SelectItem value="cover">Cover</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
                       <div className="space-y-2">
                         <Label>Arrondi</Label>
                         <Slider
-                          value={[selectedElement.radius]}
+                          value={[selectedElement.style.radius]}
                           min={0}
-                          max={40}
+                          max={30}
                           step={1}
-                          onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { radius: v[0] } as any)}
-                          disabled={!isEditable}
-                        />
-                        <div className="text-xs text-gray-500">{selectedElement.radius}px</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedElement.type === 'button' && (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label>Label</Label>
-                      <Input
-                        value={selectedElement.label}
-                        onChange={(e) => updateElement(activeSlide.id, selectedElement.id, { label: e.target.value } as any)}
-                        disabled={!isEditable}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Destination (page)</Label>
-                      <Select
-                        value={selectedElement.targetSlideId || ''}
-                        onValueChange={(v) => updateElement(activeSlide.id, selectedElement.id, { targetSlideId: v || null } as any)}
-                        disabled={!isEditable}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choisir une page" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {point.slides.map((s, idx) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              {idx + 1}. {s.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label>Fond</Label>
-                        <Input
-                          type="color"
-                          value={selectedElement.style.bg}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             updateElement(activeSlide.id, selectedElement.id, {
-                              style: { ...selectedElement.style, bg: e.target.value },
+                              style: { ...selectedElement.style, radius: v[0] },
                             } as any)
                           }
                           disabled={!isEditable}
-                          className="w-full p-1 h-10"
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Texte</Label>
-                        <Input
-                          type="color"
-                          value={selectedElement.style.fg}
-                          onChange={(e) =>
-                            updateElement(activeSlide.id, selectedElement.id, {
-                              style: { ...selectedElement.style, fg: e.target.value },
-                            } as any)
-                          }
-                          disabled={!isEditable}
-                          className="w-full p-1 h-10"
-                        />
+                        <div className="text-xs text-gray-500">{selectedElement.style.radius}px</div>
                       </div>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label>Arrondi</Label>
-                      <Slider
-                        value={[selectedElement.style.radius]}
-                        min={0}
-                        max={30}
-                        step={1}
-                        onValueChange={(v) =>
-                          updateElement(activeSlide.id, selectedElement.id, {
-                            style: { ...selectedElement.style, radius: v[0] },
-                          } as any)
-                        }
-                        disabled={!isEditable}
-                      />
-                      <div className="text-xs text-gray-500">{selectedElement.style.radius}px</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500">{isEditable ? 'Cliquez un élément (ou ajoutez-en un).' : 'Mode lecture.'}</div>
-            )}
-          </div>
-        )}
-      </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500">{isEditable ? 'Cliquez un élément (ou ajoutez-en un).' : 'Mode lecture.'}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Image dialog */}
       <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
