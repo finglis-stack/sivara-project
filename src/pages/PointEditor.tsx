@@ -12,6 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { showError, showSuccess } from '@/utils/toast';
 import {
   ArrowLeft,
@@ -32,6 +39,11 @@ import {
   Minimize,
 } from 'lucide-react';
 
+type SlideBackground =
+  | { type: 'solid'; color: string }
+  | { type: 'image'; url: string }
+  | { type: 'youtube'; videoId: string };
+
 type PointElementBase = {
   id: string;
   x: number; // 0..1
@@ -48,6 +60,7 @@ type PointTextElement = PointElementBase & {
     fontWeight: number;
     color: string;
     align: 'left' | 'center' | 'right';
+    fontFamily?: string;
   };
 };
 
@@ -74,7 +87,7 @@ type PointElement = PointTextElement | PointImageElement | PointButtonElement;
 type PointSlide = {
   id: string;
   name: string;
-  background: { type: 'solid'; color: string };
+  background: SlideBackground;
   elements: PointElement[];
 };
 
@@ -102,13 +115,88 @@ type SelectedElement = {
   elementId: string;
 } | null;
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const FONT_FAMILIES = [
+  { name: 'Inter (par défaut)', value: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif' },
+  { name: 'Roboto', value: 'Roboto, system-ui, -apple-system, Segoe UI, sans-serif' },
+  { name: 'Montserrat', value: 'Montserrat, system-ui, -apple-system, Segoe UI, sans-serif' },
+  { name: 'Open Sans', value: '"Open Sans", system-ui, -apple-system, Segoe UI, sans-serif' },
+  { name: 'Lato', value: 'Lato, system-ui, -apple-system, Segoe UI, sans-serif' },
+  { name: 'Serif', value: 'Georgia, Times, serif' },
+  { name: 'Monospace', value: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' },
+];
+
+const clonePoint = (p: PointDocV1): PointDocV1 => {
+  // structuredClone est supporté dans les navigateurs modernes
+  // et garde mieux les types que JSON stringify.
+  try {
+    return structuredClone(p) as PointDocV1;
+  } catch {
+    return JSON.parse(JSON.stringify(p)) as PointDocV1;
+  }
+};
+
+const extractYoutubeId = (input: string): string | null => {
+  const url = input.trim();
+  if (!url) return null;
+
+  // youtu.be/ID
+  let match = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+  if (match?.[1]) return match[1];
+
+  // youtube.com/watch?v=ID
+  match = url.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
+  if (match?.[1]) return match[1];
+
+  // youtube.com/embed/ID
+  match = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{6,})/);
+  if (match?.[1]) return match[1];
+
+  return null;
+};
 
 const safeJsonParse = (value: string): PointDocV1 | null => {
   try {
     const parsed = JSON.parse(value);
-    if (parsed && parsed.version === 1 && Array.isArray(parsed.slides)) return parsed;
-    return null;
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.slides)) return null;
+
+    // Normalisation (compat + defaults)
+    const normalized: PointDocV1 = {
+      version: 1,
+      slides: parsed.slides.map((s: any, i: number) => {
+        let bg: SlideBackground = { type: 'solid', color: '#0B1220' };
+        if (s?.background?.type === 'solid') bg = { type: 'solid', color: s.background.color || '#0B1220' };
+        else if (s?.background?.type === 'image') bg = { type: 'image', url: s.background.url || '' };
+        else if (s?.background?.type === 'youtube') bg = { type: 'youtube', videoId: s.background.videoId || '' };
+
+        const elements: PointElement[] = Array.isArray(s?.elements)
+          ? s.elements.map((el: any) => {
+              if (el?.type === 'text') {
+                return {
+                  ...el,
+                  style: {
+                    fontSize: el.style?.fontSize ?? 24,
+                    fontWeight: el.style?.fontWeight ?? 400,
+                    color: el.style?.color ?? '#FFFFFF',
+                    align: el.style?.align ?? 'left',
+                    fontFamily:
+                      el.style?.fontFamily || 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+                  },
+                } as PointTextElement;
+              }
+              return el as PointElement;
+            })
+          : [];
+
+        return {
+          id: s?.id || crypto.randomUUID(),
+          name: s?.name || `Slide ${i + 1}`,
+          background: bg,
+          elements,
+        } as PointSlide;
+      }),
+    };
+
+    return normalized;
   } catch {
     return null;
   }
@@ -144,6 +232,15 @@ export default function PointEditor() {
   const [isImageUploading, setIsImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
+  const isEditable = useMemo(() => permission === 'write' && mode === 'edit', [permission, mode]);
+
+  // Historique (undo/redo)
+  const historyRef = useRef<PointDocV1[]>([]);
+  const historyIndexRef = useRef(0);
+
+  // Clipboard interne (copier/coller)
+  const clipboardRef = useRef<PointElement | null>(null);
+
   const activeSlide = useMemo(() => {
     if (!point || !activeSlideId) return null;
     return point.slides.find((s) => s.id === activeSlideId) || null;
@@ -163,6 +260,136 @@ export default function PointEditor() {
       void saveNow();
     }, 500);
   };
+
+  const pushHistory = (next: PointDocV1) => {
+    // Supprimer tout "future" après l'index actuel
+    const base = historyRef.current.slice(0, historyIndexRef.current + 1);
+    base.push(clonePoint(next));
+
+    // Limite (simple)
+    const MAX = 60;
+    while (base.length > MAX) base.shift();
+
+    historyRef.current = base;
+    historyIndexRef.current = base.length - 1;
+  };
+
+  const undo = () => {
+    if (!historyRef.current.length) return;
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    const prev = clonePoint(historyRef.current[historyIndexRef.current]);
+    setPoint(prev);
+    setSelected(null);
+    scheduleSave();
+  };
+
+  const redo = () => {
+    if (!historyRef.current.length) return;
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    const next = clonePoint(historyRef.current[historyIndexRef.current]);
+    setPoint(next);
+    setSelected(null);
+    scheduleSave();
+  };
+
+  const commitPoint = (next: PointDocV1, opts?: { pushHistory?: boolean }) => {
+    setPoint(next);
+    if (opts?.pushHistory !== false) pushHistory(next);
+    scheduleSave();
+  };
+
+  const copyElement = (el: PointElement) => {
+    const payload = clonePoint({ version: 1, slides: [{ id: 'x', name: 'x', background: { type: 'solid', color: '#000' }, elements: [el] }] } as any)
+      .slides[0].elements[0] as PointElement;
+    clipboardRef.current = payload;
+    try {
+      localStorage.setItem('point-clipboard-v1', JSON.stringify(payload));
+    } catch {}
+    showSuccess('Copié');
+  };
+
+  const copySelected = () => {
+    if (!selectedElement) return;
+    copyElement(selectedElement);
+  };
+
+  const pasteClipboard = () => {
+    if (!point || !activeSlideId) return;
+    const clip = clipboardRef.current;
+    if (!clip) return;
+
+    const newEl: PointElement = {
+      ...(clonePoint({ version: 1, slides: [{ id: 'x', name: 'x', background: { type: 'solid', color: '#000' }, elements: [clip] }] } as any)
+        .slides[0].elements[0] as any),
+      id: crypto.randomUUID(),
+      x: Math.min(0.97, Math.max(0, (clip.x ?? 0.1) + 0.03)),
+      y: Math.min(0.97, Math.max(0, (clip.y ?? 0.1) + 0.03)),
+    };
+
+    const slides = point.slides.map((s) => (s.id === activeSlideId ? { ...s, elements: [...s.elements, newEl] } : s));
+    const next = { ...point, slides };
+    commitPoint(next);
+    setSelected({ slideId: activeSlideId, elementId: newEl.id });
+  };
+
+  const cutSelected = () => {
+    if (!selectedElement || !activeSlideId) return;
+    copySelected();
+    deleteElement(activeSlideId, selectedElement.id);
+  };
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('point-clipboard-v1');
+      if (saved) clipboardRef.current = JSON.parse(saved);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isFormField =
+        !!target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          (target as any).isContentEditable);
+
+      const mod = e.ctrlKey || e.metaKey;
+
+      if (isEditable && selectedElement && (e.key === 'Delete' || e.key === 'Backspace') && !isFormField) {
+        e.preventDefault();
+        deleteElement(activeSlide.id, selectedElement.id);
+        return;
+      }
+
+      if (mod && !isFormField) {
+        const key = e.key.toLowerCase();
+        if (key === 'c') {
+          e.preventDefault();
+          copySelected();
+        } else if (key === 'x') {
+          e.preventDefault();
+          if (isEditable) cutSelected();
+        } else if (key === 'v') {
+          e.preventDefault();
+          if (isEditable) pasteClipboard();
+        } else if (key === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) redo();
+          else undo();
+        } else if (key === 'y') {
+          e.preventDefault();
+          redo();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isEditable, selectedElement, activeSlide, activeSlideId, point]);
 
   const saveNow = async () => {
     if (!id || !point || !docRow) return;
@@ -246,6 +473,10 @@ export default function PointEditor() {
       setTitle(decryptedTitle);
       setPoint(parsed);
       setActiveSlideId(parsed.slides[0]?.id || null);
+
+      // Init history
+      historyRef.current = [clonePoint(parsed)];
+      historyIndexRef.current = 0;
     } catch (e: any) {
       console.error(e);
       showError(e.message || 'Point inaccessible');
@@ -266,8 +497,7 @@ export default function PointEditor() {
   }, [id, authLoading, user?.id]);
 
   const setPointAndSave = (next: PointDocV1) => {
-    setPoint(next);
-    scheduleSave();
+    commitPoint(next);
   };
 
   const addSlide = () => {
@@ -312,13 +542,13 @@ export default function PointEditor() {
     setSelected(null);
   };
 
-  const updateSlide = (slideId: string, patch: Partial<PointSlide>) => {
+  const updateSlide = (slideId: string, patch: Partial<PointSlide>, opts?: { pushHistory?: boolean }) => {
     if (!point) return;
     const slides = point.slides.map((s) => (s.id === slideId ? { ...s, ...patch } : s));
-    setPointAndSave({ ...point, slides });
+    commitPoint({ ...point, slides }, opts);
   };
 
-  const updateElement = (slideId: string, elementId: string, patch: Partial<PointElement>) => {
+  const updateElement = (slideId: string, elementId: string, patch: Partial<PointElement>, opts?: { pushHistory?: boolean }) => {
     if (!point) return;
     const slides = point.slides.map((s) => {
       if (s.id !== slideId) return s;
@@ -327,7 +557,7 @@ export default function PointEditor() {
         elements: s.elements.map((el) => (el.id === elementId ? ({ ...el, ...patch } as PointElement) : el)),
       };
     });
-    setPointAndSave({ ...point, slides });
+    commitPoint({ ...point, slides }, opts);
   };
 
   const deleteElement = (slideId: string, elementId: string) => {
@@ -355,6 +585,7 @@ export default function PointEditor() {
         fontWeight: 700,
         color: '#FFFFFF',
         align: 'left',
+        fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
       },
     };
 
@@ -450,12 +681,14 @@ export default function PointEditor() {
     originY: number;
     rect: DOMRect;
   } | null>(null);
+  const dragChangedRef = useRef(false);
 
   const onElementPointerDown = (e: React.PointerEvent, slideId: string, elementId: string) => {
     if (mode !== 'edit' || permission !== 'write') return;
     if (!point) return;
 
     e.stopPropagation();
+    dragChangedRef.current = false;
 
     const slide = point.slides.find((s) => s.id === slideId);
     const el = slide?.elements.find((x) => x.id === elementId);
@@ -497,11 +730,16 @@ export default function PointEditor() {
     const clampedX = clamp01(Math.min(nextX, 1 - el.w));
     const clampedY = clamp01(Math.min(nextY, 1 - el.h));
 
-    updateElement(dr.slideId, dr.elementId, { x: clampedX, y: clampedY } as any);
+    dragChangedRef.current = true;
+    updateElement(dr.slideId, dr.elementId, { x: clampedX, y: clampedY } as any, { pushHistory: false });
   };
 
   const onElementPointerUp = () => {
     dragRef.current = null;
+    if (dragChangedRef.current && point) {
+      pushHistory(point);
+      dragChangedRef.current = false;
+    }
   };
 
   const handleSelectElement = (e: React.MouseEvent, slideId: string, elementId: string) => {
@@ -535,6 +773,38 @@ export default function PointEditor() {
     return () => window.document.removeEventListener('fullscreenchange', handler);
   }, []);
 
+  const renderSlideBackground = (bg: SlideBackground) => {
+    if (bg.type === 'image' && bg.url) {
+      return (
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${bg.url})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+      );
+    }
+
+    if (bg.type === 'youtube' && bg.videoId) {
+      return (
+        <div className="absolute inset-0 overflow-hidden">
+          <iframe
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[160%] h-[160%]"
+            src={`https://www.youtube-nocookie.com/embed/${bg.videoId}?autoplay=1&mute=1&controls=0&rel=0&loop=1&playlist=${bg.videoId}&modestbranding=1&playsinline=1&iv_load_policy=3`}
+            title="Slide background"
+            frameBorder="0"
+            allow="autoplay; encrypted-media; picture-in-picture"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const gotoSlide = (slideId: string) => {
     setActiveSlideId(slideId);
     setSelected(null);
@@ -564,6 +834,8 @@ export default function PointEditor() {
     showSuccess('Sauvegardé');
   };
 
+  const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
   if (isLoading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -573,8 +845,6 @@ export default function PointEditor() {
   }
 
   if (!point || !docRow || !activeSlide) return null;
-
-  const isEditable = permission === 'write' && mode === 'edit';
 
   return (
     <div
@@ -681,12 +951,15 @@ export default function PointEditor() {
             <div
               data-point-canvas="1"
               className={`w-full ${isFullscreen ? 'h-full max-w-none' : 'max-w-5xl'} aspect-video rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden relative`}
-              style={{ backgroundColor: activeSlide.background.color }}
+              style={{ backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000' }}
               onPointerMove={onElementPointerMove}
               onPointerUp={onElementPointerUp}
               onPointerCancel={onElementPointerUp}
               onPointerLeave={onElementPointerUp}
             >
+              {renderSlideBackground(activeSlide.background)}
+              <div className="absolute inset-0 bg-black/35" />
+
               {activeSlide.elements.map((el) => {
                 const style: React.CSSProperties = {
                   position: 'absolute',
@@ -697,7 +970,7 @@ export default function PointEditor() {
                 };
 
                 return (
-                  <div key={el.id} style={style} className="select-none">
+                  <div key={el.id} style={style} className="select-none relative z-10">
                     {el.type === 'text' ? (
                       <div
                         className="w-full h-full flex items-center"
@@ -705,6 +978,7 @@ export default function PointEditor() {
                           color: el.style.color,
                           fontSize: el.style.fontSize,
                           fontWeight: el.style.fontWeight as any,
+                          fontFamily: el.style.fontFamily || 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
                           justifyContent:
                             el.style.align === 'left' ? 'flex-start' : el.style.align === 'right' ? 'flex-end' : 'center',
                           textAlign: el.style.align,
@@ -798,13 +1072,16 @@ export default function PointEditor() {
             <div
               data-point-canvas="1"
               className="w-full aspect-video rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden relative"
-              style={{ backgroundColor: activeSlide.background.color }}
+              style={{ backgroundColor: activeSlide.background.type === 'solid' ? activeSlide.background.color : '#000000' }}
               onPointerMove={onElementPointerMove}
               onPointerUp={onElementPointerUp}
               onPointerCancel={onElementPointerUp}
               onPointerLeave={onElementPointerUp}
               onClick={() => isEditable && setSelected(null)}
             >
+              {renderSlideBackground(activeSlide.background)}
+              <div className="absolute inset-0 bg-black/35" />
+
               {activeSlide.elements.map((el) => {
                 const isSelected = selected?.slideId === activeSlide.id && selected?.elementId === el.id;
 
@@ -816,13 +1093,10 @@ export default function PointEditor() {
                   height: `${el.h * 100}%`,
                 };
 
-                const commonClass = `group select-none ${isEditable ? 'cursor-move' : ''}`;
-
-                return (
+                const elementNode = (
                   <div
-                    key={el.id}
                     style={style}
-                    className={commonClass}
+                    className={`group select-none relative z-10 ${isEditable ? 'cursor-move' : ''}`}
                     onPointerDown={(e) => onElementPointerDown(e, activeSlide.id, el.id)}
                     onClick={(e) => handleSelectElement(e, activeSlide.id, el.id)}
                   >
@@ -838,6 +1112,7 @@ export default function PointEditor() {
                             color: el.style.color,
                             fontSize: el.style.fontSize,
                             fontWeight: el.style.fontWeight as any,
+                            fontFamily: el.style.fontFamily || 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
                             justifyContent:
                               el.style.align === 'left' ? 'flex-start' : el.style.align === 'right' ? 'flex-end' : 'center',
                             textAlign: el.style.align,
@@ -865,8 +1140,6 @@ export default function PointEditor() {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            // En mode édition, un bouton sert à naviguer EN présentation.
-                            // Ici on garde la sélection sans navigation.
                             setSelected({ slideId: activeSlide.id, elementId: el.id });
                           }}
                         >
@@ -885,6 +1158,37 @@ export default function PointEditor() {
                     )}
                   </div>
                 );
+
+                if (!isEditable) {
+                  return <div key={el.id}>{elementNode}</div>;
+                }
+
+                return (
+                  <ContextMenu
+                    key={el.id}
+                    onOpenChange={(open) => {
+                      if (open) setSelected({ slideId: activeSlide.id, elementId: el.id });
+                    }}
+                  >
+                    <ContextMenuTrigger asChild>{elementNode}</ContextMenuTrigger>
+                    <ContextMenuContent className="w-52">
+                      <ContextMenuItem onSelect={() => copyElement(el)}>Copier</ContextMenuItem>
+                      <ContextMenuItem onSelect={() => { copyElement(el); deleteElement(activeSlide.id, el.id); }}>Couper</ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          pasteClipboard();
+                        }}
+                        disabled={!clipboardRef.current}
+                      >
+                        Coller
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem className="text-red-600" onSelect={() => deleteElement(activeSlide.id, el.id)}>
+                        Supprimer
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                );
               })}
             </div>
           </div>
@@ -892,7 +1196,7 @@ export default function PointEditor() {
           {/* Properties */}
           <Card className="p-4 h-fit lg:sticky lg:top-[92px]">
             <div className="text-sm font-semibold text-gray-900">Propriétés</div>
-            <div className="text-xs text-gray-500 mt-1">Sélectionnez un élément pour l\'éditer.</div>
+            <div className="text-xs text-gray-500 mt-1">Sélectionnez un élément pour l'éditer.</div>
 
             <Separator className="my-3" />
 
@@ -900,30 +1204,78 @@ export default function PointEditor() {
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label>Nom de page</Label>
-                <Input
-                  value={activeSlide.name}
-                  onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })}
-                  disabled={!isEditable}
-                />
+                <Input value={activeSlide.name} onChange={(e) => updateSlide(activeSlide.id, { name: e.target.value })} disabled={!isEditable} />
               </div>
 
               <div className="space-y-2">
-                <Label>Fond (couleur)</Label>
-                <div className="flex items-center gap-2">
+                <Label>Fond</Label>
+                <Select
+                  value={activeSlide.background.type}
+                  onValueChange={(v: any) => {
+                    if (v === 'solid') updateSlide(activeSlide.id, { background: { type: 'solid', color: '#0B1220' } });
+                    if (v === 'image') updateSlide(activeSlide.id, { background: { type: 'image', url: '' } });
+                    if (v === 'youtube') updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: '' } });
+                  }}
+                  disabled={!isEditable}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="solid">Couleur</SelectItem>
+                    <SelectItem value="image">Image</SelectItem>
+                    <SelectItem value="youtube">Vidéo YouTube</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {activeSlide.background.type === 'solid' && (
+                <div className="space-y-2">
+                  <Label>Couleur</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="color"
+                      value={activeSlide.background.color}
+                      onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
+                      disabled={!isEditable}
+                      className="w-16 p-1"
+                    />
+                    <Input
+                      value={activeSlide.background.color}
+                      onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
+                      disabled={!isEditable}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {activeSlide.background.type === 'image' && (
+                <div className="space-y-2">
+                  <Label>Image (URL)</Label>
                   <Input
-                    type="color"
-                    value={activeSlide.background.color}
-                    onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
+                    value={activeSlide.background.url}
+                    onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'image', url: e.target.value } })}
                     disabled={!isEditable}
-                    className="w-16 p-1"
-                  />
-                  <Input
-                    value={activeSlide.background.color}
-                    onChange={(e) => updateSlide(activeSlide.id, { background: { type: 'solid', color: e.target.value } })}
-                    disabled={!isEditable}
+                    placeholder="https://..."
                   />
                 </div>
-              </div>
+              )}
+
+              {activeSlide.background.type === 'youtube' && (
+                <div className="space-y-2">
+                  <Label>Vidéo YouTube (lien)</Label>
+                  <Input
+                    value={activeSlide.background.videoId ? `https://youtu.be/${activeSlide.background.videoId}` : ''}
+                    onChange={(e) => {
+                      const id = extractYoutubeId(e.target.value) || '';
+                      updateSlide(activeSlide.id, { background: { type: 'youtube', videoId: id } });
+                    }}
+                    disabled={!isEditable}
+                    placeholder="https://www.youtube.com/watch?v=..."
+                  />
+                  <div className="text-xs text-gray-500">La vidéo est lue en muet et en boucle.</div>
+                </div>
+              )}
             </div>
 
             <Separator className="my-4" />
@@ -1071,6 +1423,34 @@ export default function PointEditor() {
                         disabled={!isEditable}
                       />
                       <div className="text-xs text-gray-500">{selectedElement.style.fontSize}px</div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedElement.type === 'text' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Police</Label>
+                      <Select
+                        value={selectedElement.style.fontFamily || FONT_FAMILIES[0].value}
+                        onValueChange={(v: string) =>
+                          updateElement(activeSlide.id, selectedElement.id, {
+                            style: { ...selectedElement.style, fontFamily: v },
+                          } as any)
+                        }
+                        disabled={!isEditable}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Police" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FONT_FAMILIES.map((f) => (
+                            <SelectItem key={f.value} value={f.value}>
+                              {f.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 )}

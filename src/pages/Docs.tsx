@@ -364,7 +364,7 @@ const Docs = () => {
                   w: 0.84,
                   h: 0.18,
                   text: title,
-                  style: { fontSize: 56, fontWeight: 700, color: '#FFFFFF', align: 'center' },
+                  style: { fontSize: 56, fontWeight: 700, color: '#FFFFFF', align: 'center', fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif' },
                 },
               ],
             },

@@ -41,6 +41,7 @@ const buildInitialPoint = (): PointDocV1 => ({
             fontWeight: 700,
             color: '#FFFFFF',
             align: 'center',
+            fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
           },
         },
         {
@@ -56,6 +57,7 @@ const buildInitialPoint = (): PointDocV1 => ({
             fontWeight: 400,
             color: '#CBD5E1',
             align: 'center',
+            fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
           },
         },
       ],
