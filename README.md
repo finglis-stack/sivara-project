@@ -25,6 +25,11 @@ Cette plateforme intègre un moteur de recherche sémantique, une suite bureauti
 *   **Ranking pondéré :** scoring hybride (exact/racine/phonétique/ngram) côté Edge, puis déchiffrement uniquement des résultats pertinents.
 *   **Interface :** regroupement des résultats web par domaine + section "Vos Documents" directement dans les résultats.
 
+### Point
+*   **Éditeur de présentations :** création de pages/slides avec éléments (texte, image, boutons).
+*   **Mode présentation :** interface masquée, navigation clavier, et option plein écran (F11).
+*   **Fond "Semi image" :** image sur le tiers supérieur avec fondu/dégradé vers une couleur, et position verticale ajustable.
+
 ---
 
 ## ⚙️ Ingénierie et Architecture Système
