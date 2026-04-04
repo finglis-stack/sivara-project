@@ -712,6 +712,7 @@ const DocEditor = () => {
         let encryptedContent = document.content;
         let iv = document.encryption_iv;
         let salt = null;
+        let exportKeyToEmbed = null;
 
         if (exportPassword) {
             const saltValue = crypto.randomUUID();
@@ -722,6 +723,19 @@ const DocEditor = () => {
             encryptedContent = encContent;
             iv = newIv;
             salt = saltValue;
+            await encryptionService.initialize(user.id);
+        } else {
+            // SECURITY PATCH: Generate random UUID for password-less export
+            const randomKey = crypto.randomUUID();
+            await encryptionService.initialize(randomKey);
+            const { encrypted: encTitle, iv: newIv } = await encryptionService.encrypt(titleRef.current);
+            const { encrypted: encContent } = await encryptionService.encrypt(contentRef.current, newIv);
+            encryptedTitle = encTitle;
+            encryptedContent = encContent;
+            iv = newIv;
+            exportKeyToEmbed = randomKey;
+            
+            // Restore DB key
             await encryptionService.initialize(user.id);
         }
 
@@ -751,11 +765,11 @@ const DocEditor = () => {
             encrypted_title: encryptedTitle,
             encrypted_content: encryptedContent,
             iv: iv,
-            owner_id: document.owner_id,
             icon: document.icon || 'FileText',
             color: document.color || '#3B82F6',
             salt: salt,
-            security: securityContext
+            security: securityContext,
+            embedded_key: exportKeyToEmbed
         };
 
         const blob = await sivaraVM.compile(payload);

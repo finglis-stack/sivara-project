@@ -521,12 +521,16 @@ const Docs = () => {
     try {
         setIsImporting(true);
 
-        if (data.header === 'SIVARA_SECURE_DOC_V2' && password && data.salt) {
+        if (data.auto_key) {
+            // SECURITY PATCH : On utilise la clé sécurisée générée sans mot de passe
+            await encryptionService.initialize(data.auto_key);
+        } else if (data.header === 'SIVARA_SECURE_DOC_V2' && password && data.salt) {
             await encryptionService.initialize(password, data.salt);
-        } else if (data.header === 'SIVARA_SECURE_DOC_V1' || data.header === 'SIVARA_SECURE_DOC_V2') {
+        } else if (data.owner_id) {
+            // Rétrocompatibilité pour les anciens fichiers qui exposaient l'owner_id
             await encryptionService.initialize(data.owner_id);
         } else {
-            throw new Error("Format non supporté");
+            throw new Error("Format ou clé non supporté");
         }
         
         let decryptedTitle = '';
@@ -536,7 +540,7 @@ const Docs = () => {
             decryptedTitle = await encryptionService.decrypt(data.encrypted_title, data.iv);
             decryptedContent = data.encrypted_content ? await encryptionService.decrypt(data.encrypted_content, data.iv) : '';
         } catch (decryptError) {
-            if (data.header === 'SIVARA_SECURE_DOC_V2' && !password) {
+            if (data.header === 'SIVARA_SECURE_DOC_V2' && data.salt && !password) {
                 setImportPasswordDialog({ isOpen: true, fileData: data });
                 setIsImporting(false);
                 return;
@@ -589,7 +593,7 @@ const Docs = () => {
         setIsImporting(true);
         const data = await sivaraVM.decompile(file);
         
-        if (data.header === 'SIVARA_SECURE_DOC_V2') {
+        if (data.header === 'SIVARA_SECURE_DOC_V2' && data.salt && !data.auto_key) {
             setImportPasswordDialog({ isOpen: true, fileData: data });
             setIsImporting(false);
         } else {
