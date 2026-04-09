@@ -29,6 +29,8 @@ import HelpLanding from "./pages/HelpLanding";
 import HelpAdmin from "./pages/HelpAdmin";
 import HelpCategory from "./pages/HelpCategory";
 import HelpArticle from "./pages/HelpArticle";
+import HelpMyTickets from "./pages/HelpMyTickets";
+import HelpAdminProfile from "./pages/HelpAdminProfile";
 import ResetPassword from "./pages/ResetPassword";
 import DeviceLanding from "./pages/DeviceLanding";
 import DeviceAdmin from "./pages/DeviceAdmin";
@@ -121,7 +123,13 @@ const AppRoutes = () => {
       {currentApp === 'help' && (
         <>
           <Route path="/" element={<HelpLanding />} />
+          <Route path="/my-tickets" element={<HelpMyTickets />} />
           <Route path="/admin" element={<HelpAdmin />} />
+          <Route path="/admin/profile/:userId" element={
+            <ProtectedRoute>
+              <HelpAdminProfile />
+            </ProtectedRoute>
+          } />
           <Route path="/category/:slug" element={<HelpCategory />} />
           <Route path="/article/:slug" element={<HelpArticle />} />
           <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />

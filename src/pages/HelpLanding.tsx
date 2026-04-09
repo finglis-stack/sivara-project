@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import UserMenu from '@/components/UserMenu';
 import Footer from '@/components/Footer';
-import { Search, Book, ArrowRight, Shield, Mail, LifeBuoy, Lock, Settings, Loader2, FileText } from 'lucide-react';
+import { Search, Book, ArrowRight, Lock, Loader2, LifeBuoy, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 const HelpLanding = () => {
@@ -17,6 +17,7 @@ const HelpLanding = () => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isStaff, setIsStaff] = useState(false);
+  const [openTicketCount, setOpenTicketCount] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -26,6 +27,15 @@ const HelpLanding = () => {
       if (user) {
         const { data: profile } = await supabase.from('profiles').select('is_staff').eq('id', user.id).single();
         if (profile?.is_staff) setIsStaff(true);
+
+        // Count open tickets for this user
+        const { count } = await supabase
+          .from('support_tickets')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .in('status', ['open', 'suspended']);
+        
+        setOpenTicketCount(count || 0);
       }
     };
     fetchData();
@@ -55,7 +65,28 @@ const HelpLanding = () => {
 
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900 flex flex-col">
-      <nav className="absolute top-0 w-full z-50 border-b border-white/10 bg-black/10 backdrop-blur-sm">
+      
+      {/* TICKET NOTIFICATION BAR — Only visible if user has open tickets */}
+      {user && openTicketCount > 0 && (
+        <div 
+          className="bg-gray-900 text-white py-2.5 px-4 text-center cursor-pointer hover:bg-gray-800 transition-colors z-[60] relative"
+          onClick={() => navigate('/my-tickets')}
+        >
+          <div className="container mx-auto flex items-center justify-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="h-5 w-5 bg-white/15 rounded-full flex items-center justify-center">
+                <MessageSquare className="h-3 w-3" />
+              </div>
+              <span className="text-sm font-light tracking-wide">
+                Vous avez <span className="font-medium">{openTicketCount}</span> demande{openTicketCount > 1 ? 's' : ''} en cours
+              </span>
+            </div>
+            <ArrowRight className="h-3.5 w-3.5 text-white/60" />
+          </div>
+        </div>
+      )}
+
+      <nav className="absolute top-0 w-full z-50 border-b border-white/10 bg-black/10 backdrop-blur-sm" style={{ top: user && openTicketCount > 0 ? '40px' : '0' }}>
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = 'https://sivara.ca'}>
             <div className="h-9 w-9 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 shadow-inner">
@@ -64,9 +95,20 @@ const HelpLanding = () => {
             <span className="font-medium text-lg tracking-wide text-white drop-shadow-md">Sivara Help</span>
           </div>
           <div className="flex items-center gap-4">
+            {user && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => navigate('/my-tickets')} 
+                className="text-white hover:bg-white/20 gap-2"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span className="hidden sm:inline">Mes demandes</span>
+              </Button>
+            )}
             {isStaff && (
               <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="text-white hover:bg-white/20">
-                <Lock className="w-4 h-4 mr-2" /> Admin
+                <Lock className="w-4 h-4 mr-2" />Admin
               </Button>
             )}
             {user ? <div className="bg-white/10 rounded-full p-1 backdrop-blur-md"><UserMenu /></div> : <Button onClick={handleLogin} className="bg-white text-black hover:bg-gray-100 rounded-full px-6">Connexion</Button>}
@@ -74,7 +116,10 @@ const HelpLanding = () => {
         </div>
       </nav>
 
-      <div className="relative pt-32 pb-20 overflow-hidden bg-gray-900 min-h-[500px] flex flex-col items-center justify-center">
+      <div 
+        className="relative pb-20 overflow-hidden bg-gray-900 min-h-[500px] flex flex-col items-center justify-center"
+        style={{ paddingTop: user && openTicketCount > 0 ? 'calc(8rem + 40px)' : '8rem' }}
+      >
         <div className="absolute inset-0 z-0"><img src="/help-hero.jpg" className="w-full h-full object-cover opacity-80" /><div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-white"></div></div>
         <div className="relative z-10 container mx-auto px-6 text-center max-w-3xl">
           <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight drop-shadow-xl">Comment pouvons-nous vous aider ?</h1>
@@ -127,14 +172,33 @@ const HelpLanding = () => {
             )) : <div className="col-span-3 text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200"><LifeBuoy className="h-12 w-12 mx-auto mb-4 text-gray-300" /><p>Aucune catégorie disponible.</p></div>}
             </div>
         )}
+
+        {/* Contact Support CTA */}
+        <div className="max-w-2xl mx-auto mt-16 text-center">
+          <div className="bg-gray-50 rounded-2xl border border-gray-100 p-10">
+            <h3 className="text-xl font-light text-gray-900 mb-2">Vous ne trouvez pas ce que vous cherchez ?</h3>
+            <p className="text-sm text-gray-400 font-light mb-6">Notre équipe est là pour vous aider</p>
+            {user ? (
+              <Button 
+                onClick={() => navigate('/my-tickets')}
+                className="bg-gray-900 hover:bg-gray-800 text-white rounded-full px-8 h-11 font-normal shadow-sm"
+              >
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Contacter le support
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleLogin}
+                variant="outline"
+                className="rounded-full px-8 h-11 font-normal"
+              >
+                Connectez-vous pour nous contacter
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="border-t border-gray-100 py-12 bg-gray-50">
-         <div className="container mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="flex items-start gap-4 group cursor-pointer"><div className="p-3 bg-white rounded-full shadow-sm text-green-600 group-hover:scale-110 transition-transform"><Shield className="h-6 w-6" /></div><div><h4 className="font-bold text-gray-900">Confidentialité</h4><p className="text-sm text-gray-500 mt-1">Protection des données.</p></div></div>
-            <div className="flex items-start gap-4 group cursor-pointer"><div className="p-3 bg-white rounded-full shadow-sm text-blue-600 group-hover:scale-110 transition-transform"><Mail className="h-6 w-6" /></div><div><h4 className="font-bold text-gray-900">Support</h4><p className="text-sm text-gray-500 mt-1">Contactez notre équipe.</p></div></div>
-            <div className="flex items-start gap-4 group cursor-pointer"><div className="p-3 bg-white rounded-full shadow-sm text-purple-600 group-hover:scale-110 transition-transform"><Settings className="h-6 w-6" /></div><div><h4 className="font-bold text-gray-900">Système</h4><p className="text-sm text-gray-500 mt-1">Opérationnel.</p></div></div>
-         </div>
-      </div>
+
       <Footer />
     </div>
   );

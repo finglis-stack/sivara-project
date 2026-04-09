@@ -13,8 +13,8 @@ import {
   MessageSquare, Search, Send, LogOut, 
   Folder, FileText, Plus, Edit2, Trash2, 
   Eye, Layout, ChevronRight, Loader2,
-  MoreVertical, Phone, Mail, User, HardDrive,
-  ShieldCheck, AlertCircle, PauseCircle, CheckCircle2, Smartphone, GripVertical
+  MoreVertical, User,
+  PauseCircle, CheckCircle2, GripVertical
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -629,7 +629,7 @@ const HelpAdmin = () => {
                         </h2>
                         <p className="text-sm text-gray-500 mb-4">{selectedTicket.customer_email}</p>
                         
-                        <Button variant="outline" size="sm" className="w-full gap-2">
+                        <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => navigate(`/admin/profile/${selectedTicket.user_id}`)}>
                             <User className="h-4 w-4" /> Voir profil complet
                         </Button>
                     </div>
@@ -639,19 +639,13 @@ const HelpAdmin = () => {
                             <div>
                                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Coordonnées</h3>
                                 <div className="space-y-3">
-                                    <div className="flex items-center gap-3 text-sm text-gray-600">
-                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><Smartphone className="h-4 w-4" /></div>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{selectedTicket.profiles.phone_country_code || '+1'} {selectedTicket.profiles.phone_number || 'N/A'}</span>
-                                            <span className="text-xs text-gray-400">Mobile</span>
-                                        </div>
+                                    <div className="flex flex-col gap-0.5 text-sm text-gray-600">
+                                        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Téléphone</span>
+                                        <span className="font-medium">{selectedTicket.profiles.phone_country_code || '+1'} {selectedTicket.profiles.phone_number || 'N/A'}</span>
                                     </div>
-                                    <div className="flex items-center gap-3 text-sm text-gray-600">
-                                        <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center text-purple-600"><Mail className="h-4 w-4" /></div>
-                                        <div className="flex flex-col overflow-hidden">
-                                            <span className="font-medium truncate">{selectedTicket.customer_email}</span>
-                                            <span className="text-xs text-gray-400">Email principal</span>
-                                        </div>
+                                    <div className="flex flex-col gap-0.5 text-sm text-gray-600">
+                                        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Email</span>
+                                        <span className="font-medium truncate">{selectedTicket.customer_email}</span>
                                     </div>
                                 </div>
                             </div>
@@ -675,12 +669,8 @@ const HelpAdmin = () => {
                             <Separator />
 
                             <div>
-                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Sécurité & Compte</h3>
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Compte</h3>
                                 <div className="space-y-2">
-                                    <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-100">
-                                        <span className="text-xs font-medium text-green-800 flex items-center gap-2"><ShieldCheck className="h-3 w-3" /> E2EE Actif</span>
-                                        <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                                    </div>
                                     <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-100">
                                         <span className="text-xs font-medium text-gray-600">Type de compte</span>
                                         <span className="text-xs font-bold uppercase">{selectedTicket.profiles.account_type}</span>
