@@ -7,7 +7,7 @@ import { sivaraVM } from '@/lib/sivara-vm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { showSuccess, showError } from '@/utils/toast';
-import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
+import { useEditor, EditorContent, ReactNodeViewRenderer, BubbleMenu } from '@tiptap/react';
 import { Extension, mergeAttributes } from '@tiptap/core';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Underline } from '@tiptap/extension-underline';
@@ -231,6 +231,7 @@ const DocEditor = () => {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   
   // UI Inputs
   const [selectedIcon, setSelectedIcon] = useState('FileText');
@@ -791,6 +792,54 @@ const DocEditor = () => {
         if (user) await encryptionService.initialize(user.id);
     }
   };
+
+  const handleAiAction = async (action: 'revise' | 'generate' | 'summarize') => {
+    if (!editor || !userProfile?.is_pro) return;
+    setAiLoading(true);
+    let text = '';
+    let instructions = '';
+    
+    if (action === 'revise') {
+      const { from, to } = editor.state.selection;
+      text = editor.state.doc.textBetween(from, to, ' ');
+      if (!text) {
+        setAiLoading(false);
+        return showError("Veuillez sélectionner du texte à réviser.");
+      }
+    } else if (action === 'summarize') {
+      text = editor.getText();
+    } else if (action === 'generate') {
+      instructions = window.prompt("Que voulez-vous générer ?") || '';
+      if (!instructions) {
+         setAiLoading(false);
+         return;
+      }
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('doc-ai', {
+        body: { action, text, instructions }
+      });
+
+      if (error || !data?.result) throw new Error(error?.message || "Erreur IA");
+
+      if (action === 'revise') {
+        editor.commands.insertContent(data.result);
+        showSuccess("Texte révisé avec succès.");
+      } else if (action === 'summarize') {
+        editor.commands.insertContent(`<blockquote><strong>Résumé de l'IA :</strong><br/>${data.result}</blockquote><p></p>`);
+        showSuccess("Résumé ajouté !");
+      } else if (action === 'generate') {
+        editor.commands.insertContent(data.result);
+        showSuccess("Texte généré !");
+      }
+    } catch (e: any) {
+      console.error(e);
+      showError("Échec de l'assistant IA.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
   
   const CurrentIcon = AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || FileText;
   const getIconTextColor = (bgColor: string) => { const hex = bgColor.replace('#', ''); const r = parseInt(hex.substr(0, 2), 16); const g = parseInt(hex.substr(2, 2), 16); const b = parseInt(hex.substr(4, 2), 16); return ((r * 299 + g * 587 + b * 114) / 1000) > 155 ? '#1F2937' : '#FFFFFF'; };
@@ -1019,6 +1068,40 @@ const DocEditor = () => {
         ))}
 
         <div className="max-w-[21cm] w-full mx-auto py-4 sm:py-8">
+          {editor && userProfile?.is_pro && permission === 'write' && (
+            <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }} className="bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden flex items-center p-1">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => handleAiAction('revise')} 
+                disabled={aiLoading}
+                className="text-xs h-7 gap-1 px-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 font-medium"
+              >
+                {aiLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : <Wand2 className="h-3 w-3"/>}
+                Réviser
+              </Button>
+              <div className="w-px h-4 bg-gray-200 mx-1"></div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => handleAiAction('generate')} 
+                disabled={aiLoading}
+                className="text-xs h-7 gap-1 px-2 text-gray-700 font-medium"
+              >
+                Générer
+              </Button>
+              <div className="w-px h-4 bg-gray-200 mx-1"></div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => handleAiAction('summarize')}
+                disabled={aiLoading} 
+                className="text-xs h-7 gap-1 px-2 text-gray-700 font-medium"
+              >
+                Résumer
+              </Button>
+            </BubbleMenu>
+          )}
           <EditorContent editor={editor} />
         </div>
       </div>
