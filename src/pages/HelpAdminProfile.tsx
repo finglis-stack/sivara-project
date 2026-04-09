@@ -181,18 +181,6 @@ const HelpAdminProfile = () => {
   return (
     <div className="min-h-screen bg-[#FAFAFA]" style={{ fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
 
-      {/* SECURITY HEADER */}
-      <div className="bg-gray-900 text-white">
-        <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="h-4 w-4 text-amber-400" />
-            <span className="text-[11px] font-light tracking-widest uppercase text-gray-400">Accès restreint — Dossier client confidentiel</span>
-          </div>
-          <span className="text-[10px] text-gray-500 font-mono">
-            {accessTime.toLocaleString('fr-FR')}
-          </span>
-        </div>
-      </div>
 
       {/* NAV */}
       <div className="bg-white border-b border-gray-200/80">
@@ -393,12 +381,6 @@ const HelpAdminProfile = () => {
             )}
           </div>
 
-          {/* FOOTER INFO */}
-          <div className="text-center py-6">
-            <p className="text-[10px] text-gray-300 font-light tracking-wider uppercase">
-              Consultation effectuée le {accessTime.toLocaleString('fr-FR')} — Session staff authentifiée
-            </p>
-          </div>
 
         </div>
       </ScrollArea>

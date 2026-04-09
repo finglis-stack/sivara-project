@@ -230,7 +230,7 @@ const HelpMyTickets = () => {
       <nav className="bg-white border-b border-gray-200/80 sticky top-0 z-50">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/')} className="flex items-center gap-2 text-gray-400 hover:text-gray-600 transition-colors">
+            <button onClick={() => navigate('/')} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors">
               <ArrowLeft className="h-4 w-4" />
               <span className="text-sm font-light hidden sm:inline">Centre d'aide</span>
             </button>
@@ -246,7 +246,7 @@ const HelpMyTickets = () => {
               <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Nouvelle demande</span>
             </Button>
-            {user ? <UserMenu /> : <Button onClick={handleLogin} size="sm" variant="outline" className="rounded-full">Connexion</Button>}
+            {user ? <UserMenu /> : <Button onClick={handleLogin} size="sm" variant="outline" className="rounded-full border-gray-300 text-gray-700">Connexion</Button>}
           </div>
         </div>
       </nav>
@@ -257,7 +257,7 @@ const HelpMyTickets = () => {
         {/* TICKET LIST */}
         <div className={`lg:w-96 w-full border-r border-gray-200/80 bg-white flex flex-col shrink-0 ${selectedTicket ? 'hidden lg:flex' : 'flex'}`}>
           <div className="p-5 border-b border-gray-100">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <p className="text-xs font-medium text-gray-600 uppercase tracking-wider">
               {tickets.length} demande{tickets.length !== 1 ? 's' : ''}
             </p>
           </div>
@@ -269,18 +269,15 @@ const HelpMyTickets = () => {
               </div>
             ) : tickets.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-                <div className="h-16 w-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4">
-                  <MessageSquare className="h-7 w-7 text-gray-300" />
-                </div>
-                <p className="text-sm font-light text-gray-400 mb-1">Aucune demande</p>
-                <p className="text-xs text-gray-300 mb-6">Créez votre première demande de support</p>
+                <p className="text-sm font-medium text-gray-800 mb-1">Aucune demande</p>
+                <p className="text-xs text-gray-600 mb-6">Créez votre première demande de support</p>
                 <Button
                   onClick={() => setShowNewTicket(true)}
                   variant="outline"
                   size="sm"
-                  className="rounded-full px-5 gap-2 text-xs"
+                  className="rounded-full px-5 text-xs text-gray-800 border-gray-300"
                 >
-                  <Plus className="h-3 w-3" /> Nouvelle demande
+                  Nouvelle demande
                 </Button>
               </div>
             ) : (
@@ -298,15 +295,14 @@ const HelpMyTickets = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <h3 className="text-sm font-medium text-gray-900 truncate leading-snug">{t.subject}</h3>
-                          <p className="text-[11px] text-gray-400 font-light mt-1.5">
+                          <p className="text-[11px] text-gray-500 font-medium mt-1.5">
                             {new Date(t.last_message_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <Badge variant="outline" className={`text-[10px] h-5 px-2 font-normal border ${status.color} flex items-center gap-1`}>
-                            {status.icon}{status.label}
+                          <Badge variant="outline" className={`text-[10px] h-5 px-2 font-medium border text-gray-700 bg-gray-100`}>
+                            {status.label}
                           </Badge>
-                          <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-gray-500 transition-colors hidden lg:block" />
                         </div>
                       </div>
                     </button>
@@ -326,7 +322,7 @@ const HelpMyTickets = () => {
                 <div className="flex items-center gap-3 min-w-0">
                   <button
                     onClick={() => setSelectedTicket(null)}
-                    className="lg:hidden text-gray-400 hover:text-gray-600 transition-colors"
+                    className="lg:hidden text-gray-600 hover:text-gray-900 transition-colors"
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </button>
@@ -334,8 +330,8 @@ const HelpMyTickets = () => {
                     <h2 className="text-sm font-medium text-gray-900 truncate">{selectedTicket.subject}</h2>
                   </div>
                 </div>
-                <Badge variant="outline" className={`text-[10px] h-5 px-2 font-normal border ${getStatusConfig(selectedTicket.status).color} flex items-center gap-1 shrink-0`}>
-                  {getStatusConfig(selectedTicket.status).icon}{getStatusConfig(selectedTicket.status).label}
+                <Badge variant="outline" className={`text-[10px] h-5 px-2 font-medium border text-gray-700 bg-gray-100 shrink-0`}>
+                  {getStatusConfig(selectedTicket.status).label}
                 </Badge>
               </div>
 
@@ -357,14 +353,14 @@ const HelpMyTickets = () => {
                         </Avatar>
                         <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                           m.is_staff_reply
-                            ? 'bg-white border border-gray-100 text-gray-800 rounded-tl-md shadow-sm'
+                            ? 'bg-white border border-gray-200 text-gray-900 rounded-tl-md shadow-sm'
                             : 'bg-gray-900 text-white rounded-tr-md'
                         }`}>
                           {m.is_staff_reply && m.profiles?.first_name && (
-                            <p className="text-[10px] font-medium text-gray-400 mb-1 uppercase tracking-wider">{m.profiles.first_name} · Sivara</p>
+                            <p className="text-[10px] font-bold text-gray-600 mb-1 uppercase tracking-wider">{m.profiles.first_name} · Sivara</p>
                           )}
                           <div dangerouslySetInnerHTML={{ __html: m.body }} />
-                          <p className={`text-[10px] mt-2 ${m.is_staff_reply ? 'text-gray-300' : 'text-white/50'}`}>
+                          <p className={`text-[10px] mt-2 font-medium ${m.is_staff_reply ? 'text-gray-500' : 'text-white/60'}`}>
                             {new Date(m.created_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
@@ -383,36 +379,32 @@ const HelpMyTickets = () => {
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       placeholder="Écrivez votre message..."
-                      className="min-h-[80px] pr-14 resize-none bg-gray-50 border-gray-200 focus:bg-white focus:border-gray-300 transition-all text-sm rounded-xl font-light"
+                      className="min-h-[80px] pr-20 resize-none bg-gray-50 border-gray-300 text-gray-900 focus:bg-white focus:border-gray-400 transition-all text-sm rounded-xl font-medium"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
                       }}
                     />
                     <Button
-                      size="icon"
-                      className="absolute bottom-3 right-3 h-8 w-8 bg-gray-900 hover:bg-gray-800 text-white rounded-full shadow-sm"
+                      className="absolute bottom-3 right-3 h-8 bg-gray-900 hover:bg-gray-800 text-white rounded-full shadow-sm px-4 text-xs font-semibold"
                       onClick={sendReply}
                       disabled={isSending || !replyText.trim()}
                     >
-                      {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                      {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Envoyer"}
                     </Button>
                   </div>
                 </div>
               )}
 
               {selectedTicket.status === 'closed' && (
-                <div className="border-t border-gray-100 bg-gray-50 py-4 text-center">
-                  <p className="text-xs text-gray-400 font-light">Cette demande est résolue</p>
+                <div className="border-t border-gray-200 bg-gray-50 py-4 text-center">
+                  <p className="text-sm text-gray-600 font-medium">Cette demande est résolue</p>
                 </div>
               )}
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-              <div className="h-20 w-20 bg-gray-50 rounded-2xl flex items-center justify-center mb-5">
-                <MessageSquare className="h-8 w-8 text-gray-200" />
-              </div>
-              <p className="text-sm font-light text-gray-400">Sélectionnez une demande</p>
-              <p className="text-xs text-gray-300 mt-1">ou créez-en une nouvelle</p>
+              <p className="text-sm font-medium text-gray-800">Sélectionnez une demande</p>
+              <p className="text-xs text-gray-600 mt-1">ou créez-en une nouvelle</p>
             </div>
           )}
         </div>
@@ -422,41 +414,51 @@ const HelpMyTickets = () => {
 
       {/* NEW TICKET DIALOG */}
       <Dialog open={showNewTicket} onOpenChange={setShowNewTicket}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-light text-xl">Nouvelle demande</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-5 py-4">
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Sujet</Label>
-              <Input
-                value={newSubject}
-                onChange={(e) => setNewSubject(e.target.value)}
-                placeholder="Ex: Problème d'accès à mon compte"
-                className="h-11 font-light border-gray-200 focus:border-gray-300"
-              />
+        <DialogContent className="sm:max-w-lg overflow-hidden p-0 border-0">
+          <div className="relative p-8 px-10">
+            <div className="absolute inset-0 z-0">
+              <img src="/ticket-bg.jpg" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-black/80"></div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Décrivez votre problème</Label>
-              <Textarea
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Donnez-nous le plus de détails possible pour que nous puissions vous aider rapidement..."
-                className="min-h-[150px] font-light resize-none border-gray-200 focus:border-gray-300"
-              />
+            
+            <div className="relative z-10 text-white">
+              <DialogHeader>
+                <DialogTitle className="font-light text-2xl text-white">Nouvelle demande</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-6 py-8">
+                <div className="space-y-3">
+                  <Label className="text-[11px] font-bold text-white/70 uppercase tracking-widest">Sujet</Label>
+                  <Input
+                    value={newSubject}
+                    onChange={(e) => setNewSubject(e.target.value)}
+                    placeholder="Ex: Problème d'accès à mon compte"
+                    className="h-12 font-medium border-white/20 bg-white/10 text-white placeholder:text-white/40 focus:border-white/50 focus:ring-1 focus:ring-white/50 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-[11px] font-bold text-white/70 uppercase tracking-widest">Décrivez votre problème</Label>
+                  <Textarea
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Donnez-nous tous les détails..."
+                    className="min-h-[160px] font-medium resize-none border-white/20 bg-white/10 text-white placeholder:text-white/40 focus:border-white/50 focus:ring-1 focus:ring-white/50 rounded-xl"
+                  />
+                </div>
+              </div>
+              <DialogFooter className="gap-3 sm:gap-0 mt-2 border-t border-white/10 pt-6">
+                <Button variant="ghost" onClick={() => setShowNewTicket(false)} className="font-medium text-white/70 hover:text-white hover:bg-white/10 rounded-full h-11">
+                  Annuler
+                </Button>
+                <Button
+                  onClick={createTicket}
+                  disabled={isCreating || !newSubject.trim() || !newMessage.trim()}
+                  className="bg-white hover:bg-gray-200 text-black h-11 rounded-full px-8 font-bold shadow-xl"
+                >
+                  {isCreating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Envoyer"}
+                </Button>
+              </DialogFooter>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowNewTicket(false)} className="font-light">Annuler</Button>
-            <Button
-              onClick={createTicket}
-              disabled={isCreating || !newSubject.trim() || !newMessage.trim()}
-              className="bg-gray-900 hover:bg-gray-800 text-white rounded-full px-6 font-normal shadow-sm"
-            >
-              {isCreating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Envoyer
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
