@@ -52,6 +52,8 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { SivaraText } from '@/components/SivaraText';
 import { ImageNodeView } from '@/components/ImageNodeView';
 
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+
 // --- CUSTOM EXTENSIONS ---
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -233,6 +235,31 @@ const DocEditor = () => {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  
+  // AI States
+  const [showGeneratePopup, setShowGeneratePopup] = useState(false);
+  const [generateInputStr, setGenerateInputStr] = useState('');
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryPos, setSummaryPos] = useState({ x: window.innerWidth / 2 - 200, y: 150 });
+  const [isDraggingSummary, setIsDraggingSummary] = useState(false);
+  const summaryDragRef = useRef({ x: 0, y: 0, startX: 0, startY: 0 });
+
+  const startDragSummary = (e: React.PointerEvent) => {
+    setIsDraggingSummary(true);
+    summaryDragRef.current = { x: e.clientX, y: e.clientY, startX: summaryPos.x, startY: summaryPos.y };
+    (e.target as Element).setPointerCapture(e.pointerId);
+  };
+  const moveDragSummary = (e: React.PointerEvent) => {
+    if (!isDraggingSummary) return;
+    setSummaryPos({
+      x: summaryDragRef.current.startX + (e.clientX - summaryDragRef.current.x),
+      y: summaryDragRef.current.startY + (e.clientY - summaryDragRef.current.y)
+    });
+  };
+  const endDragSummary = (e: React.PointerEvent) => {
+    setIsDraggingSummary(false);
+    (e.target as Element).releasePointerCapture(e.pointerId);
+  };
   
   // UI Inputs
   const [selectedIcon, setSelectedIcon] = useState('FileText');
@@ -810,11 +837,12 @@ const DocEditor = () => {
     } else if (action === 'summarize') {
       text = editor.getText();
     } else if (action === 'generate') {
-      instructions = window.prompt("Que voulez-vous générer ?") || '';
-      if (!instructions) {
+      if (!generateInputStr) {
+         setShowGeneratePopup(true);
          setAiLoading(false);
          return;
       }
+      instructions = generateInputStr;
     }
 
     try {
@@ -828,11 +856,14 @@ const DocEditor = () => {
         editor.commands.insertContent(data.result);
         showSuccess("Texte révisé avec succès.");
       } else if (action === 'summarize') {
-        editor.commands.insertContent(`<blockquote><strong>Résumé de l'IA :</strong><br/>${data.result}</blockquote><p></p>`);
-        showSuccess("Résumé ajouté !");
+        setSummaryText(data.result);
+        setSummaryPos({ x: window.innerWidth / 2 - 200, y: 150 });
+        showSuccess("Résumé généré !");
       } else if (action === 'generate') {
         editor.commands.insertContent(data.result);
         showSuccess("Texte généré !");
+        setShowGeneratePopup(false);
+        setGenerateInputStr('');
       }
     } catch (e: any) {
       console.error(e);
@@ -1260,6 +1291,67 @@ const DocEditor = () => {
             </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Generate Dialog popup */}
+      <Dialog open={showGeneratePopup} onOpenChange={setShowGeneratePopup}>
+        <DialogContent className="sm:max-w-3xl overflow-hidden p-0 rounded-2xl border bg-white/95 backdrop-blur-xl shadow-2xl [&>button]:hidden">
+          <div className="flex bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 items-center justify-between p-4">
+             <div className="flex items-center gap-4 w-full">
+                <div className="w-16 h-16 shrink-0 bg-white rounded-xl shadow-sm overflow-hidden flex items-center justify-center p-1">
+                   <DotLottieReact src="/8bit.lottie" loop autoplay className="w-full h-full object-contain" />
+                </div>
+                <div className="flex-1">
+                   <input 
+                      autoFocus
+                      type="text" 
+                      value={generateInputStr}
+                      onChange={(e) => setGenerateInputStr(e.target.value)}
+                      onKeyDown={(e) => { 
+                          if(e.key === 'Enter') handleAiAction('generate'); 
+                      }}
+                      className="w-full bg-transparent text-xl font-medium outline-none text-gray-800 placeholder-gray-400 py-2"
+                      placeholder="Que voulez-vous générer aujourd'hui ?"
+                   />
+                </div>
+                <Button 
+                   onClick={() => handleAiAction('generate')} 
+                   disabled={!generateInputStr || aiLoading}
+                   className="shrink-0 bg-black hover:bg-gray-800 text-white rounded-full px-6 py-2 transition-all drop-shadow-md"
+                >
+                    {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Générer"}
+                </Button>
+             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Summarize Bubble */}
+      {summaryText && (
+          <div 
+             className="fixed z-50 w-80 bg-white shadow-2xl border border-gray-200 rounded-2xl overflow-hidden flex flex-col transition-shadow"
+             style={{ 
+                 left: summaryPos.x, top: summaryPos.y,
+                 touchAction: 'none'
+             }}
+          >
+             <div 
+                 onPointerDown={startDragSummary}
+                 onPointerMove={moveDragSummary}
+                 onPointerUp={endDragSummary}
+                 onPointerCancel={endDragSummary}
+                 className="bg-zinc-50 border-b border-gray-100 px-4 py-2.5 cursor-move flex items-center justify-between select-none active:cursor-grabbing"
+             >
+                 <div className="font-semibold text-sm text-zinc-700 tracking-tight">
+                     L'essentiel
+                 </div>
+                 <button onClick={() => setSummaryText(null)} className="text-zinc-400 hover:text-zinc-800 transition-colors p-1" aria-label="Fermer">
+                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                 </button>
+             </div>
+             <div className="p-5 max-h-[400px] overflow-y-auto text-[13.5px] text-zinc-600 font-sans leading-relaxed whitespace-pre-wrap">
+                 {summaryText}
+             </div>
+          </div>
+      )}
     </div>
   );
 };
