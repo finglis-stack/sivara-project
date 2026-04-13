@@ -28,7 +28,7 @@ serve(async (req) => {
 
     const { action, text, context, instructions } = await req.json();
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     let prompt = '';
     if (action === 'revise') {
