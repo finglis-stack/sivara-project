@@ -47,16 +47,9 @@ RÈGLES ABSOLUES :
 
 Texte à corriger :
 ${text}`;
-    } else if (action === 'generate') {
-      prompt = `Tu es un assistant de rédaction IA intégré dans un traitement de texte. Ta tâche est de générer du texte basé sur les instructions suivantes de l'utilisateur.
-      Instructions: ${instructions || 'Génère un texte pertinent'}
-      (S'il y a un texte de contexte fourni, base-toi dessus : ${context || 'Aucun'})
-      
-      Rédige le texte de la manière la plus fluide possible. Utilise des paragraphes si nécessaire, avec des balises HTML basiques comme <p>, <strong>, <em> etc. pour le formatage, car ton rendu sera injecté dans un éditeur riche (TipTap).
-      N'encapsule pas ta réponse dans un code block markdown, donne directement le HTML.`;
     } else if (action === 'summarize') {
       prompt = `Tu es un assistant d'analyse. Fais un résumé concis professionnel du document suivant. 
-      Utilise des balises HTML simples (<p>, <ul>, <li>, <strong>) pour formater ta réponse, car ce sera inséré dans un éditeur de texte riche. Ne mets pas de bloc markdown.
+      N'utilise AUCUN formatage (pas de gras, pas de puces, pas de balises HTML). Renvoie uniquement du texte brut, en un seul paragraphe ou paragraphes séparés par des sauts de ligne réguliers.
       
       Document:
       ${text}`;

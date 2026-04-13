@@ -237,8 +237,6 @@ const DocEditor = () => {
   const [aiLoading, setAiLoading] = useState(false);
   
   // AI States
-  const [showGeneratePopup, setShowGeneratePopup] = useState(false);
-  const [generateInputStr, setGenerateInputStr] = useState('');
   const [summaryText, setSummaryText] = useState<string | null>(null);
   const [summaryPos, setSummaryPos] = useState({ x: window.innerWidth / 2 - 200, y: 150 });
   const [isDraggingSummary, setIsDraggingSummary] = useState(false);
@@ -821,7 +819,7 @@ const DocEditor = () => {
     }
   };
 
-  const handleAiAction = async (action: 'revise' | 'generate' | 'summarize') => {
+  const handleAiAction = async (action: 'revise' | 'summarize') => {
     if (!editor || !userProfile?.is_pro) return;
     setAiLoading(true);
     let text = '';
@@ -836,13 +834,6 @@ const DocEditor = () => {
       }
     } else if (action === 'summarize') {
       text = editor.getText();
-    } else if (action === 'generate') {
-      if (!generateInputStr) {
-         setShowGeneratePopup(true);
-         setAiLoading(false);
-         return;
-      }
-      instructions = generateInputStr;
     }
 
     try {
@@ -859,11 +850,6 @@ const DocEditor = () => {
         setSummaryText(data.result);
         setSummaryPos({ x: window.innerWidth / 2 - 200, y: 150 });
         showSuccess("Résumé généré !");
-      } else if (action === 'generate') {
-        editor.commands.insertContent(data.result);
-        showSuccess("Texte généré !");
-        setShowGeneratePopup(false);
-        setGenerateInputStr('');
       }
     } catch (e: any) {
       console.error(e);
@@ -1116,16 +1102,6 @@ const DocEditor = () => {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={() => handleAiAction('generate')} 
-                disabled={aiLoading}
-                className="text-xs h-7 gap-1 px-2 text-gray-700 font-medium"
-              >
-                Générer
-              </Button>
-              <div className="w-px h-4 bg-gray-200 mx-1"></div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
                 onClick={() => handleAiAction('summarize')}
                 disabled={aiLoading} 
                 className="text-xs h-7 gap-1 px-2 text-gray-700 font-medium"
@@ -1291,38 +1267,7 @@ const DocEditor = () => {
             </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* Generate Dialog popup */}
-      <Dialog open={showGeneratePopup} onOpenChange={setShowGeneratePopup}>
-        <DialogContent className="sm:max-w-3xl overflow-hidden p-0 rounded-2xl border border-zinc-200 bg-white shadow-xl [&>button]:hidden">
-          <div className="flex bg-white items-center justify-between p-4">
-             <div className="flex items-center gap-4 w-full">
-                <div className="w-16 h-16 shrink-0 bg-white rounded-xl shadow-sm overflow-hidden flex items-center justify-center p-1">
-                   <DotLottieReact src="/8bit.lottie" loop autoplay className="w-full h-full object-contain" />
-                </div>
-                <div className="flex-1">
-                   <input 
-                      autoFocus
-                      type="text" 
-                      value={generateInputStr}
-                      onChange={(e) => setGenerateInputStr(e.target.value)}
-                      onKeyDown={(e) => { 
-                          if(e.key === 'Enter') handleAiAction('generate'); 
-                      }}
-                      className="w-full bg-transparent text-xl font-medium outline-none text-gray-800 placeholder-gray-400 py-2"
-                      placeholder="Que voulez-vous générer aujourd'hui ?"
-                   />
-                </div>
-                <Button 
-                   onClick={() => handleAiAction('generate')} 
-                   disabled={!generateInputStr || aiLoading}
-                   className="shrink-0 bg-black hover:bg-gray-800 text-white rounded-full px-6 py-2 transition-all drop-shadow-md"
-                >
-                    {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Générer"}
-                </Button>
-             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
 
       {/* Summarize Bubble */}
       {summaryText && (
