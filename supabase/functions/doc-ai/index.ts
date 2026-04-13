@@ -28,18 +28,25 @@ serve(async (req) => {
 
     const { action, text, context, instructions } = await req.json();
 
-    const modelName = Deno.env.get('GEMINI_MODEL') || 'gemini-3.2-pro-preview';
+    const modelName = Deno.env.get('GEMINI_MODEL') || 'gemini-3-flash-preview';
     const model = genAI.getGenerativeModel({ model: modelName });
-    
+
     let prompt = '';
     if (action === 'revise') {
-      prompt = `Tu es un assistant de rédaction IA intégré dans un traitement de texte. Ta tâche est de réviser et corriger le texte suivant sélectionné par l'utilisateur. 
-      Améliore la clarté, la grammaire et le style. 
-      NE RAJOUTE PAS DE FORMATTAGE MARKDOWN INUTILE (pas de \`\`\`html ou autre si ce n'est pas demandé). 
-      Renvoie UNIQUEMENT le texte corrigé.
-      
-      Texte à réviser:
-      ${text}`;
+      prompt = `Tu es un correcteur orthographique et grammatical. Ta SEULE tâche est de corriger les fautes d'orthographe, de grammaire, de conjugaison, d'accents et de ponctuation dans le texte suivant.
+
+RÈGLES ABSOLUES :
+- NE CHANGE JAMAIS les mots. Garde exactement les mêmes mots que l'utilisateur a écrits.
+- NE REFORMULE JAMAIS. Ne réécris pas les phrases différemment.
+- NE RAJOUTE PAS de mots, d'expressions ou de phrases.
+- NE SUPPRIME PAS de mots ou de phrases.
+- NE CHANGE PAS le style, le ton ou la structure des phrases.
+- Corrige UNIQUEMENT : les fautes d'orthographe, les accents manquants/incorrects, la conjugaison, les accords (genre/nombre), et la ponctuation.
+- NE RAJOUTE PAS DE FORMATTAGE MARKDOWN (pas de \`\`\`html ou autre).
+- Renvoie UNIQUEMENT le texte corrigé, rien d'autre.
+
+Texte à corriger :
+${text}`;
     } else if (action === 'generate') {
       prompt = `Tu es un assistant de rédaction IA intégré dans un traitement de texte. Ta tâche est de générer du texte basé sur les instructions suivantes de l'utilisateur.
       Instructions: ${instructions || 'Génère un texte pertinent'}
@@ -59,22 +66,22 @@ serve(async (req) => {
 
     const result = await model.generateContent(prompt);
     let outputText = result.response.text();
-    
+
     // Nettoyage markdown éventuel
     if (outputText.startsWith('```html')) {
-        outputText = outputText.replace(/^```html\n/g, '').replace(/```$/g, '');
+      outputText = outputText.replace(/^```html\n/g, '').replace(/```$/g, '');
     } else if (outputText.startsWith('```')) {
-        outputText = outputText.replace(/^```\n/g, '').replace(/```$/g, '');
+      outputText = outputText.replace(/^```\n/g, '').replace(/```$/g, '');
     }
 
-    return new Response(JSON.stringify({ result: outputText.trim() }), { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    return new Response(JSON.stringify({ result: outputText.trim() }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error: any) {
     console.error(error);
-    return new Response(JSON.stringify({ error: error.message }), { 
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 })
