@@ -28,7 +28,8 @@ serve(async (req) => {
 
     const { action, text, context, instructions } = await req.json();
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const modelName = Deno.env.get('GEMINI_MODEL') || 'gemini-3.2-pro-preview';
+    const model = genAI.getGenerativeModel({ model: modelName });
     
     let prompt = '';
     if (action === 'revise') {
