@@ -1293,8 +1293,8 @@ const DocEditor = () => {
       </Dialog>
       {/* Generate Dialog popup */}
       <Dialog open={showGeneratePopup} onOpenChange={setShowGeneratePopup}>
-        <DialogContent className="sm:max-w-3xl overflow-hidden p-0 rounded-2xl border bg-white/95 backdrop-blur-xl shadow-2xl [&>button]:hidden">
-          <div className="flex bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 items-center justify-between p-4">
+        <DialogContent className="sm:max-w-3xl overflow-hidden p-0 rounded-2xl border border-zinc-200 bg-white shadow-xl [&>button]:hidden">
+          <div className="flex bg-white items-center justify-between p-4">
              <div className="flex items-center gap-4 w-full">
                 <div className="w-16 h-16 shrink-0 bg-white rounded-xl shadow-sm overflow-hidden flex items-center justify-center p-1">
                    <DotLottieReact src="/8bit.lottie" loop autoplay className="w-full h-full object-contain" />
