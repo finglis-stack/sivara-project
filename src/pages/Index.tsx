@@ -373,72 +373,75 @@ const Index = () => {
 
       <div className={`flex-1 ${hasSearched ? "pt-24" : ""}`}>
         {!hasSearched ? (
-          <div className="relative min-h-screen w-full overflow-hidden flex flex-col bg-black">
-            {/* VIDEO BACKGROUND */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <div className="absolute inset-0">
-                {/* Cover technique for 16:9 video */}
-                <iframe
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-[177.78vh] h-[56.25vw]"
-                  src="https://www.youtube-nocookie.com/embed/wQ7grPng_EI?autoplay=1&mute=1&controls=0&rel=0&loop=1&playlist=wQ7grPng_EI&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1"
-                  title="Sivara background"
-                  frameBorder="0"
-                  allow="autoplay; encrypted-media; picture-in-picture"
-                  referrerPolicy="strict-origin-when-cross-origin"
-                />
-              </div>
-              {/* Overlay for readability */}
-              <div className="absolute inset-0 bg-black/55" />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/35 to-black/70" />
-            </div>
+          <div className="relative min-h-screen w-full overflow-hidden flex flex-col" style={{ background: '#FAFAF8', fontFamily: "'Inter', sans-serif" }}>
 
-            <nav className="absolute top-0 w-full z-50 bg-transparent">
+            <nav className="w-full z-50" style={{ background: '#FAFAF8' }}>
               <div className="container mx-auto px-6 h-20 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <img src="/sivara-logo.png" alt="Logo" className="w-10 h-10 object-contain drop-shadow-sm" />
-                  <span className="font-bold text-xl tracking-tight text-white">Sivara</span>
+                  <img src="/sivara-logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+                  <span style={{ fontWeight: 450, fontSize: '20px', color: '#2D2D2D', letterSpacing: '-0.3px' }}>Sivara</span>
                 </div>
                 <div className="flex items-center gap-4">
                   {isStaff && (
-                    <button onClick={() => setShowManage(true)} className="text-white/80 hover:text-white transition-colors text-sm font-medium hidden sm:block">Contribution</button>
+                    <button onClick={() => setShowManage(true)} style={{ color: '#6B6B6B', fontWeight: 400, fontSize: '14px' }} className="hover:opacity-70 transition-opacity hidden sm:block">Contribution</button>
                   )}
                   <UserMenu />
                 </div>
               </div>
             </nav>
 
-            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 w-full max-w-5xl mx-auto mt-10">
-              <div className="w-full max-w-3xl space-y-8 text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.1] drop-shadow-[0_8px_30px_rgba(0,0,0,0.65)]">
-                  Recherchez le{' '}
-                  <span className="relative inline-block">
-                    web
-                    <span className="absolute -top-10 left-1/2 translate-x-[calc(-50%+8px)] rotate-[7deg] px-4 py-1.5 bg-pink-300/25 border border-pink-200/40 text-white/95 text-[11px] sm:text-xs font-light tracking-wide backdrop-blur-sm shadow-lg max-w-[90vw] whitespace-nowrap">
-                      Conceptualisé par Félix I. et Léa C., École secondaire Marie-Anne
-                    </span>
-                  </span>
-                  .
-                  <br />
-                  Sans surveillance.
-                  <span className="text-white/70 font-medium text-xl md:text-2xl">{' '}(promis)</span>
-                </h1>
-                <p className="text-base md:text-xl text-white/80 font-light max-w-xl mx-auto leading-relaxed">
-                  Sivara vous aide à trouver l'information rapidement, dans une expérience claire et immersive.
-                </p>
+            <div className="flex-1 flex items-center">
+              <div className="container mx-auto px-6">
+                <div className="flex items-center justify-between gap-8">
+                  
+                  {/* Left — Text + Search */}
+                  <div className="flex-1 max-w-xl space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                    <div>
+                      <p style={{ fontSize: '13px', fontWeight: 400, color: '#8B7355', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '12px' }}>Moteur de recherche</p>
+                      <h1 style={{ fontSize: 'clamp(36px, 5vw, 56px)', fontWeight: 300, color: '#2D2D2D', lineHeight: 1.1, letterSpacing: '-1px' }}>
+                        Recherchez le web.
+                        <br />
+                        <span style={{ fontWeight: 450 }}>Sans surveillance.</span>
+                      </h1>
+                      <p style={{ fontSize: '13px', fontWeight: 300, color: '#9A9A9A', marginTop: '6px', fontStyle: 'italic' }}>
+                        Conceptualisé par Félix I. et Léa C., École secondaire Marie-Anne
+                      </p>
+                    </div>
+                    <p style={{ fontSize: '16px', fontWeight: 300, color: '#6B6B6B', lineHeight: 1.7, maxWidth: '440px' }}>
+                      Sivara vous aide à trouver l'information rapidement, dans une expérience claire et immersive.
+                    </p>
 
-                <div className="w-full transform transition-all duration-300 hover:scale-[1.01] shadow-2xl rounded-full">
-                  <SearchBar onSearch={handleSearch} isLoading={isSearching} value={searchQuery} onChange={setSearchQuery} />
-                </div>
+                    <div className="w-full" style={{ maxWidth: '480px' }}>
+                      <SearchBar onSearch={handleSearch} isLoading={isSearching} value={searchQuery} onChange={setSearchQuery} />
+                    </div>
 
-                <div className="flex flex-wrap justify-center gap-3 pt-4">
-                  {quickCategories.map((c) => (
-                    <CategoryImageButton
-                      key={c.label}
-                      label={c.label}
-                      imageSrc={c.imageSrc}
-                      onClick={() => handleSearch(c.query)}
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      {quickCategories.map((c) => (
+                        <CategoryImageButton
+                          key={c.label}
+                          label={c.label}
+                          imageSrc={c.imageSrc}
+                          onClick={() => handleSearch(c.query)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right — City Image */}
+                  <div className="hidden lg:block flex-shrink-0 animate-in fade-in slide-in-from-right-8 duration-1000" style={{ animationDelay: '200ms' }}>
+                    <img 
+                      src="/city-hero.png" 
+                      alt="Sivara city" 
+                      style={{ 
+                        width: '480px', 
+                        maxWidth: '40vw',
+                        height: 'auto',
+                        filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.1))',
+                        mixBlendMode: 'multiply',
+                      }} 
                     />
-                  ))}
+                  </div>
+
                 </div>
               </div>
             </div>

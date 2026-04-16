@@ -1,0 +1,71 @@
+{
+  "name": "sivara-browser",
+  "version": "1.0.0",
+  "description": "Navigateur web Sivara basé sur Chromium",
+  "main": "main.js",
+  "scripts": {
+    "build:editor": "esbuild src/tiptap-entry.js --bundle --outfile=dist/tiptap-bundle.js --format=iife --platform=browser --target=chrome110",
+    "prestart": "npm run build:editor",
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "npm run build:editor && electron-builder --win",
+    "build:portable": "npm run build:editor && electron-builder --win portable"
+  },
+  "author": "Sivara",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.0.0",
+    "esbuild": "^0.28.0"
+  },
+  "build": {
+    "appId": "ca.sivara.browser",
+    "productName": "Sivara Browser",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico"
+    },
+    "fileAssociations": [
+      {
+        "ext": "sivara",
+        "name": "Sivara Document",
+        "description": "Sivara Secure Document",
+        "mimeType": "application/x-sivara-binary",
+        "role": "Editor",
+        "icon": "assets/sivara-doc.ico"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Sivara Protocol",
+        "schemes": [
+          "sivara"
+        ]
+      }
+    ]
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.22.3",
+    "@tiptap/extension-font-family": "^3.22.3",
+    "@tiptap/extension-image": "^3.22.3",
+    "@tiptap/extension-placeholder": "^3.22.3",
+    "@tiptap/extension-text-align": "^3.22.3",
+    "@tiptap/extension-text-style": "^3.22.3",
+    "@tiptap/extension-underline": "^3.22.3",
+    "@tiptap/pm": "^3.22.3",
+    "@tiptap/starter-kit": "^3.22.3",
+    "lottie-web": "^5.13.0"
+  }
+}

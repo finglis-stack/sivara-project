@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sivara Browser</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;600&display=swap" rel="stylesheet">
+  <script src="node_modules/lottie-web/build/player/lottie.min.js"></script>
+</head>
+<body>
+
+  <!-- Onboarding / Welcome (first launch) -->
+  <div id="onboarding-overlay" style="display: none;">
+    <div class="ob-shape ob-shape-1"></div>
+    <div class="ob-shape ob-shape-2"></div>
+    <div class="ob-shape ob-shape-3"></div>
+    <div id="onboarding-card">
+      <div id="onboarding-image">
+        <img src="assets/onboarding.jpg" alt="">
+      </div>
+      <div id="onboarding-content">
+        <h1>Bienvenue sur Sivara</h1>
+        <p>Connectez-vous pour synchroniser vos documents et retrouver votre espace de travail.</p>
+
+        <form id="onboarding-login-form" autocomplete="on">
+          <input type="email" id="ob-email" placeholder="Adresse e-mail" autocomplete="email" required>
+          <input type="password" id="ob-password" placeholder="Mot de passe" autocomplete="current-password" required>
+          <button type="submit" id="onboarding-login-btn">Se connecter</button>
+          <p id="onboarding-error"></p>
+        </form>
+
+        <div id="onboarding-divider"><span>ou</span></div>
+
+        <button id="onboarding-signup-btn">Créer un compte</button>
+        <button id="onboarding-skip">Continuer sans compte</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Title Bar -->
+  <div id="titlebar">
+    <div id="titlebar-left">
+      <span id="app-title">Sivara</span>
+    </div>
+    <div id="titlebar-controls">
+      <button id="btn-minimize" class="titlebar-btn" title="Minimiser">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button id="btn-maximize" class="titlebar-btn" title="Maximiser">
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+      </button>
+      <button id="btn-close" class="titlebar-btn titlebar-btn-close" title="Fermer">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div id="tab-bar">
+    <div id="tabs-container"></div>
+    <button id="btn-new-tab" title="Nouvel onglet">
+      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <!-- Navigation Bar -->
+  <div id="navbar">
+    <div id="nav-buttons">
+      <button id="btn-back" class="nav-btn" title="Retour" disabled>
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </button>
+      <button id="btn-forward" class="nav-btn" title="Avancer" disabled>
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </button>
+      <button id="btn-reload" class="nav-btn" title="Actualiser">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M13.5 3v3h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </button>
+    </div>
+
+    <div id="url-bar-container">
+      <div id="url-security-icon">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1L2 3.5v3C2 10 4.2 12.5 7 13.5 9.8 12.5 12 10 12 6.5v-3L7 1z" stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.4"/></svg>
+      </div>
+      <input type="text" id="url-bar" placeholder="Rechercher ou entrer une URL..." spellcheck="false" autocomplete="off">
+      <button id="btn-go" class="nav-btn" title="Aller">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7h10M9 4l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </button>
+    </div>
+
+    <div id="nav-extras">
+      <button id="btn-home" class="nav-btn" title="Accueil">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 8l6-6 6 6M4 7v5.5a.5.5 0 0 0 .5.5H7V10h2v3h2.5a.5.5 0 0 0 .5-.5V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </button>
+      <button id="btn-open-sivara" class="nav-btn" title="Ouvrir un fichier .sivara">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 2h5l3 3v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M9 2v3h3" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+      </button>
+      <div id="account-area">
+        <button id="btn-account" class="nav-btn account-btn" title="Compte Sivara">
+          <div id="account-avatar" class="account-avatar">
+            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M2 14c0-3.3 2.7-5 6-5s6 1.7 6 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
+          </div>
+        </button>
+        <div id="account-panel" class="account-panel" style="display: none;">
+          <!-- Logged out state -->
+          <div id="account-logged-out">
+            <div class="account-panel-header">
+              <h3>Connectez-vous</h3>
+              <p>Synchronisez vos documents.</p>
+            </div>
+            <div class="account-form">
+              <input type="email" id="login-email" placeholder="Adresse e-mail" autocomplete="email">
+              <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password">
+              <button id="btn-login" class="account-submit-btn">Se connecter</button>
+              <p id="login-error" class="account-error" style="display: none;"></p>
+            </div>
+          </div>
+          <!-- Logged in state -->
+          <div id="account-logged-in" style="display: none;">
+            <div class="account-panel-header">
+              <div id="profile-avatar-large" class="profile-avatar-large">
+                <svg width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="12" r="5" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M6 28c0-5.5 4.5-8 10-8s10 2.5 10 8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              </div>
+              <h3 id="profile-name">—</h3>
+              <p id="profile-email">—</p>
+            </div>
+            <div class="account-actions">
+              <button id="btn-sync-now" class="account-action-btn">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 7a6 6 0 0110-4.5M13 7a6 6 0 01-10 4.5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+                Synchroniser
+              </button>
+              <button id="btn-logout" class="account-action-btn account-action-danger">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5 2H3a1 1 0 00-1 1v8a1 1 0 001 1h2M8 10l3-3-3-3M11 7H5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                Se déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Bar -->
+  <div id="loading-bar-container">
+    <div id="loading-bar"></div>
+  </div>
+
+  <!-- Browser Content -->
+  <div id="browser-content">
+    <!-- New Tab Page -->
+    <div id="new-tab-page" class="active">
+      <div id="ntp-content">
+        <div id="ntp-hero">
+          <h1 id="ntp-greeting">Bonjour</h1>
+          <div id="ntp-lottie"></div>
+        </div>
+        <div id="ntp-search">
+          <svg width="18" height="18" viewBox="0 0 18 18" class="ntp-search-icon"><circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 12l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <input type="text" id="ntp-search-input" placeholder="Rechercher sur le web..." spellcheck="false" autocomplete="off">
+        </div>
+
+        <div id="ntp-shortcuts">
+          <a class="shortcut" data-url="https://sivara.ca">
+            <div class="shortcut-icon" style="background: #2D2D2D;">S</div>
+            <span>Sivara</span>
+          </a>
+          <a class="shortcut" data-url="https://docs.sivara.ca">
+            <div class="shortcut-icon" style="background: #4A6FA5;">D</div>
+            <span>Docs</span>
+          </a>
+          <a class="shortcut" data-url="https://www.google.com">
+            <div class="shortcut-icon" style="background: #4285f4;">G</div>
+            <span>Google</span>
+          </a>
+          <a class="shortcut" data-url="https://www.youtube.com">
+            <div class="shortcut-icon" style="background: #cc0000;">Y</div>
+            <span>YouTube</span>
+          </a>
+          <a class="shortcut" data-url="https://github.com">
+            <div class="shortcut-icon" style="background: #333;">H</div>
+            <span>GitHub</span>
+          </a>
+          <a class="shortcut" data-url="https://discord.com">
+            <div class="shortcut-icon" style="background: #5865f2;">D</div>
+            <span>Discord</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
