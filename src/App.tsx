@@ -196,6 +196,7 @@ const AppRoutes = () => {
       {currentApp === 'www' && (
         <>
           <Route path="/" element={<Index />} />
+          <Route path="/search" element={<Index />} />
           <Route path="/monitor" element={
             <ProtectedRoute>
               <Monitor />

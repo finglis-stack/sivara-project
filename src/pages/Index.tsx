@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import SearchBar from '@/components/SearchBar';
 import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
@@ -16,7 +16,7 @@ import {
   Presentation
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,6 +59,7 @@ const ICON_MAP: any = {
 
 const Index = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [results, setResults] = useState<SearchResultType[]>([]);
   const [docResults, setDocResults] = useState<DocResultType[]>([]);
@@ -69,6 +70,7 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isStaff, setIsStaff] = useState(false);
   const [adminPage, setAdminPage] = useState('dashboard');
+  const hasInitialSearchRun = useRef(false);
   
   // Vérifier si l'utilisateur est staff
   useEffect(() => {
@@ -81,6 +83,17 @@ const Index = () => {
       setIsStaff(false);
     }
   }, [user]);
+
+  // Lire le paramètre ?q= de l'URL au chargement et lancer la recherche
+  useEffect(() => {
+    if (hasInitialSearchRun.current) return;
+    const queryFromUrl = searchParams.get('q');
+    if (queryFromUrl && queryFromUrl.trim()) {
+      hasInitialSearchRun.current = true;
+      setSearchQuery(queryFromUrl);
+      handleSearch(queryFromUrl);
+    }
+  }, [searchParams]);
 
   const groupResultsByDomain = (results: SearchResultType[]): GroupedResult[] => {
     if (results.length === 0) return [];
@@ -114,6 +127,9 @@ const Index = () => {
       setIsSearching(true);
       setHasSearched(true);
       setSearchQuery(query);
+
+      // Mettre à jour l'URL avec le paramètre ?q=
+      setSearchParams({ q: query }, { replace: true });
       setDocResults([]);
 
       console.log('Searching for:', query);
@@ -336,6 +352,7 @@ const Index = () => {
                 setTotalResults(0);
                 setDocResults([]);
                 setSearchQuery('');
+                setSearchParams({}, { replace: true });
               }}
               className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
             >
