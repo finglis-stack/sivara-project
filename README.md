@@ -56,10 +56,18 @@ Une suite collaborative temps réel où le serveur agit comme un simple stockage
     *   **Canal "Broadcast" (Stateless) :** Transmission éphémère haute fréquence (60fps) pour les curseurs et la sélection de texte. Ces données ne touchent jamais la base de données (latence < 50ms).
 *   **Autorisation & Sécurité (The Bouncer) :**
     *   Utilisation stricte des politiques **Row Level Security (RLS)**. L'application ne valide pas les accès, c'est le moteur SQL qui le fait. Si l'ID utilisateur n'est pas dans la table `document_access` ou n'est pas `owner_id`, la donnée n'existe tout simplement pas pour le requérant.
-*   **Client-Side Encryption (E2EE) :**
+*   **Client-Side Encryption (E2EE) — Architecture KEK/DEK :**
     *   Chiffrement **AES-256-GCM** exécuté exclusivement dans le navigateur via l'API Web Crypto. Le serveur ne voit que des chaînes de caractères aléatoires.
-*   **Dérivation de Clés (PBKDF2) :**
-    *   Les clés de chiffrement sont dérivées localement garantissant que les clés ne transitent jamais en clair sur le réseau.
+    *   **DEK (Data Encryption Key) :** Clé aléatoire de 32 octets (CSPRNG) générée à l'inscription. C'est cette clé — et uniquement celle-ci — qui chiffre et déchiffre les documents. Elle ne change **jamais**.
+    *   **KEK (Key Encryption Key) :** Clé dérivée du **vrai mot de passe** de l'utilisateur via **PBKDF2** (210 000 itérations, SHA-512) avec un sel aléatoire de 16 octets. La KEK protège ("wrappe") la DEK.
+    *   **Recovery Key :** Une deuxième copie de la DEK est wrappée avec une clé de récupération (128 bits, hex) générée à l'inscription et affichée **une seule fois** à l'utilisateur.
+    *   **Stockage :** La DEK chiffrée (`encrypted_dek`), le sel (`kek_salt`), le vecteur d'initialisation (`dek_iv`) et la copie de récupération (`recovery_dek`, `recovery_salt`, `recovery_iv`) sont stockés dans la table `profiles`.
+*   **Cycle de vie des clés :**
+    *   **Inscription :** Génération de la DEK + wrapping par le mot de passe + wrapping par la recovery key.
+    *   **Connexion :** Le mot de passe dérive la KEK → unwrap de la DEK → DEK stockée en `sessionStorage` (disparaît à la fermeture de l'onglet).
+    *   **Changement de mot de passe :** L'ancien mot de passe unwrappe la DEK → le nouveau mot de passe la re-wrappe. **Zéro document rechiffré.**
+    *   **Mot de passe oublié :** L'utilisateur fournit sa recovery key pour unwrapper la DEK → re-wrapping avec le nouveau mot de passe. Sans recovery key, les documents sont **définitivement inaccessibles** — même par Sivara.
+    *   **Fichiers .sivara (export) :** Utilise un chemin de chiffrement séparé (`initializeDirect`) avec dérivation PBKDF2 directe, indépendant du système KEK/DEK.
 
 ### 4. Infrastructure de Paiement et Souscription (Billing)
 L'architecture de facturation délègue la complexité transactionnelle à Stripe tout en maintenant une synchronisation stricte.
@@ -169,7 +177,7 @@ Au-delà de la simple correction orthographique, **Sivara Text** est un moteur c
 *   **Infrastructure de Synchronisation Sécurisée :**
     *   **Priorité Locale (0 Latence) :** Le modèle d'apprentissage est chargé en RAM et persisté dans le `localStorage`. L'analyse est instantanée et fonctionne hors-ligne.
     *   **Stockage Chiffré (Cloud) :** Pour permettre la continuité entre appareils, le modèle est synchronisé en base de données.
-    *   **Confidentialité Absolue :** Avant de quitter le navigateur, le JSON du modèle d'apprentissage est chiffré en **AES-256-GCM** avec la clé maître de l'utilisateur. Le serveur reçoit un blob illisible `text_preferences`. Sivara ne peut techniquement pas savoir quels mots vous utilisez ou quelles fautes vous faites.
+    *   **Confidentialité Absolue :** Avant de quitter le navigateur, le JSON du modèle d'apprentissage est chiffré en **AES-256-GCM** avec la DEK de l'utilisateur. Le serveur reçoit un blob illisible `text_preferences`. Sivara ne peut techniquement pas savoir quels mots vous utilisez ou quelles fautes vous faites.
 
 ---
 
@@ -259,7 +267,7 @@ Lorsqu'un utilisateur lance une recherche :
 Sivara intègre nativement les exigences de la **Loi modernisant des dispositions législatives en matière de protection des renseignements personnels** (Loi 25).
 
 ### Mesures Techniques de Conformité
-*   **Privacy by Design :** L'architecture empêche techniquement l'accès aux données utilisateur par les administrateurs de la plateforme (grâce au chiffrement client).
+*   **Privacy by Design :** L'architecture empêche **techniquement** l'accès aux données utilisateur par quiconque — y compris les administrateurs de la plateforme. La clé de chiffrement (DEK) est protégée par le mot de passe de l'utilisateur et n'est jamais stockée en clair. Même en cas de fuite complète de la base de données, les documents restent du bruit binaire.
 *   **Minimisation des Données :** Collecte strictement limitée aux métadonnées essentielles au fonctionnement du service. Aucune donnée comportementale n'est stockée.
 *   **Droit à l'Effacement (Right to be Forgotten) :** Procédures automatisées (`ON DELETE CASCADE` au niveau SQL) assurant la destruction totale et irréversible des données utilisateur lors de la suppression du compte.
 *   **Traçabilité et Audit :** Journaux d'accès cryptographiques permettant de détecter toute anomalie sans compromettre la confidentialité des contenus.
@@ -284,7 +292,10 @@ Une pile technique moderne choisie pour sa robustesse, sa typologie stricte et s
 *   **UI System :** Shadcn/UI sur base Radix Primitives (Accessibilité WCAG 2.1 AA).
 *   **Backend Infrastructure :** Supabase (PostgreSQL 15+).
 *   **Compute :** Edge Functions (Deno runtime) pour les micro-services serverless.
-*   **Cryptographie :** Web Crypto API (Standard natif browser).
+*   **Cryptographie :**
+    *   `Web Crypto API` (Standard natif browser) — AES-256-GCM, PBKDF2 (210k itérations, SHA-512).
+    *   Architecture **Envelope Encryption** (KEK/DEK) avec recovery key.
+    *   HMAC-SHA256 pour l'indexation aveugle (Blind Index).
 *   **CI/CD :** Déploiement continu avec vérification statique du code.
 
 ---
