@@ -106,7 +106,7 @@ const _RT = (() => {
         }
         case 0x60: m[r()] = s.pop(); break;
         case 0x61: s.push(m[r()]); break;
-        case 0x70: p = r(); break;
+        case 0x70: { const t = r(); if (t < 0 || t >= bc.length) throw new Error('SBP_VM_JMP_OOB'); p = t; break; }
         case 0x71: { const t = r(); if (s.pop() === 0) p = t; break; }
         case 0x50: s.push(s.pop() + s.pop()); break;
         case 0x51: { const b = s.pop(); s.push(s.pop() - b); break; }
@@ -164,18 +164,23 @@ const _RT = (() => {
     return new Uint8Array(bc);
   };
 
-  // SECURITY: CSPRNG-based random int (replaces Math.random for crypto ops)
+  // SECURITY: CSPRNG-based random int with rejection sampling (no modulo bias)
   const csprngInt = (max) => {
-    const buf = new Uint32Array(1);
-    crypto.getRandomValues(buf);
-    return buf[0] % max;
+    const limit = Math.floor(0x100000000 / max) * max;
+    let val;
+    do {
+      const buf = new Uint32Array(1);
+      crypto.getRandomValues(buf);
+      val = buf[0];
+    } while (val >= limit);
+    return val % max;
   };
 
   // AES-256-GCM wrapping for metadata (v7)
   const deriveWrappingKey = async (nonce) => {
     const keyMaterial = await crypto.subtle.importKey('raw', nonce, 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey(
-      { name: 'PBKDF2', salt: _e.encode('sivara-sbp-wrap-v7'), iterations: 50000, hash: 'SHA-256' },
+      { name: 'PBKDF2', salt: _e.encode('sivara-sbp-wrap-v7'), iterations: 100000, hash: 'SHA-256' },
       keyMaterial,
       { name: 'AES-GCM', length: 256 },
       false,
@@ -215,7 +220,75 @@ const _RT = (() => {
     return crypto.subtle.verify('HMAC', hmacKey, expectedHmac, data);
   };
 
-  return Object.freeze({ $, _e, _d, b64, d64, i32, u32, xF, xR, sx, gB, vm, cc, csprngInt, wrapMetadata, unwrapMetadata, computeHMAC, verifyHMAC });
+  // ─── V8 OWNER-BOUND SECURITY (fixes CRIT-03 + HIGH-02) ───
+  const deriveWrappingKeyV8 = async (nonce, ownerSecret) => {
+    const ownerBytes = _e.encode(ownerSecret);
+    const combined = new Uint8Array(nonce.length + ownerBytes.length);
+    combined.set(nonce); combined.set(ownerBytes, nonce.length);
+    const keyMaterial = await crypto.subtle.importKey('raw', combined, 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: _e.encode('sivara-sbp-wrap-v8'), iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  };
+
+  const wrapMetadataV8 = async (data, nonce, ownerSecret) => {
+    const key = await deriveWrappingKeyV8(nonce, ownerSecret);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, data);
+    const result = new Uint8Array(12 + encrypted.byteLength);
+    result.set(iv, 0);
+    result.set(new Uint8Array(encrypted), 12);
+    return result;
+  };
+
+  const unwrapMetadataV8 = async (wrapped, nonce, ownerSecret) => {
+    const key = await deriveWrappingKeyV8(nonce, ownerSecret);
+    const iv = wrapped.slice(0, 12);
+    const data = wrapped.slice(12);
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, data);
+    return new Uint8Array(decrypted);
+  };
+
+  const computeHMACv8 = async (data, nonce, ownerSecret) => {
+    const ownerBytes = _e.encode(ownerSecret);
+    const combined = new Uint8Array(nonce.length + ownerBytes.length);
+    combined.set(nonce); combined.set(ownerBytes, nonce.length);
+    const keyData = await crypto.subtle.digest('SHA-256', combined);
+    const hmacKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', hmacKey, data);
+    return new Uint8Array(sig);
+  };
+
+  const verifyHMACv8 = async (data, expectedHmac, nonce, ownerSecret) => {
+    const ownerBytes = _e.encode(ownerSecret);
+    const combined = new Uint8Array(nonce.length + ownerBytes.length);
+    combined.set(nonce); combined.set(ownerBytes, nonce.length);
+    const keyData = await crypto.subtle.digest('SHA-256', combined);
+    const hmacKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    return crypto.subtle.verify('HMAC', hmacKey, expectedHmac, data);
+  };
+
+  const ownerHash = async (ownerId) => {
+    const hash = await crypto.subtle.digest('SHA-256', _e.encode(ownerId));
+    return new Uint8Array(hash);
+  };
+
+  // SECURITY: Safe metadata merge — whitelist keys to prevent prototype pollution
+  const safeMeta = (out, jsonStr) => {
+    const ALLOWED = ['auto_key', 'icon', 'color', 'salt', 'v', 'security', 'owner_id'];
+    try {
+      const p = JSON.parse(jsonStr);
+      if (p && typeof p === 'object' && !Array.isArray(p)) {
+        for (const k of ALLOWED) if (k in p) out[k] = p[k];
+      }
+    } catch (_) {}
+  };
+
+  return Object.freeze({ $, _e, _d, b64, d64, i32, u32, xF, xR, sx, gB, vm, cc, csprngInt, wrapMetadata, unwrapMetadata, computeHMAC, verifyHMAC, wrapMetadataV8, unwrapMetadataV8, computeHMACv8, verifyHMACv8, ownerHash, safeMeta });
 })();
 
 const sivaraVM = Object.freeze({
@@ -225,7 +298,9 @@ const sivaraVM = Object.freeze({
    * @returns {Promise<Uint8Array>} The compiled binary
    */
   async compile(payload) {
-    const { encrypted_title: eT, encrypted_content: eC, title_iv: tIv, content_iv: cIv, icon: ic, color: cl, salt: sl, security: sec, embedded_key: eK } = payload;
+    const { encrypted_title: eT, encrypted_content: eC, title_iv: tIv, content_iv: cIv, icon: ic, color: cl, salt: sl, security: sec, embedded_key: eK, user_secret: uS } = payload;
+    const isOwnerBound = !!eK && !sl;
+    const isPasswordProtected = !!sl;
 
     // SECURITY: Use CSPRNG instead of Math.random
     const dk1 = _RT.csprngInt(0x7fffffff);
@@ -233,7 +308,12 @@ const sivaraVM = Object.freeze({
     const mKey = dk1 ^ dk2;
     const vmKeyGen = _RT.cc(`${dk1} ^ ${dk2}`);
 
-    const mB = _RT._e.encode(JSON.stringify({ auto_key: eK, icon: ic, color: cl, salt: sl, v: 7.0, security: sec || {} }));
+    // SECURITY (v8): auto_key is NOT stored in metadata for owner-bound files
+    const metaObj = { icon: ic, color: cl, salt: sl, v: 7.0, security: sec || {} };
+    if (!isOwnerBound) {
+      metaObj.auto_key = eK;
+    }
+    const mB = _RT._e.encode(JSON.stringify(metaObj));
     const titleIvB = _RT.d64(tIv);
     const contentIvB = _RT.d64(cIv);
     const tB = _RT._e.encode(eT);
@@ -266,8 +346,24 @@ const sivaraVM = Object.freeze({
     const wrappingNonce = crypto.getRandomValues(new Uint8Array(16));
     pts.push(new Uint8Array([0xa1]), wrappingNonce);
 
-    // SECURITY: AES-256-GCM encrypted metadata (0xD5) replacing XOR obfuscation (0xD4)
-    const wrappedMetadata = await _RT.wrapMetadata(mB, wrappingNonce);
+    // SECURITY (v8): Owner hash block (0xA2)
+    if (isOwnerBound) {
+      const oh = await _RT.ownerHash(eK);
+      pts.push(new Uint8Array([0xa2]), oh);
+    }
+
+    // SECURITY: Salt block (0xA3) — store salt outside encrypted metadata for password files
+    if (isPasswordProtected && sl) {
+      const saltBytes = _RT._e.encode(sl);
+      pts.push(new Uint8Array([0xa3]), _RT.u32(saltBytes.length), saltBytes);
+    }
+
+    // Metadata encrypted with AES-256-GCM
+    const wrappedMetadata = isOwnerBound
+      ? await _RT.wrapMetadataV8(mB, wrappingNonce, eK)
+      : (isPasswordProtected && uS)
+        ? await _RT.wrapMetadataV8(mB, wrappingNonce, uS)
+        : await _RT.wrapMetadata(mB, wrappingNonce);
     pts.push(new Uint8Array([0xd5]), _RT.u32(wrappedMetadata.length ^ mKey), wrappedMetadata);
 
     if (Math.random() > 0.3) pts.push(..._RT.gB());
@@ -285,7 +381,11 @@ const sivaraVM = Object.freeze({
     const preHmacBuf = new Uint8Array(preHmacTotal);
     let preOff = 0;
     for (const p of pts) { preHmacBuf.set(p, preOff); preOff += p.length; }
-    const hmac = await _RT.computeHMAC(preHmacBuf, wrappingNonce);
+    const hmac = isOwnerBound
+      ? await _RT.computeHMACv8(preHmacBuf, wrappingNonce, eK)
+      : (isPasswordProtected && uS)
+        ? await _RT.computeHMACv8(preHmacBuf, wrappingNonce, uS)
+        : await _RT.computeHMAC(preHmacBuf, wrappingNonce);
     pts.push(new Uint8Array([0xfa]), hmac);
 
     pts.push(new Uint8Array([0xff]));
@@ -300,9 +400,10 @@ const sivaraVM = Object.freeze({
   /**
    * Decompile a .sivara binary into its components (supports v6 + v7)
    * @param {Uint8Array} buffer - The raw file bytes
-   * @returns {Promise<Object>} { header, iv, title_iv, content_iv, encrypted_title, encrypted_content, auto_key, icon, color, salt, security, requiresInternet }
+   * @param {string} [ownerSecret] - Owner ID for v8 owner-bound files
+   * @returns {Promise<Object>} Decompiled document data
    */
-  async decompile(buffer) {
+  async decompile(buffer, ownerSecret) {
     const b = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
 
@@ -313,7 +414,7 @@ const sivaraVM = Object.freeze({
     const version = b[3];
 
     if (version === 0x07) {
-      return this._decompileV7(b, v);
+      return this._decompileV7(b, v, ownerSecret);
     }
     return this._decompileV6(b, v);
   },
@@ -356,7 +457,7 @@ const sivaraVM = Object.freeze({
         try {
           const dec2 = _RT.sx(b.slice(c, c + l), dKey);
           const dec1 = _RT.xR(dec2, 0xaa);
-          Object.assign(out, JSON.parse(_RT._d.decode(dec1)));
+          _RT.safeMeta(out, _RT._d.decode(dec1));
         } catch (_) {}
         c += l;
         continue;
@@ -406,29 +507,34 @@ const sivaraVM = Object.freeze({
   },
 
   // ─── v7 DECOMPILER ───
-  async _decompileV7(b, v) {
+  async _decompileV7(b, v, ownerSecret) {
     let c = 4;
     const out = { header: 'SIVARA_SECURE_DOC_V7' };
     const vx = [];
     let dKey = 0;
     let wrappingNonce = null;
+    let storedOwnerHash = null;
+    let isOwnerBound = false;
+    let isPasswordProtected = false;
+    let storedSalt = null;
 
     while (c < b.length) {
       const op = b[c++];
       if (op === 0xff) break;
 
-      if (op === 0x1f) { c += 4 + v.getUint32(c); continue; }
+      if (op === 0x1f) { const gl = v.getUint32(c); c += 4; if (c + gl > b.length) throw new Error('SIVARA_CORRUPT: ghost block overflow'); c += gl; continue; }
 
       if (op === 0xee) {
         const l = v.getUint32(c) ^ 0x12345678;
         c += 4;
+        if (l < 0 || c + l > b.length) throw new Error('SIVARA_CORRUPT: keygen block overflow');
         const script = b.slice(c, c + l);
         dKey = _RT.vm(script, { lat: 0, lng: 0 });
         c += l;
         continue;
       }
 
-      if (op === 0xe5) { const l = v.getUint32(c) ^ dKey; c += 4; vx.push(b.slice(c, c + l)); c += l; continue; }
+      if (op === 0xe5) { const l = v.getUint32(c) ^ dKey; c += 4; if (l < 0 || c + l > b.length) throw new Error('SIVARA_CORRUPT: vm block overflow'); vx.push(b.slice(c, c + l)); c += l; continue; }
 
       // Title IV (0xB2)
       if (op === 0xb2) {
@@ -447,22 +553,60 @@ const sivaraVM = Object.freeze({
         continue;
       }
 
-      // Wrapping nonce (0xA1) — v7 (always 16 bytes)
+      // Wrapping nonce (0xA1)
       if (op === 0xa1) {
+        if (c + 16 > b.length) throw new Error('SIVARA_CORRUPT: nonce block overflow');
         wrappingNonce = b.slice(c, c + 16);
         c += 16;
         continue;
       }
 
-      // AES-GCM encrypted metadata (0xD5) — v7
+      // Owner hash block (0xA2) — v8 security (always 32 bytes)
+      if (op === 0xa2) {
+        if (c + 32 > b.length) throw new Error('SIVARA_CORRUPT: owner hash block overflow');
+        storedOwnerHash = b.slice(c, c + 32);
+        isOwnerBound = true;
+        c += 32;
+        continue;
+      }
+
+      // Salt block (0xA3) — password-protected files (salt stored outside metadata)
+      if (op === 0xa3) {
+        const l = v.getUint32(c); c += 4;
+        if (l < 0 || c + l > b.length) throw new Error('SIVARA_CORRUPT: salt block overflow');
+        storedSalt = _RT._d.decode(b.slice(c, c + l));
+        isPasswordProtected = true;
+        c += l;
+        continue;
+      }
+
+      // AES-GCM encrypted metadata (0xD5)
       if (op === 0xd5) {
         const l = v.getUint32(c) ^ dKey;
         c += 4;
+        if (l < 0 || c + l > b.length) throw new Error('SIVARA_CORRUPT: metadata block overflow');
         if (wrappingNonce) {
           try {
-            const decrypted = await _RT.unwrapMetadata(b.slice(c, c + l), wrappingNonce);
-            Object.assign(out, JSON.parse(_RT._d.decode(decrypted)));
+            let decrypted;
+            if (isOwnerBound && ownerSecret) {
+              decrypted = await _RT.unwrapMetadataV8(b.slice(c, c + l), wrappingNonce, ownerSecret);
+            } else if (isPasswordProtected && ownerSecret) {
+              decrypted = await _RT.unwrapMetadataV8(b.slice(c, c + l), wrappingNonce, ownerSecret);
+            } else if (isPasswordProtected && !ownerSecret) {
+              try {
+                decrypted = await _RT.unwrapMetadata(b.slice(c, c + l), wrappingNonce);
+              } catch (_) {
+                throw new Error('SIVARA_PASSWORD_REQUIRED: Ce fichier nécessite un mot de passe.');
+              }
+            } else if (!isOwnerBound && !isPasswordProtected) {
+              decrypted = await _RT.unwrapMetadata(b.slice(c, c + l), wrappingNonce);
+            } else {
+              throw new Error('SIVARA_AUTH_REQUIRED: Ce fichier nécessite une authentification.');
+            }
+            _RT.safeMeta(out, _RT._d.decode(decrypted));
           } catch (e) {
+            if (e.message?.startsWith('SIVARA_AUTH_REQUIRED')) throw e;
+            if (e.message?.startsWith('SIVARA_PASSWORD_REQUIRED')) throw e;
             console.error('Metadata decryption failed:', e);
           }
         }
@@ -476,7 +620,7 @@ const sivaraVM = Object.freeze({
         try {
           const dec2 = _RT.sx(b.slice(c, c + l), dKey);
           const dec1 = _RT.xR(dec2, 0xaa);
-          Object.assign(out, JSON.parse(_RT._d.decode(dec1)));
+          _RT.safeMeta(out, _RT._d.decode(dec1));
         } catch (_) {}
         c += l;
         continue;
@@ -485,6 +629,7 @@ const sivaraVM = Object.freeze({
       // Payload (0xC3)
       if (op === 0xc3) {
         const l = v.getUint32(c) ^ dKey; c += 4;
+        if (l < 0 || c + l > b.length) throw new Error('SIVARA_CORRUPT: payload block overflow');
         const cl = _RT.xR(b.slice(c, c + l), 0xbb);
         let s = -1;
         for (let i = 0; i < cl.length; i++) { if (cl[i] === 0x00) { s = i; break; } }
@@ -501,9 +646,20 @@ const sivaraVM = Object.freeze({
         const expectedHmac = b.slice(c, c + 32);
         if (wrappingNonce) {
           const dataToVerify = b.slice(0, c - 1);
-          const valid = await _RT.verifyHMAC(dataToVerify, expectedHmac, wrappingNonce);
+          let valid;
+          if (isOwnerBound && ownerSecret) {
+            valid = await _RT.verifyHMACv8(dataToVerify, expectedHmac, wrappingNonce, ownerSecret);
+          } else if (isPasswordProtected && ownerSecret) {
+            valid = await _RT.verifyHMACv8(dataToVerify, expectedHmac, wrappingNonce, ownerSecret);
+          } else if (isPasswordProtected && !ownerSecret) {
+            try { valid = await _RT.verifyHMAC(dataToVerify, expectedHmac, wrappingNonce); } catch (_) { valid = false; }
+          } else if (!isOwnerBound) {
+            valid = await _RT.verifyHMAC(dataToVerify, expectedHmac, wrappingNonce);
+          } else {
+            throw new Error('SIVARA_AUTH_REQUIRED: Ce fichier nécessite une authentification.');
+          }
           if (!valid) {
-            console.warn('SIVARA: File integrity check failed — file may have been tampered with');
+            throw new Error('SIVARA_INTEGRITY_VIOLATION: Le fichier a été modifié ou corrompu.');
           }
         }
         c += 32;
@@ -511,11 +667,40 @@ const sivaraVM = Object.freeze({
       }
 
       // Unknown opcode: skip
-      try { const n = v.getUint32(c); c += 4 + (dKey ? n ^ dKey : n); } catch (_) { break; }
+      try { const n = v.getUint32(c); const skip = dKey ? n ^ dKey : n; c += 4; if (skip < 0 || c + skip > b.length) break; c += skip; } catch (_) { break; }
     }
 
     // Fall back content_iv to title_iv if missing
     if (!out.content_iv) out.content_iv = out.title_iv;
+
+    // SECURITY (v8): owner-bound verification
+    if (isOwnerBound) {
+      if (!ownerSecret) {
+        out.requires_auth = true;
+        return out;
+      }
+      // SECURITY: Constant-time hash comparison — prevents timing attacks (CRIT-01 fix)
+      const computedHash = await _RT.ownerHash(ownerSecret);
+      if (storedOwnerHash) {
+        let diff = 0;
+        for (let i = 0; i < 32; i++) {
+          diff |= computedHash[i] ^ storedOwnerHash[i];
+        }
+        if (diff !== 0) {
+          throw new Error('SIVARA_OWNER_MISMATCH: Identité du propriétaire invalide.');
+        }
+      }
+      out.auto_key = ownerSecret;
+    }
+
+    // SECURITY: For password-protected files with new format (0xA3 salt block)
+    if (isPasswordProtected && storedSalt) {
+      out.salt = storedSalt;
+      if (!ownerSecret) {
+        out.requires_password = true;
+        return out;
+      }
+    }
 
     // Detect security requirements (don't enforce, just flag)
     out.requiresInternet = false;

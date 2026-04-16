@@ -271,6 +271,9 @@ class SivaraCompiler {
 }
 
 // --- VM ENGINE (RUNTIME) ---
+const MAX_VM_INSTRUCTIONS = 100000;
+const MAX_VM_STACK = 1024;
+
 const executeVM = (bytecode: Uint8Array, context: any) => {
   const stack: number[] = [];
   // Mémoire vive de la VM (256 slots d'entiers)
@@ -278,10 +281,12 @@ const executeVM = (bytecode: Uint8Array, context: any) => {
   
   const view = new DataView(bytecode.buffer, bytecode.byteOffset, bytecode.byteLength);
   let pc = 0; // Program Counter
-
-  console.log(`[VM] Start. Context: Lat=${context.lat}, Lng=${context.lng}`);
+  let instructionCount = 0;
 
   while (pc < bytecode.length) {
+    // SECURITY: Prevent infinite loop DoS from malicious bytecode
+    if (++instructionCount > MAX_VM_INSTRUCTIONS) throw new Error('SBP_VM_INSTRUCTION_LIMIT');
+    if (stack.length > MAX_VM_STACK) throw new Error('SBP_VM_STACK_OVERFLOW');
     const op = bytecode[pc++];
 
     switch (op) {
@@ -303,6 +308,7 @@ const executeVM = (bytecode: Uint8Array, context: any) => {
       case VM_OPS.STORE:
         const addrStore = view.getInt32(pc, false);
         pc += 4;
+        if (addrStore < 0 || addrStore >= 256) throw new Error('SBP_VM_MEMORY_OOB');
         const valStore = stack.pop()!;
         memory[addrStore] = valStore;
         break;
@@ -310,12 +316,14 @@ const executeVM = (bytecode: Uint8Array, context: any) => {
       case VM_OPS.LOAD:
         const addrLoad = view.getInt32(pc, false);
         pc += 4;
+        if (addrLoad < 0 || addrLoad >= 256) throw new Error('SBP_VM_MEMORY_OOB');
         stack.push(memory[addrLoad]);
         break;
 
       // --- SAUTS ---
       case VM_OPS.JMP:
         const targetJmp = view.getInt32(pc, false);
+        if (targetJmp < 0 || targetJmp >= bytecode.length) throw new Error('SBP_VM_JMP_OOB');
         pc = targetJmp;
         break;
 
@@ -372,6 +380,7 @@ serve(async (req) => {
 
     // --- COMPILATION ---
     if (action === 'compile') {
+      console.warn('[DEPRECATED] Server-side compile is legacy SBP v3. Use client-side sivaraVM.compile() for v7/v8 security.');
       const { encrypted_title, encrypted_content, iv, owner_id, icon, color, salt, security } = payload;
       
       const metaJson = JSON.stringify({ owner_id, icon, color, salt, v: 5.0, security: security || {} });
@@ -471,6 +480,7 @@ serve(async (req) => {
 
     // --- DÉCOMPILATION ---
     if (action === 'decompile') {
+      console.warn('[DEPRECATED] Server-side decompile is legacy SBP v3. Use client-side sivaraVM.decompile() for v7/v8 security.');
       const binaryString = atob(fileData);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
@@ -510,6 +520,7 @@ serve(async (req) => {
         if (opcode === OP_CODES.VM_EXEC) {
             const len = view.getUint32(cursor);
             cursor += 4;
+            if (cursor + len > bytes.length) throw new Error('SBP_CORRUPT: VM block overflow');
             const bytecode = bytes.slice(cursor, cursor + len);
             
             try {
@@ -535,7 +546,8 @@ serve(async (req) => {
           const clearChunk = sivaraUnshuffle(chunk, 0xAA);
           try {
              metaData = JSON.parse(bufToStr(clearChunk));
-             Object.assign(result, metaData);
+             const ALLOWED_META = ['owner_id', 'icon', 'color', 'salt', 'v', 'security'];
+             for (const k of ALLOWED_META) if (k in metaData) result[k] = metaData[k];
           } catch(e) {}
           cursor += len;
         }
@@ -563,6 +575,6 @@ serve(async (req) => {
 
   } catch (error) {
     console.error(error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })

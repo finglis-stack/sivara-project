@@ -14,6 +14,7 @@ class SivaraEditor {
     this.isOnline = navigator.onLine;
     this.autoSaveInterval = null;
     this.lastSavedAt = null;
+    this.ownerSecret = null;
 
     this.init();
   }
@@ -209,11 +210,29 @@ class SivaraEditor {
       this.fileName = result.fileName;
       this.filePathDisplay.textContent = filePath;
 
-      const data = sivaraVM.decompile(result.data);
+      const data = await sivaraVM.decompile(result.data, this.ownerSecret);
       this.fileData = data;
 
+      // SECURITY (v8): File requires authentication (owner-bound)
+      if (data.requires_auth) {
+        const ownerId = prompt('Ce fichier est protégé par identité.\nEntrez votre identifiant Sivara :');
+        if (!ownerId) { this.setStatus('error', 'Annulé'); return; }
+        this.ownerSecret = ownerId;
+        const data2 = await sivaraVM.decompile(result.data, ownerId);
+        this.fileData = data2;
+      }
+
+      // SECURITY: File requires password (new format password-protected files)
+      if (this.fileData.requires_password) {
+        const password = prompt('Ce document est protégé.\nEntrez le mot de passe :');
+        if (!password) { this.setStatus('error', 'Annulé'); return; }
+        this._userPassword = password;
+        const data2 = await sivaraVM.decompile(result.data, password);
+        this.fileData = data2;
+      }
+
       // Security check
-      if (data.requiresInternet) {
+      if (this.fileData.requiresInternet) {
         const isOnline = await this.checkOnline();
         if (!isOnline) {
           this.showInternetRequired(data.securityFlags);
@@ -228,7 +247,7 @@ class SivaraEditor {
       if (data.auto_key) {
         await this.encService.initialize(data.auto_key);
       } else if (data.salt) {
-        const password = prompt('Ce document est protégé.\nEntrez le mot de passe :');
+        const password = this._userPassword || prompt('Ce document est protégé.\nEntrez le mot de passe :');
         if (!password) { this.setStatus('error', 'Annulé'); return; }
         await this.encService.initialize(password, data.salt);
       } else {
