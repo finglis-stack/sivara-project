@@ -290,8 +290,8 @@ const Onboarding = () => {
       <Dialog open={recoveryKey !== null} onOpenChange={() => { }}>
         <DialogContent className="sm:max-w-lg [&>button]:hidden" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
           <DialogHeader>
-            <div className="mx-auto w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mb-2">
-              <Key className="h-7 w-7 text-amber-600" />
+            <div className="mx-auto w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-2">
+              <Key className="h-7 w-7 text-gray-900" />
             </div>
             <DialogTitle className="text-center text-xl">Clé de récupération</DialogTitle>
             <DialogDescription className="text-center">
@@ -301,7 +301,7 @@ const Onboarding = () => {
           </DialogHeader>
 
           <div className="my-4 p-4 bg-gray-900 rounded-xl text-center">
-            <code className="text-lg font-mono text-amber-400 tracking-widest select-all">
+            <code className="text-lg font-mono text-white tracking-widest select-all">
               {recoveryKey}
             </code>
           </div>

@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptionService, parseDocumentIVs } from '@/lib/encryption';
 import { sivaraVM } from '@/lib/sivara-vm';
+import VaultUnlock from '@/components/VaultUnlock';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -209,6 +210,7 @@ const Docs = () => {
   const [customIcon, setCustomIcon] = useState('Folder');
   const [customColor, setCustomColor] = useState('#6B7280');
   const [isUploading, setIsUploading] = useState(false);
+  const [needsUnlock, setNeedsUnlock] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -238,13 +240,16 @@ const Docs = () => {
     setProfile(data);
   };
 
-  const initializeEncryption = async () => {
-    if (!user) return;
+  const initializeEncryption = async (): Promise<boolean> => {
+    if (!user) return false;
     try {
       await encryptionService.ensureReady();
+      setNeedsUnlock(false);
+      return true;
     } catch (error) {
       console.error('Encryption initialization error:', error);
-      showError('Session de chiffrement expirée. Reconnectez-vous.');
+      setNeedsUnlock(true);
+      return false;
     }
   };
 
@@ -315,7 +320,9 @@ const Docs = () => {
 
   useEffect(() => {
     if (!user) return;
-    initializeEncryption().then(() => fetchDocuments());
+    initializeEncryption().then((ready) => {
+      if (ready) fetchDocuments();
+    });
     fetchProfile();
   }, [user, currentFolderId]);
 
@@ -713,6 +720,7 @@ const Docs = () => {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      {user && <VaultUnlock open={needsUnlock} userId={user.id} onUnlocked={() => { setNeedsUnlock(false); fetchDocuments(); }} />}
       <div className="min-h-screen bg-gray-50 flex flex-col pt-[env(safe-area-inset-top)]">
         {/* ... (Header) ... */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
