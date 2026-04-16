@@ -493,7 +493,7 @@ export default function PointEditor() {
       if (isDirect) {
         await encryptionService.initializeDirect(effectiveKey);
       } else {
-        await encryptionService.initialize(effectiveKey);
+        await encryptionService.ensureReady();
       }
 
       const { encrypted: encTitle, iv: titleIv } = await encryptionService.encrypt(titleRef.current || 'Point');
@@ -548,7 +548,7 @@ export default function PointEditor() {
       if (isDirect) {
         await encryptionService.initializeDirect(effectiveKey);
       } else {
-        await encryptionService.initialize(effectiveKey);
+        await encryptionService.ensureReady();
       }
 
       let decryptedTitle = 'Point';
@@ -559,7 +559,9 @@ export default function PointEditor() {
         decryptedTitle = await encryptionService.decrypt(docTyped.title, titleIv);
         decryptedContent = await encryptionService.decrypt(docTyped.content, contentIv);
       } catch {
-        await encryptionService.initialize(docTyped.owner_id);
+        // Fallback: try reloading DEK from session
+        encryptionService.invalidateCache();
+        await encryptionService.ensureReady();
         const { titleIv: t2, contentIv: c2 } = parseDocumentIVs(docTyped.encryption_iv);
         decryptedTitle = await encryptionService.decrypt(docTyped.title, t2);
         decryptedContent = await encryptionService.decrypt(docTyped.content, c2);

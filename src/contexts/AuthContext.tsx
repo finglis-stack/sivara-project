@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { encryptionService } from '@/lib/encryption';
 
 interface AuthContextType {
   user: User | null;
@@ -99,6 +100,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     } finally {
       // DANS TOUS LES CAS : on nettoie l'état local
+      encryptionService.logout(); // Clear DEK from memory + sessionStorage
       setUser(null);
       setSession(null);
       

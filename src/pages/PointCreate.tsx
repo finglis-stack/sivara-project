@@ -76,8 +76,8 @@ export default function PointCreate() {
 
   useEffect(() => {
     if (!user) return;
-    encryptionService.initialize(user.id).catch(() => {
-      showError("Impossible d'initialiser le chiffrement");
+    encryptionService.ensureReady().catch(() => {
+      showError("Session de chiffrement expirée. Reconnectez-vous.");
     });
   }, [user]);
 
@@ -85,7 +85,7 @@ export default function PointCreate() {
     if (!user) return;
     setIsCreating(true);
     try {
-      await encryptionService.initialize(user.id);
+      await encryptionService.ensureReady();
 
       const point = buildInitialPoint();
       // Synchroniser le titre avec la slide 1 (optionnel mais agréable)

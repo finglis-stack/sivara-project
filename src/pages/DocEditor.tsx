@@ -625,7 +625,8 @@ const DocEditor = () => {
       if (shareKey && shareKey !== 'share') {
         await encryptionService.initializeDirect(shareKey);
       } else {
-        await encryptionService.initialize(doc.owner_id);
+        // Owner or authorized viewer: DEK from session
+        await encryptionService.ensureReady();
       }
 
       const isDocOwner = user?.id === doc.owner_id;
@@ -670,10 +671,10 @@ const DocEditor = () => {
         decryptedTitle = await encryptionService.decrypt(doc.title, titleIv);
         decryptedContent = await encryptionService.decrypt(doc.content, contentIv);
       } catch (e: any) {
-        // Si la clé n'a pas été initialisée correctement (ou hash inattendu),
-        // on tente une dernière fois avec la clé propriétaire (utile pour les lectures publiques).
+        // Fallback: try DEK from session (owner viewing own doc)
         try {
-          await encryptionService.initialize(doc.owner_id);
+          encryptionService.invalidateCache();
+          await encryptionService.ensureReady();
           const { titleIv: tIv2, contentIv: cIv2 } = parseDocumentIVs(doc.encryption_iv);
           decryptedTitle = await encryptionService.decrypt(doc.title, tIv2);
           decryptedContent = await encryptionService.decrypt(doc.content, cIv2);
@@ -758,7 +759,7 @@ const DocEditor = () => {
             contentIv = cIv;
             salt = saltValue;
             encryptionService.invalidateCache();
-            await encryptionService.initialize(user.id);
+            await encryptionService.ensureReady();
         } else {
             // SECURITY (v8): Use user.id derived key for .sivara — owner-bound via direct PBKDF2
             await encryptionService.initializeDirect(user.id);
@@ -772,7 +773,7 @@ const DocEditor = () => {
             
             // Restore DEK-based encryption for Supabase session
             encryptionService.invalidateCache();
-            await encryptionService.initialize(user.id);
+            await encryptionService.ensureReady();
         }
 
         const securityContext: any = {};
@@ -828,7 +829,7 @@ const DocEditor = () => {
         setIsExporting(false);
         if (user) {
             encryptionService.invalidateCache();
-            await encryptionService.initialize(user.id);
+            await encryptionService.ensureReady();
         }
     }
   };

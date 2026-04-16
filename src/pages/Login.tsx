@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
+import { encryptionService } from '@/lib/encryption';
 import { showSuccess, showError } from '@/utils/toast';
 import { Loader2, ArrowRight, Check, ShieldCheck, Zap, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -65,8 +66,19 @@ const Login = () => {
 
     try {
       setIsLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+
+      // KEK/DEK: Derive KEK from the REAL password, unwrap the DEK
+      if (data.user) {
+        try {
+          await encryptionService.initializeWithPassword(password, data.user.id);
+        } catch (encError: any) {
+          console.warn('Encryption init (may be first-time user):', encError.message);
+          // Non-blocking: user may not have DEK yet (legacy account)
+        }
+      }
+
       showSuccess('Connexion réussie');
     } catch (error: any) {
       console.error('Login error:', error);

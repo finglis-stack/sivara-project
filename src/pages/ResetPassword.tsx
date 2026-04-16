@@ -7,17 +7,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { showSuccess, showError } from '@/utils/toast';
-import { Loader2, Lock, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Loader2, Lock, CheckCircle2, ShieldCheck, Key } from 'lucide-react';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
+  const [recoveryKey, setRecoveryKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
     const initializeRecoverySession = async () => {
-      // 1. Vérifier si une session est déjà active
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
@@ -25,12 +25,10 @@ const ResetPassword = () => {
         return;
       }
 
-      // 2. Si pas de session, on regarde si les tokens sont dans l'URL (Hash)
-      // C'est souvent le cas si l'auto-détection a échoué ou a été trop lente
       const hash = window.location.hash;
       if (hash && hash.includes('access_token')) {
         try {
-          const params = new URLSearchParams(hash.substring(1)); // Enlève le '#'
+          const params = new URLSearchParams(hash.substring(1));
           const accessToken = params.get('access_token');
           const refreshToken = params.get('refresh_token');
 
@@ -50,21 +48,19 @@ const ResetPassword = () => {
         }
       }
 
-      // 3. Écouter l'événement de récupération (Fallback final)
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
           setSessionChecked(true);
         }
       });
 
-      // Si après tout ça on a rien au bout de 2 secondes, on redirige
       setTimeout(async () => {
         const { data: { session: finalCheck } } = await supabase.auth.getSession();
         if (!finalCheck) {
            showError("Lien invalide ou expiré.");
            navigate('/login');
         }
-      }, 4000); // Délai généreux pour laisser le temps au process PKCE
+      }, 4000);
 
       return () => subscription.unsubscribe();
     };
@@ -78,31 +74,30 @@ const ResetPassword = () => {
       showError("Le mot de passe doit faire au moins 6 caractères");
       return;
     }
+    if (!recoveryKey.trim()) {
+      showError("Veuillez entrer votre clé de récupération");
+      return;
+    }
 
     setLoading(true);
     try {
-      // Double vérification de la session avant l'envoi
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
          throw new Error("Session perdue. Veuillez recliquer sur le lien dans votre email.");
       }
 
+      // 1. Update auth password
       const { error } = await supabase.auth.updateUser({ password: password });
-
       if (error) throw error;
 
-      // KEK/DEK: Re-initialize encryption after password change.
-      // Since KEK is derived from user.id (immutable), the DEK stays valid.
-      // We just invalidate the cache and re-init for a clean state.
-      try {
-        encryptionService.invalidateCache();
-        await encryptionService.initialize(session.user.id);
-      } catch (encError) {
-        console.warn('Encryption re-init after password change:', encError);
-        // Non-blocking: encryption will re-init on next page load
-      }
+      // 2. KEK/DEK: Use recovery key to unwrap DEK, re-wrap with new password
+      await encryptionService.resetWithRecoveryKey(
+        recoveryKey.trim().toUpperCase(),
+        password,
+        session.user.id
+      );
 
-      showSuccess("Mot de passe mis à jour avec succès !");
+      showSuccess("Mot de passe mis à jour et clé de chiffrement re-protégée !");
       
       setTimeout(() => {
         navigate('/profile');
@@ -140,15 +135,33 @@ const ResetPassword = () => {
           </div>
           <CardTitle className="text-xl font-bold">Nouveau mot de passe</CardTitle>
           <CardDescription>
-            Votre identité est vérifiée.
+            Votre identité est vérifiée. Entrez votre clé de récupération pour re-protéger vos documents.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6 pt-4">
-          <div className="flex items-center gap-2 p-3 mb-4 bg-emerald-50 border border-emerald-100 rounded-lg">
-            <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-            <p className="text-xs text-emerald-700">Vos documents chiffrés restent intacts. La clé de chiffrement est liée à votre identité, pas à votre mot de passe.</p>
+          <div className="flex items-center gap-2 p-3 mb-4 bg-amber-50 border border-amber-100 rounded-lg">
+            <ShieldCheck className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            <p className="text-xs text-amber-700">La clé de récupération re-protège vos documents chiffrés avec votre nouveau mot de passe.</p>
           </div>
+
           <form onSubmit={handleUpdatePassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="recovery-key" className="flex items-center gap-1.5">
+                <Key className="h-3.5 w-3.5 text-gray-500" />
+                Clé de récupération
+              </Label>
+              <Input
+                id="recovery-key"
+                type="text"
+                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+                value={recoveryKey}
+                onChange={(e) => setRecoveryKey(e.target.value)}
+                required
+                className="h-11 font-mono tracking-wider text-sm"
+                autoFocus
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="password">Nouveau mot de passe</Label>
               <Input
@@ -159,9 +172,9 @@ const ResetPassword = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="h-11"
-                autoFocus
               />
             </div>
+
             <Button type="submit" className="w-full h-11 bg-black hover:bg-gray-800" disabled={loading}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
               Mettre à jour

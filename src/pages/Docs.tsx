@@ -241,10 +241,10 @@ const Docs = () => {
   const initializeEncryption = async () => {
     if (!user) return;
     try {
-      await encryptionService.initialize(user.id);
+      await encryptionService.ensureReady();
     } catch (error) {
       console.error('Encryption initialization error:', error);
-      showError('Erreur d\'initialisation du chiffrement');
+      showError('Session de chiffrement expirée. Reconnectez-vous.');
     }
   };
 
@@ -254,7 +254,7 @@ const Docs = () => {
       if (folderParam && folderParam !== currentFolderId) {
           const loadFolderDetails = async () => {
               if (!user) return;
-               await encryptionService.initialize(user.id);
+               await encryptionService.ensureReady();
                const { data } = await supabase.from('documents').select('id, title, encryption_iv').eq('id', folderParam).single();
                if (data) {
                    try {
@@ -278,7 +278,7 @@ const Docs = () => {
 
     try {
       // IMPORTANT: S'assurer que l'instance crypto est bien sur l'utilisateur courant avant de fetch
-      await encryptionService.initialize(user.id);
+      await encryptionService.ensureReady();
 
       let query = supabase.from('documents').select('*').eq('owner_id', user.id);
 
@@ -549,7 +549,7 @@ const Docs = () => {
         }
 
         encryptionService.invalidateCache();
-        await encryptionService.initialize(user.id);
+        await encryptionService.ensureReady();
         
         const { encrypted: newEncTitle, iv: newTitleIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
         const { encrypted: newEncContent, iv: newContentIv } = await encryptionService.encrypt(decryptedContent);
@@ -580,7 +580,7 @@ const Docs = () => {
         console.error(err);
         if (user) {
             encryptionService.invalidateCache();
-            await encryptionService.initialize(user.id);
+            await encryptionService.ensureReady();
         }
         showError(err.message || "Erreur lors de l'importation");
     } finally {
