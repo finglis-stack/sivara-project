@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { encryptionService } from '@/lib/encryption';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { showSuccess, showError } from '@/utils/toast';
-import { Loader2, Lock, CheckCircle2 } from 'lucide-react';
+import { Loader2, Lock, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -90,6 +91,17 @@ const ResetPassword = () => {
 
       if (error) throw error;
 
+      // KEK/DEK: Re-initialize encryption after password change.
+      // Since KEK is derived from user.id (immutable), the DEK stays valid.
+      // We just invalidate the cache and re-init for a clean state.
+      try {
+        encryptionService.invalidateCache();
+        await encryptionService.initialize(session.user.id);
+      } catch (encError) {
+        console.warn('Encryption re-init after password change:', encError);
+        // Non-blocking: encryption will re-init on next page load
+      }
+
       showSuccess("Mot de passe mis à jour avec succès !");
       
       setTimeout(() => {
@@ -132,6 +144,10 @@ const ResetPassword = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6 pt-4">
+          <div className="flex items-center gap-2 p-3 mb-4 bg-emerald-50 border border-emerald-100 rounded-lg">
+            <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+            <p className="text-xs text-emerald-700">Vos documents chiffrés restent intacts. La clé de chiffrement est liée à votre identité, pas à votre mot de passe.</p>
+          </div>
           <form onSubmit={handleUpdatePassword} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="password">Nouveau mot de passe</Label>
