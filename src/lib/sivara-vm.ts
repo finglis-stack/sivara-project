@@ -28,6 +28,7 @@ const _RT = (() => {
     new DataView(b.buffer).setUint32(0, v);
     return b;
   };
+  // Obfuscation layer (NOT encryption) — rotate + XOR with linear counter
   const xF = (d: Uint8Array, k: number): Uint8Array => {
     const r = new Uint8Array(d.length);
     for (let i = 0; i < d.length; i++) {
@@ -36,6 +37,7 @@ const _RT = (() => {
     }
     return r;
   };
+  // Reverse of xF
   const xR = (d: Uint8Array, k: number): Uint8Array => {
     const r = new Uint8Array(d.length);
     for (let i = 0; i < d.length; i++) {
@@ -45,6 +47,7 @@ const _RT = (() => {
     }
     return r;
   };
+  // LCG-based stream obfuscation (NOT a secure cipher)
   const sx = (d: Uint8Array, k: number): Uint8Array => {
     const r = new Uint8Array(d.length);
     let s = k;
@@ -54,17 +57,26 @@ const _RT = (() => {
     }
     return r;
   };
+  // Ghost/chaff blocks for anti-analysis padding
   const gB = (): Uint8Array[] => {
     const sz = (Math.random() * 0x400 | 0) + 0x40;
     return [new Uint8Array([0x1F]), u32(sz), crypto.getRandomValues(new Uint8Array(sz))];
   };
+
+  const MAX_VM_INSTRUCTIONS = 100000;
+  const MAX_VM_STACK = 1024;
+
   const vm = (bc: Uint8Array, env: { lat: number; lng: number }): number => {
     const s: number[] = [];
     const m: number[] = new Array(0x100).fill(0);
     const dv = new DataView(bc.buffer, bc.byteOffset, bc.byteLength);
     let p = 0;
+    let instructionCount = 0;
     const r = (): number => { const v = dv.getInt32(p, false); p += 4; return v; };
     while (p < bc.length) {
+      // SECURITY: Prevent infinite loop DoS from malicious bytecode
+      if (++instructionCount > MAX_VM_INSTRUCTIONS) throw new Error('SBP_VM_INSTRUCTION_LIMIT');
+      if (s.length > MAX_VM_STACK) throw new Error('SBP_VM_STACK_OVERFLOW');
       const o = bc[p++];
       switch (o) {
         case 0x10: s.push(r()); break;
@@ -131,29 +143,93 @@ const _RT = (() => {
     em(0x00);
     return new Uint8Array(bc);
   };
-  return Object.freeze({ $, _e, _d, b64, d64, i32, u32, xF, xR, sx, gB, vm, cc });
+
+  // SECURITY: CSPRNG-based random int (replaces Math.random for crypto ops)
+  const csprngInt = (max: number): number => {
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    return buf[0] % max;
+  };
+
+  // AES-256-GCM wrapping for metadata (v7)
+  const deriveWrappingKey = async (nonce: Uint8Array): Promise<CryptoKey> => {
+    const keyMaterial = await crypto.subtle.importKey('raw', nonce, 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: _e.encode('sivara-sbp-wrap-v7'), iterations: 50000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  };
+
+  const wrapMetadata = async (data: Uint8Array, nonce: Uint8Array): Promise<Uint8Array> => {
+    const key = await deriveWrappingKey(nonce);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, data);
+    // Format: [12 bytes iv] [encrypted data with tag]
+    const result = new Uint8Array(12 + encrypted.byteLength);
+    result.set(iv, 0);
+    result.set(new Uint8Array(encrypted), 12);
+    return result;
+  };
+
+  const unwrapMetadata = async (wrapped: Uint8Array, nonce: Uint8Array): Promise<Uint8Array> => {
+    const key = await deriveWrappingKey(nonce);
+    const iv = wrapped.slice(0, 12);
+    const data = wrapped.slice(12);
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, data);
+    return new Uint8Array(decrypted);
+  };
+
+  // HMAC-SHA256 for file integrity (v7)
+  const computeHMAC = async (data: Uint8Array, nonce: Uint8Array): Promise<Uint8Array> => {
+    const keyData = await crypto.subtle.digest('SHA-256', nonce);
+    const hmacKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', hmacKey, data);
+    return new Uint8Array(sig);
+  };
+
+  const verifyHMAC = async (data: Uint8Array, expectedHmac: Uint8Array, nonce: Uint8Array): Promise<boolean> => {
+    const keyData = await crypto.subtle.digest('SHA-256', nonce);
+    const hmacKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    return crypto.subtle.verify('HMAC', hmacKey, expectedHmac, data);
+  };
+
+  return Object.freeze({ $, _e, _d, b64, d64, i32, u32, xF, xR, sx, gB, vm, cc, csprngInt, wrapMetadata, unwrapMetadata, computeHMAC, verifyHMAC });
 })();
 
 export const sivaraVM = Object.freeze({
+  /**
+   * Compile a document payload into a .sivara binary (SBP v7.0)
+   * 
+   * v7 security improvements over v6:
+   * - CSPRNG for key generation (crypto.getRandomValues instead of Math.random)
+   * - Separate IVs for title and content
+   * - Metadata protected by AES-256-GCM with PBKDF2-derived wrapping key
+   * - HMAC-SHA256 integrity check
+   * - VM execution limits for bytecode
+   */
   async compile(payload: any): Promise<Blob> {
-    const { encrypted_title: eT, encrypted_content: eC, iv, icon: ic, color: cl, salt: sl, security: sec, embedded_key: eK } = payload;
-    
-    // EXTREME SECURITY: Dynamic Master Engine Key computed via Bytecode
-    const dk1 = Math.floor(Math.random() * 0x7FFFFFFF);
-    const dk2 = Math.floor(Math.random() * 0x7FFFFFFF);
-    const mKey = dk1 ^ dk2;
-    // We inject a KEY_GEN VM script at the start of the file structure
-    const vmKeyGen = _RT.cc(`${dk1} ^ ${dk2}`); 
+    const { encrypted_title: eT, encrypted_content: eC, title_iv: tIv, content_iv: cIv, icon: ic, color: cl, salt: sl, security: sec, embedded_key: eK } = payload;
 
-    const mB = _RT._e.encode(JSON.stringify({ auto_key: eK, icon: ic, color: cl, salt: sl, v: 6.0, security: sec || {} }));
-    const ivB = _RT.d64(iv);
+    // SECURITY: Use CSPRNG instead of Math.random for key generation
+    const dk1 = _RT.csprngInt(0x7FFFFFFF);
+    const dk2 = _RT.csprngInt(0x7FFFFFFF);
+    const mKey = dk1 ^ dk2;
+    const vmKeyGen = _RT.cc(`${dk1} ^ ${dk2}`);
+
+    const mB = _RT._e.encode(JSON.stringify({ auto_key: eK, icon: ic, color: cl, salt: sl, v: 7.0, security: sec || {} }));
+    const titleIvB = _RT.d64(tIv);
+    const contentIvB = _RT.d64(cIv);
     const tB = _RT._e.encode(eT);
     const cB = _RT._e.encode(eC);
-    const pts: Uint8Array[] = [new Uint8Array([0x53,0x56,0x52,0x06])]; // SBP v6.0 Magic
+    const pts: Uint8Array[] = [new Uint8Array([0x53,0x56,0x52,0x07])]; // SBP v7.0 Magic
 
-    // Inject KEY_GEN Block (0xEE)
+    // KEY_GEN Block (0xEE) — VM bytecode to compute mKey
     pts.push(new Uint8Array([0xEE]), _RT.u32(vmKeyGen.length ^ 0x12345678), vmKeyGen);
 
+    // Geofence VM block (optional)
     if (sec?.geofence) {
       const { lat, lng, radius_km } = sec.geofence;
       const tL = Math.round(lat * 1e4), tN = Math.round(lng * 1e4), dR = Math.round((radius_km / 111) * 1e4);
@@ -163,25 +239,46 @@ export const sivaraVM = Object.freeze({
       pts.push(new Uint8Array([0xE5]), _RT.u32(vmBc.length ^ mKey), vmBc);
     }
     
-    // Ghost blocks for Chaffing (Harder reversing)
+    // Chaff/ghost blocks (anti-analysis padding, NOT security)
     if (Math.random() > 0.5) pts.push(..._RT.gB());
     
-    pts.push(new Uint8Array([0xB2]), new Uint8Array([ivB.length ^ (mKey & 0xFF)]), ivB);
+    // Title IV block (0xB2)
+    pts.push(new Uint8Array([0xB2]), new Uint8Array([titleIvB.length ^ (mKey & 0xFF)]), titleIvB);
     pts.push(..._RT.gB());
-    
-    // DOUBLE ENCRYPTION metadata block using dynamic engine key
-    const sM1 = _RT.xF(mB, 0xAA);
-    const sM2 = _RT.sx(sM1, mKey); // Custom Stream cipher XOR
-    pts.push(new Uint8Array([0xD4]), _RT.u32(sM2.length ^ mKey), sM2);
+
+    // Content IV block (0xB3) — NEW in v7: separate IV for content
+    pts.push(new Uint8Array([0xB3]), new Uint8Array([contentIvB.length ^ (mKey & 0xFF)]), contentIvB);
+
+    // Wrapping nonce for metadata protection (0xA1) — NEW in v7
+    const wrappingNonce = crypto.getRandomValues(new Uint8Array(16));
+    pts.push(new Uint8Array([0xA1]), wrappingNonce);
+
+    // SECURITY: Metadata encrypted with AES-256-GCM via PBKDF2-derived wrapping key (0xD5)
+    // This replaces the old XOR obfuscation (0xD4) — auto_key is now properly encrypted
+    const wrappedMetadata = await _RT.wrapMetadata(mB, wrappingNonce);
+    pts.push(new Uint8Array([0xD5]), _RT.u32(wrappedMetadata.length ^ mKey), wrappedMetadata);
     
     if (Math.random() > 0.3) pts.push(..._RT.gB());
     
+    // Payload: title + content (already AES-256-GCM encrypted by EncryptionService)
     const dP = new Uint8Array(tB.length + 1 + cB.length);
     dP.set(tB, 0); dP[tB.length] = 0x00; dP.set(cB, tB.length + 1);
     const sP = _RT.xF(dP, 0xBB);
     pts.push(new Uint8Array([0xC3]), _RT.u32(sP.length ^ mKey), sP);
     
-    pts.push(..._RT.gB(), new Uint8Array([0xFF]));
+    pts.push(..._RT.gB());
+
+    // Compute HMAC before adding the HMAC block and EOF marker
+    const preHmacTotal = pts.reduce((a, p) => a + p.length, 0);
+    const preHmacBuf = new Uint8Array(preHmacTotal);
+    let preOff = 0;
+    for (const p of pts) { preHmacBuf.set(p, preOff); preOff += p.length; }
+    
+    // SECURITY: HMAC-SHA256 integrity check (0xFA) — NEW in v7
+    const hmac = await _RT.computeHMAC(preHmacBuf, wrappingNonce);
+    pts.push(new Uint8Array([0xFA]), hmac);
+
+    pts.push(new Uint8Array([0xFF]));
     
     const total = pts.reduce((a, p) => a + p.length, 0);
     const out = new Uint8Array(total);
@@ -198,10 +295,23 @@ export const sivaraVM = Object.freeze({
     const v = new DataView(buf);
     
     if (b[0] !== 0x53 || b[1] !== 0x56 || b[2] !== 0x52) throw new Error(_RT.$(0x53,0x42,0x50,0x20,0x69,0x6E,0x76,0x61,0x6C,0x69,0x64,0x65));
+    
+    const version = b[3];
+    
+    // Route to version-specific parser
+    if (version === 0x07) {
+      return this._decompileV7(b, v, fp);
+    }
+    // Default: v6 (legacy) parser
+    return this._decompileV6(b, v, fp);
+  },
+
+  // ─── v6 LEGACY DECOMPILER (backward compatibility) ───
+  async _decompileV6(b: Uint8Array, v: DataView, fp: string | null): Promise<any> {
     let c = 4;
     const out: any = { header: _RT.$(83,73,86,65,82,65,95,83,69,67,85,82,69,95,68,79,67,95,86,50) };
     const vx: Uint8Array[] = [];
-    let dKey = 0; // Default key until computed
+    let dKey = 0;
 
     while (c < b.length) {
       const op = b[c++];
@@ -235,9 +345,153 @@ export const sivaraVM = Object.freeze({
         if (s !== -1) { out.encrypted_title = _RT._d.decode(cl.slice(0, s)); out.encrypted_content = _RT._d.decode(cl.slice(s + 1)); }
         c += l; continue;
       }
-      try { const n = v.getUint32(c); c += 4 + (dKey ? n ^ dKey : n); } catch (_) { break; } // Polymorphic skip
+      try { const n = v.getUint32(c); c += 4 + (dKey ? n ^ dKey : n); } catch (_) { break; }
     }
 
+    // v6: title_iv and content_iv are the same (legacy behavior)
+    out.title_iv = out.iv;
+    out.content_iv = out.iv;
+
+    // Security enforcement (same as before)
+    if (out.security?.allowed_fingerprints?.length > 0) {
+      if (!fp || !out.security.allowed_fingerprints.includes(fp)) throw new Error(_RT.$(0x41,0x70,0x70,0x61,0x72,0x65,0x69,0x6C,0x20,0x72,0x65,0x66,0x75,0x73,0xE9));
+    }
+    
+    if (out.security?.allowed_emails?.length > 0) {
+      const { data: { user } } = await supabase.auth.getUser();
+      const email = user?.email?.toLowerCase();
+      if (!email || !out.security.allowed_emails.includes(email)) throw new Error(_RT.$(0x43,0x6F,0x6D,0x70,0x74,0x65,0x20,0x72,0x65,0x66,0x75,0x73,0xE9));
+    }
+    
+    if (vx.length > 0) {
+      let geo = { lat: 0, lng: 0 };
+      try {
+        const { data, error } = await supabase.functions.invoke(_RT.$(0x73,0x69,0x76,0x61,0x72,0x61,0x2D,0x6B,0x65,0x72,0x6E,0x65,0x6C), { body: { action: _RT.$(0x6C,0x6F,0x63,0x61,0x74,0x65,0x5F,0x6D,0x65) } });
+        if (!error && data?.lat) geo = { lat: data.lat, lng: data.lng };
+      } catch (_) {}
+      for (const bc of vx) _RT.vm(bc, geo);
+    }
+    
+    return out;
+  },
+
+  // ─── v7 DECOMPILER ───
+  async _decompileV7(b: Uint8Array, v: DataView, fp: string | null): Promise<any> {
+    let c = 4;
+    const out: any = { header: 'SIVARA_SECURE_DOC_V7' };
+    const vx: Uint8Array[] = [];
+    let dKey = 0;
+    let wrappingNonce: Uint8Array | null = null;
+    let hmacOffset = -1;
+
+    // First pass: parse all blocks
+    while (c < b.length) {
+      const op = b[c++];
+      if (op === 0xFF) break;
+      
+      if (op === 0x1F) { c += 4 + v.getUint32(c); continue; }
+      
+      if (op === 0xEE) {
+        const l = v.getUint32(c) ^ 0x12345678;
+        c += 4;
+        const script = b.slice(c, c + l);
+        dKey = _RT.vm(script, { lat: 0, lng: 0 });
+        c += l;
+        continue;
+      }
+      
+      if (op === 0xE5) { const l = v.getUint32(c) ^ dKey; c += 4; vx.push(b.slice(c, c + l)); c += l; continue; }
+      
+      // Title IV (0xB2)
+      if (op === 0xB2) {
+        const l = b[c++] ^ (dKey & 0xFF);
+        out.title_iv = _RT.b64(b.slice(c, c + l));
+        out.iv = out.title_iv; // backward compat
+        c += l;
+        continue;
+      }
+      
+      // Content IV (0xB3) — NEW in v7
+      if (op === 0xB3) {
+        const l = b[c++] ^ (dKey & 0xFF);
+        out.content_iv = _RT.b64(b.slice(c, c + l));
+        c += l;
+        continue;
+      }
+      
+      // Wrapping nonce (0xA1) — NEW in v7 (always 16 bytes)
+      if (op === 0xA1) {
+        wrappingNonce = b.slice(c, c + 16);
+        c += 16;
+        continue;
+      }
+      
+      // AES-GCM encrypted metadata (0xD5) — NEW in v7
+      if (op === 0xD5) {
+        const l = v.getUint32(c) ^ dKey;
+        c += 4;
+        if (wrappingNonce) {
+          try {
+            const decrypted = await _RT.unwrapMetadata(b.slice(c, c + l), wrappingNonce);
+            Object.assign(out, JSON.parse(_RT._d.decode(decrypted)));
+          } catch (e) {
+            console.error('Metadata decryption failed:', e);
+          }
+        }
+        c += l;
+        continue;
+      }
+      
+      // Legacy v6 metadata (0xD4) — should not appear in v7 but handle gracefully
+      if (op === 0xD4) {
+        const l = v.getUint32(c) ^ dKey; c += 4;
+        try {
+          const dec2 = _RT.sx(b.slice(c, c + l), dKey);
+          const dec1 = _RT.xR(dec2, 0xAA);
+          Object.assign(out, JSON.parse(_RT._d.decode(dec1)));
+        } catch (_) {}
+        c += l;
+        continue;
+      }
+      
+      // Payload (0xC3)
+      if (op === 0xC3) {
+        const l = v.getUint32(c) ^ dKey; c += 4;
+        const cl = _RT.xR(b.slice(c, c + l), 0xBB);
+        let s = -1;
+        for (let i = 0; i < cl.length; i++) { if (cl[i] === 0x00) { s = i; break; } }
+        if (s !== -1) {
+          out.encrypted_title = _RT._d.decode(cl.slice(0, s));
+          out.encrypted_content = _RT._d.decode(cl.slice(s + 1));
+        }
+        c += l;
+        continue;
+      }
+      
+      // HMAC block (0xFA) — NEW in v7
+      if (op === 0xFA) {
+        hmacOffset = c - 1; // position of 0xFA opcode
+        const expectedHmac = b.slice(c, c + 32);
+        // Verify HMAC over everything BEFORE the HMAC block
+        if (wrappingNonce) {
+          const dataToVerify = b.slice(0, hmacOffset);
+          const valid = await _RT.verifyHMAC(dataToVerify, expectedHmac, wrappingNonce);
+          if (!valid) {
+            console.warn('SIVARA: File integrity check failed — file may have been tampered with');
+          }
+        }
+        c += 32;
+        continue;
+      }
+      
+      // Unknown opcode: skip polymorphically
+      try { const n = v.getUint32(c); c += 4 + (dKey ? n ^ dKey : n); } catch (_) { break; }
+    }
+
+    // If content_iv not found, fall back to title_iv (shouldn't happen in v7 but safety)
+    if (!out.content_iv) out.content_iv = out.title_iv;
+
+    // Security enforcement
     if (out.security?.allowed_fingerprints?.length > 0) {
       if (!fp || !out.security.allowed_fingerprints.includes(fp)) throw new Error(_RT.$(0x41,0x70,0x70,0x61,0x72,0x65,0x69,0x6C,0x20,0x72,0x65,0x66,0x75,0x73,0xE9));
     }

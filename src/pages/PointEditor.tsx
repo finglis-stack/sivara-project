@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { encryptionService } from '@/lib/encryption';
+import { encryptionService, parseDocumentIVs } from '@/lib/encryption';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -492,15 +492,15 @@ export default function PointEditor() {
       const effectiveKey = getEffectiveKey(docRow.owner_id);
       await encryptionService.initialize(effectiveKey);
 
-      const { encrypted: encTitle, iv } = await encryptionService.encrypt(titleRef.current || 'Point');
-      const { encrypted: encContent } = await encryptionService.encrypt(JSON.stringify(point), iv);
+      const { encrypted: encTitle, iv: titleIv } = await encryptionService.encrypt(titleRef.current || 'Point');
+      const { encrypted: encContent, iv: contentIv } = await encryptionService.encrypt(JSON.stringify(point));
 
       const { error } = await supabase
         .from('documents')
         .update({
           title: encTitle,
           content: encContent,
-          encryption_iv: iv,
+          encryption_iv: JSON.stringify({ t: titleIv, c: contentIv }),
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
@@ -546,12 +546,14 @@ export default function PointEditor() {
       let decryptedContent = '';
 
       try {
-        decryptedTitle = await encryptionService.decrypt(docTyped.title, docTyped.encryption_iv);
-        decryptedContent = await encryptionService.decrypt(docTyped.content, docTyped.encryption_iv);
+        const { titleIv, contentIv } = parseDocumentIVs(docTyped.encryption_iv);
+        decryptedTitle = await encryptionService.decrypt(docTyped.title, titleIv);
+        decryptedContent = await encryptionService.decrypt(docTyped.content, contentIv);
       } catch {
         await encryptionService.initialize(docTyped.owner_id);
-        decryptedTitle = await encryptionService.decrypt(docTyped.title, docTyped.encryption_iv);
-        decryptedContent = await encryptionService.decrypt(docTyped.content, docTyped.encryption_iv);
+        const { titleIv: t2, contentIv: c2 } = parseDocumentIVs(docTyped.encryption_iv);
+        decryptedTitle = await encryptionService.decrypt(docTyped.title, t2);
+        decryptedContent = await encryptionService.decrypt(docTyped.content, c2);
       }
 
       const parsed = safeJsonParse(decryptedContent);

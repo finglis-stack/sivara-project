@@ -78,12 +78,12 @@ export class EncryptionService {
     return bytes;
   }
 
-  async encrypt(plaintext: string, ivBase64?: string): Promise<{ encrypted: string; iv: string }> {
+  async encrypt(plaintext: string): Promise<{ encrypted: string; iv: string }> {
     if (!this.masterKey) throw new Error('Encryption service not initialized');
 
     const encoder = new TextEncoder();
     const data = encoder.encode(plaintext);
-    const iv = ivBase64 ? this.base64ToArrayBuffer(ivBase64) : this.generateIV();
+    const iv = this.generateIV(); // SECURITY: Always generate a fresh IV — reusing IV with AES-GCM is catastrophic
 
     const encryptedData = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: iv, tagLength: 128 },
@@ -117,6 +117,25 @@ export class EncryptionService {
       throw new Error('Clé incorrecte ou données corrompues.');
     }
   }
+}
+
+/**
+ * Parse encryption IVs from a document's encryption_iv column.
+ * Handles two formats:
+ * - Legacy: a single base64 string (same IV used for title and content — v1 format)
+ * - New: a JSON string { t: titleIv, c: contentIv } (separate IVs — security fix)
+ */
+export function parseDocumentIVs(ivField: string): { titleIv: string; contentIv: string } {
+  if (!ivField) return { titleIv: '', contentIv: '' };
+  try {
+    // Try parsing as JSON (new format)
+    if (ivField.startsWith('{')) {
+      const parsed = JSON.parse(ivField);
+      return { titleIv: parsed.t || parsed.titleIv || '', contentIv: parsed.c || parsed.contentIv || '' };
+    }
+  } catch (_) {}
+  // Legacy format: single IV for both
+  return { titleIv: ivField, contentIv: ivField };
 }
 
 export const encryptionService = EncryptionService.getInstance();

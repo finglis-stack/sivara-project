@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { encryptionService } from '@/lib/encryption';
+import { encryptionService, parseDocumentIVs } from '@/lib/encryption';
 import { sivaraVM } from '@/lib/sivara-vm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -663,15 +663,17 @@ const DocEditor = () => {
       let decryptedContent = doc.content;
 
       try {
-        decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
-        decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
+        const { titleIv, contentIv } = parseDocumentIVs(doc.encryption_iv);
+        decryptedTitle = await encryptionService.decrypt(doc.title, titleIv);
+        decryptedContent = await encryptionService.decrypt(doc.content, contentIv);
       } catch (e: any) {
         // Si la clé n'a pas été initialisée correctement (ou hash inattendu),
         // on tente une dernière fois avec la clé propriétaire (utile pour les lectures publiques).
         try {
           await encryptionService.initialize(doc.owner_id);
-          decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
-          decryptedContent = await encryptionService.decrypt(doc.content, doc.encryption_iv);
+          const { titleIv: tIv2, contentIv: cIv2 } = parseDocumentIVs(doc.encryption_iv);
+          decryptedTitle = await encryptionService.decrypt(doc.title, tIv2);
+          decryptedContent = await encryptionService.decrypt(doc.content, cIv2);
         } catch {
           setDecryptionError(true);
           decryptedTitle = "Document sécurisé";
@@ -702,7 +704,7 @@ const DocEditor = () => {
 
   const fetchAccessList = async () => { const { data } = await supabase.from('document_access').select('*').eq('document_id', id); setAccessList(data || []); };
   
-  const handleSave = async (key: string, value: string) => { if (!id || permission !== 'write') return; try { setIsSaving(true); const { encrypted: encTitle, iv } = await encryptionService.encrypt(titleRef.current); const { encrypted: encContent } = await encryptionService.encrypt(editor?.getHTML() || '', iv); await supabase.from('documents').update({ title: encTitle, content: encContent, encryption_iv: iv, updated_at: new Date().toISOString(), ...((key === 'icon') ? { icon: value } : {}), ...((key === 'color') ? { color: value } : {}) }).eq('id', id); } catch(e) { console.error(e); } finally { setIsSaving(false); } };
+  const handleSave = async (key: string, value: string) => { if (!id || permission !== 'write') return; try { setIsSaving(true); const { encrypted: encTitle, iv: titleIv } = await encryptionService.encrypt(titleRef.current); const { encrypted: encContent, iv: contentIv } = await encryptionService.encrypt(editor?.getHTML() || ''); await supabase.from('documents').update({ title: encTitle, content: encContent, encryption_iv: JSON.stringify({ t: titleIv, c: contentIv }), updated_at: new Date().toISOString(), ...((key === 'icon') ? { icon: value } : {}), ...((key === 'color') ? { color: value } : {}) }).eq('id', id); } catch(e) { console.error(e); } finally { setIsSaving(false); } };
   
   const handleContentChange = (content: string) => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = setTimeout(() => handleSave('content', content), 500); };
   
@@ -737,29 +739,32 @@ const DocEditor = () => {
     try {
         let encryptedTitle = document.title;
         let encryptedContent = document.content;
-        let iv = document.encryption_iv;
+        let titleIv = '';
+        let contentIv = '';
         let salt = null;
         let exportKeyToEmbed = null;
 
         if (exportPassword) {
             const saltValue = crypto.randomUUID();
             await encryptionService.initialize(exportPassword, saltValue);
-            const { encrypted: encTitle, iv: newIv } = await encryptionService.encrypt(titleRef.current);
-            const { encrypted: encContent } = await encryptionService.encrypt(contentRef.current, newIv);
+            const { encrypted: encTitle, iv: tIv } = await encryptionService.encrypt(titleRef.current);
+            const { encrypted: encContent, iv: cIv } = await encryptionService.encrypt(contentRef.current);
             encryptedTitle = encTitle;
             encryptedContent = encContent;
-            iv = newIv;
+            titleIv = tIv;
+            contentIv = cIv;
             salt = saltValue;
             await encryptionService.initialize(user.id);
         } else {
             // SECURITY PATCH: Generate random UUID for password-less export
             const randomKey = crypto.randomUUID();
             await encryptionService.initialize(randomKey);
-            const { encrypted: encTitle, iv: newIv } = await encryptionService.encrypt(titleRef.current);
-            const { encrypted: encContent } = await encryptionService.encrypt(contentRef.current, newIv);
+            const { encrypted: encTitle, iv: tIv } = await encryptionService.encrypt(titleRef.current);
+            const { encrypted: encContent, iv: cIv } = await encryptionService.encrypt(contentRef.current);
             encryptedTitle = encTitle;
             encryptedContent = encContent;
-            iv = newIv;
+            titleIv = tIv;
+            contentIv = cIv;
             exportKeyToEmbed = randomKey;
             
             // Restore DB key
@@ -791,7 +796,8 @@ const DocEditor = () => {
         const payload = {
             encrypted_title: encryptedTitle,
             encrypted_content: encryptedContent,
-            iv: iv,
+            title_iv: titleIv,
+            content_iv: contentIv,
             icon: document.icon || 'FileText',
             color: document.color || '#3B82F6',
             salt: salt,

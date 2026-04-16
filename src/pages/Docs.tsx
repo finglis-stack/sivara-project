@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { encryptionService } from '@/lib/encryption';
+import { encryptionService, parseDocumentIVs } from '@/lib/encryption';
 import { sivaraVM } from '@/lib/sivara-vm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -254,11 +254,12 @@ const Docs = () => {
       if (folderParam && folderParam !== currentFolderId) {
           const loadFolderDetails = async () => {
               if (!user) return;
-              await encryptionService.initialize(user.id);
-              const { data } = await supabase.from('documents').select('id, title, encryption_iv').eq('id', folderParam).single();
-              if (data) {
-                  try {
-                      const title = await encryptionService.decrypt(data.title, data.encryption_iv);
+               await encryptionService.initialize(user.id);
+               const { data } = await supabase.from('documents').select('id, title, encryption_iv').eq('id', folderParam).single();
+               if (data) {
+                   try {
+                       const { titleIv } = parseDocumentIVs(data.encryption_iv);
+                       const title = await encryptionService.decrypt(data.title, titleIv);
                       // TODO: Idéalement reconstruire tout le chemin parent
                       setBreadcrumbs([{ id: null, name: 'Accueil' }, { id: data.id, name: title }]);
                       setCurrentFolderId(data.id);
@@ -294,8 +295,8 @@ const Docs = () => {
       const decryptedDocs = await Promise.all(
         (data || []).map(async (doc) => {
           try {
-            const decryptedTitle = await encryptionService.decrypt(doc.title, doc.encryption_iv);
-            const decryptedContent = doc.type !== 'folder' ? await encryptionService.decrypt(doc.content, doc.encryption_iv) : '';
+            const decryptedTitle = await encryptionService.decrypt(doc.title, parseDocumentIVs(doc.encryption_iv).titleIv);
+            const decryptedContent = doc.type !== 'folder' ? await encryptionService.decrypt(doc.content, parseDocumentIVs(doc.encryption_iv).contentIv) : '';
             return { ...doc, decryptedTitle, decryptedContent };
           } catch (error) {
             return { ...doc, decryptedTitle: '🔒 Illisible', decryptedContent: '' };
@@ -344,7 +345,7 @@ const Docs = () => {
     if (!user) return;
     try {
       const title = type === 'folder' ? 'Nouveau dossier' : type === 'point' ? 'Nouveau Point' : 'Document sans titre';
-      const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(title);
+      const { encrypted: encryptedTitle, iv: titleIv } = await encryptionService.encrypt(title);
 
       let initialContent = '';
       if (type === 'point') {
@@ -372,8 +373,8 @@ const Docs = () => {
         });
       }
 
-      // On initialise le contenu aussi (même IV)
-      const { encrypted: encryptedContent } = await encryptionService.encrypt(initialContent, iv);
+      // SECURITY: Each encrypt generates its own unique IV
+      const { encrypted: encryptedContent, iv: contentIv } = await encryptionService.encrypt(initialContent);
 
       const { data, error } = await supabase
         .from('documents')
@@ -382,7 +383,7 @@ const Docs = () => {
           content: encryptedContent,
           owner_id: user.id,
           is_starred: false,
-          encryption_iv: iv,
+          encryption_iv: JSON.stringify({ t: titleIv, c: contentIv }),
           icon: type === 'folder' ? 'Folder' : type === 'point' ? 'Presentation' : 'FileText',
           color: type === 'folder' ? '#6B7280' : type === 'point' ? '#F97316' : '#3B82F6',
           cover_url: type === 'folder' ? DEFAULT_COVER : null,
@@ -419,19 +420,17 @@ const Docs = () => {
     if (!docToRename) return;
 
     try {
-      // 1. Chiffrement du nouveau titre -> Génère un nouvel IV
-      const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(newTitle);
-      
-      // 2. Chiffrement du contenu existant avec le MÊME nouvel IV
+      // SECURITY: Each encrypt generates its own unique IV
+      const { encrypted: encryptedTitle, iv: titleIv } = await encryptionService.encrypt(newTitle);
       const contentToEncrypt = docToRename.decryptedContent || ''; 
-      const { encrypted: encryptedContent } = await encryptionService.encrypt(contentToEncrypt, iv);
+      const { encrypted: encryptedContent, iv: contentIv } = await encryptionService.encrypt(contentToEncrypt);
 
       const { error } = await supabase
         .from('documents')
         .update({ 
             title: encryptedTitle, 
-            content: encryptedContent, // Update content too!
-            encryption_iv: iv 
+            content: encryptedContent,
+            encryption_iv: JSON.stringify({ t: titleIv, c: contentIv })
         })
         .eq('id', renameDialog.docId);
       
@@ -537,8 +536,9 @@ const Docs = () => {
         let decryptedContent = '';
         
         try {
-            decryptedTitle = await encryptionService.decrypt(data.encrypted_title, data.iv);
-            decryptedContent = data.encrypted_content ? await encryptionService.decrypt(data.encrypted_content, data.iv) : '';
+            // SECURITY: v7 files have separate IVs; v6 files have title_iv === content_iv
+            decryptedTitle = await encryptionService.decrypt(data.encrypted_title, data.title_iv || data.iv);
+            decryptedContent = data.encrypted_content ? await encryptionService.decrypt(data.encrypted_content, data.content_iv || data.iv) : '';
         } catch (decryptError) {
             if (data.header === 'SIVARA_SECURE_DOC_V2' && data.salt && !password) {
                 setImportPasswordDialog({ isOpen: true, fileData: data });
@@ -550,15 +550,15 @@ const Docs = () => {
 
         await encryptionService.initialize(user.id);
         
-        const { encrypted: newEncTitle, iv: newIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
-        const { encrypted: newEncContent } = await encryptionService.encrypt(decryptedContent, newIv);
+        const { encrypted: newEncTitle, iv: newTitleIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
+        const { encrypted: newEncContent, iv: newContentIv } = await encryptionService.encrypt(decryptedContent);
 
         const { error: insertError } = await supabase
             .from('documents')
             .insert({
                 title: newEncTitle,
                 content: newEncContent,
-                encryption_iv: newIv,
+                encryption_iv: JSON.stringify({ t: newTitleIv, c: newContentIv }),
                 owner_id: user.id, 
                 type: 'file',
                 visibility: 'private',

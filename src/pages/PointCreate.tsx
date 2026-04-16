@@ -95,8 +95,8 @@ export default function PointCreate() {
       const plaintextTitle = title.trim() || 'Nouveau Point';
       const plaintextContent = JSON.stringify(point);
 
-      const { encrypted: encryptedTitle, iv } = await encryptionService.encrypt(plaintextTitle);
-      const { encrypted: encryptedContent } = await encryptionService.encrypt(plaintextContent, iv);
+      const { encrypted: encryptedTitle, iv: titleIv } = await encryptionService.encrypt(plaintextTitle);
+      const { encrypted: encryptedContent, iv: contentIv } = await encryptionService.encrypt(plaintextContent);
 
       const { data, error } = await supabase
         .from('documents')
@@ -105,7 +105,7 @@ export default function PointCreate() {
           content: encryptedContent,
           owner_id: user.id,
           is_starred: false,
-          encryption_iv: iv,
+          encryption_iv: JSON.stringify({ t: titleIv, c: contentIv }),
           icon: 'Presentation',
           color: '#F97316',
           type: 'point',

@@ -237,8 +237,9 @@ class SivaraEditor {
 
       let decTitle, decContent;
       try {
-        decTitle = await this.encService.decrypt(data.encrypted_title, data.iv);
-        decContent = data.encrypted_content ? await this.encService.decrypt(data.encrypted_content, data.iv) : '';
+        // SECURITY: v7 uses separate IVs for title and content; v6 uses same IV (title_iv === content_iv)
+        decTitle = await this.encService.decrypt(data.encrypted_title, data.title_iv || data.iv);
+        decContent = data.encrypted_content ? await this.encService.decrypt(data.encrypted_content, data.content_iv || data.iv) : '';
       } catch (e) {
         if (data.salt) { alert('Mot de passe incorrect.'); this.setStatus('error', 'Mot de passe invalide'); return; }
         throw e;
@@ -274,13 +275,15 @@ class SivaraEditor {
       const autoKey = this.fileData.auto_key || crypto.randomUUID();
       await this.encService.initialize(autoKey);
 
-      const { encrypted: encTitle, iv } = await this.encService.encrypt(title);
-      const { encrypted: encContent } = await this.encService.encrypt(content, iv);
+      // SECURITY: Generate separate IVs for title and content (AES-GCM IV reuse fix)
+      const { encrypted: encTitle, iv: titleIv } = await this.encService.encrypt(title);
+      const { encrypted: encContent, iv: contentIv } = await this.encService.encrypt(content);
 
       const payload = {
         encrypted_title: encTitle,
         encrypted_content: encContent,
-        iv,
+        title_iv: titleIv,
+        content_iv: contentIv,
         icon: this.fileData.icon || 'FileText',
         color: this.fileData.color || '#3B82F6',
         salt: null,
@@ -288,7 +291,8 @@ class SivaraEditor {
         embedded_key: autoKey,
       };
 
-      const binary = sivaraVM.compile(payload);
+      // compile() is now async (v7 uses AES-GCM for metadata wrapping)
+      const binary = await sivaraVM.compile(payload);
       const result = await window.electronAPI.writeSivaraFile(this.filePath, Array.from(binary));
       if (!result.success) throw new Error(result.error);
 

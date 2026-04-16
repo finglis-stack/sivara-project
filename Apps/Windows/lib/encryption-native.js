@@ -64,12 +64,12 @@ class EncryptionService {
     return bytes;
   }
 
-  async encrypt(plaintext, ivBase64) {
+  async encrypt(plaintext) {
     if (!this.masterKey) throw new Error('Encryption service not initialized');
 
     const encoder = new TextEncoder();
     const data = encoder.encode(plaintext);
-    const iv = ivBase64 ? this._base64ToArrayBuffer(ivBase64) : this._generateIV();
+    const iv = this._generateIV(); // SECURITY: Always generate a fresh IV — reusing IV with AES-GCM is catastrophic
 
     const encryptedData = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: iv, tagLength: 128 },

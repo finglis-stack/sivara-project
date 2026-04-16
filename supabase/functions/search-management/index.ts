@@ -79,6 +79,8 @@ class CryptoService {
   private searchKey: CryptoKey | null = null;
 
   async initialize(secretKey: string) {
+    // TODO: SECURITY — padEnd is not a proper KDF. Ideally use SHA-256 or PBKDF2.
+    // Kept for backward compatibility with existing encrypted crawler data.
     const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
     this.key = await crypto.subtle.importKey('raw', keyData, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
     const searchKeyData = await crypto.subtle.digest('SHA-256', keyData);
@@ -105,8 +107,9 @@ class CryptoService {
       const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this.key, data);
       return decoder.decode(decrypted);
     } catch (e) { 
-      console.error('Decryption error:', e);
-      return '[Erreur dechiffrement]'; 
+      // SECURITY: Log and propagate decrypt errors — don't return magic strings
+      console.error('[DECRYPT_ERROR]', e instanceof Error ? e.message : 'Unknown');
+      throw new Error('Decryption failed');
     }
   }
 

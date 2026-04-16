@@ -76,9 +76,23 @@ class ServerEncryption {
 
       return new TextDecoder().decode(decryptedData);
     } catch (e) {
+      // SECURITY: Log decryption errors for monitoring — don't silently fail
+      console.error('[DECRYPT_ERROR]', e instanceof Error ? e.message : 'Unknown decrypt error');
       return null;
     }
   }
+}
+
+// Parse encryption IVs — handles legacy (single base64) and new (JSON {t, c}) formats
+function parseIVs(ivField: string): { titleIv: string; contentIv: string } {
+  if (!ivField) return { titleIv: '', contentIv: '' };
+  try {
+    if (ivField.startsWith('{')) {
+      const parsed = JSON.parse(ivField);
+      return { titleIv: parsed.t || '', contentIv: parsed.c || '' };
+    }
+  } catch (_) {}
+  return { titleIv: ivField, contentIv: ivField };
 }
 
 serve(async (req) => {
@@ -126,7 +140,8 @@ serve(async (req) => {
     const results = [];
 
     for (const doc of docs || []) {
-        const decryptedTitle = await cryptoService.decrypt(doc.title, doc.encryption_iv);
+        const { titleIv, contentIv } = parseIVs(doc.encryption_iv);
+        const decryptedTitle = await cryptoService.decrypt(doc.title, titleIv);
         
         // --- MATCH TITRE ---
         if (decryptedTitle) {
@@ -146,7 +161,6 @@ serve(async (req) => {
                     snippet: "Titre correspondant",
                     type: doc.type,
                     updated_at: doc.updated_at,
-                    // Nouveaux champs pour le design
                     icon: doc.icon,
                     color: doc.color,
                     cover_url: doc.cover_url
@@ -157,7 +171,7 @@ serve(async (req) => {
 
         // --- MATCH CONTENU ---
         if (doc.type === 'file' && doc.content) {
-             const decryptedContent = await cryptoService.decrypt(doc.content, doc.encryption_iv);
+             const decryptedContent = await cryptoService.decrypt(doc.content, contentIv);
              if (decryptedContent) {
                  const normContent = TitaniumTokenizer.normalize(decryptedContent);
                  
