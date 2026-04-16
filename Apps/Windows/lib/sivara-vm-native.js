@@ -180,6 +180,18 @@ const _RT = (() => {
   const deriveWrappingKey = async (nonce) => {
     const keyMaterial = await crypto.subtle.importKey('raw', nonce, 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: _e.encode('sivara-sbp-wrap-v7'), iterations: 210000, hash: 'SHA-512' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  };
+
+  // Legacy wrapping key for backward compat (100k SHA-256)
+  const deriveWrappingKeyLegacy = async (nonce) => {
+    const keyMaterial = await crypto.subtle.importKey('raw', nonce, 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
       { name: 'PBKDF2', salt: _e.encode('sivara-sbp-wrap-v7'), iterations: 100000, hash: 'SHA-256' },
       keyMaterial,
       { name: 'AES-GCM', length: 256 },
@@ -199,11 +211,18 @@ const _RT = (() => {
   };
 
   const unwrapMetadata = async (wrapped, nonce) => {
-    const key = await deriveWrappingKey(nonce);
     const iv = wrapped.slice(0, 12);
     const data = wrapped.slice(12);
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, data);
-    return new Uint8Array(decrypted);
+    // Try current params first, then legacy
+    try {
+      const key = await deriveWrappingKey(nonce);
+      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, data);
+      return new Uint8Array(decrypted);
+    } catch (_) {
+      const legacyKey = await deriveWrappingKeyLegacy(nonce);
+      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, legacyKey, data);
+      return new Uint8Array(decrypted);
+    }
   };
 
   // HMAC-SHA256 for file integrity (v7)
@@ -222,6 +241,21 @@ const _RT = (() => {
 
   // ─── V8 OWNER-BOUND SECURITY (fixes CRIT-03 + HIGH-02) ───
   const deriveWrappingKeyV8 = async (nonce, ownerSecret) => {
+    const ownerBytes = _e.encode(ownerSecret);
+    const combined = new Uint8Array(nonce.length + ownerBytes.length);
+    combined.set(nonce); combined.set(ownerBytes, nonce.length);
+    const keyMaterial = await crypto.subtle.importKey('raw', combined, 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: _e.encode('sivara-sbp-wrap-v8'), iterations: 210000, hash: 'SHA-512' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  };
+
+  // Legacy v8 wrapping key for backward compat (100k SHA-256)
+  const deriveWrappingKeyV8Legacy = async (nonce, ownerSecret) => {
     const ownerBytes = _e.encode(ownerSecret);
     const combined = new Uint8Array(nonce.length + ownerBytes.length);
     combined.set(nonce); combined.set(ownerBytes, nonce.length);
@@ -246,11 +280,18 @@ const _RT = (() => {
   };
 
   const unwrapMetadataV8 = async (wrapped, nonce, ownerSecret) => {
-    const key = await deriveWrappingKeyV8(nonce, ownerSecret);
     const iv = wrapped.slice(0, 12);
     const data = wrapped.slice(12);
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, data);
-    return new Uint8Array(decrypted);
+    // Try current params first, then legacy
+    try {
+      const key = await deriveWrappingKeyV8(nonce, ownerSecret);
+      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, data);
+      return new Uint8Array(decrypted);
+    } catch (_) {
+      const legacyKey = await deriveWrappingKeyV8Legacy(nonce, ownerSecret);
+      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, legacyKey, data);
+      return new Uint8Array(decrypted);
+    }
   };
 
   const computeHMACv8 = async (data, nonce, ownerSecret) => {

@@ -3,13 +3,15 @@
  * Niveau de sécurité: Standard Web (Persistant)
  */
 
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 210000;
+const PBKDF2_ITERATIONS_LEGACY = 100000;
 const KEY_LENGTH = 256;
 const IV_LENGTH = 12;
 
 export class EncryptionService {
   private static instance: EncryptionService;
   private masterKey: CryptoKey | null = null;
+  private legacyKey: CryptoKey | null = null;
 
   private constructor() {}
 
@@ -28,12 +30,19 @@ export class EncryptionService {
   async initialize(secret: string, saltString?: string): Promise<void> {
     const encoder = new TextEncoder();
     
-    // Si pas de sel fourni, on utilise le mode "Persistant User ID" (Legacy/Auto)
-    // Sinon on utilise le mode "Mot de passe" avec le sel fourni
-    const finalSalt = saltString 
-      ? encoder.encode(saltString) 
-      : encoder.encode(`${secret.toLowerCase().trim()}:sivara-docs-persistent-key-v2`);
-    
+    // SECURITY: Derive a proper 32-byte salt via SHA-256 instead of using raw secret as salt.
+    // This provides cryptographic separation between the secret and its derived salt.
+    // For password mode, the saltString is already random (caller-generated UUID).
+    let finalSalt: Uint8Array;
+    if (saltString) {
+      finalSalt = encoder.encode(saltString);
+    } else {
+      // Owner-bound mode: derive salt from secret through SHA-256
+      const saltInput = encoder.encode(`sivara-docs-salt-v3:${secret.toLowerCase().trim()}`);
+      const saltHash = await crypto.subtle.digest('SHA-256', saltInput);
+      finalSalt = new Uint8Array(saltHash);
+    }
+
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
       encoder.encode(secret),
@@ -42,6 +51,7 @@ export class EncryptionService {
       ['deriveBits', 'deriveKey']
     );
 
+    // New key: 210k iterations, SHA-512, cryptographic salt
     this.masterKey = await crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
@@ -50,6 +60,26 @@ export class EncryptionService {
         hash: 'SHA-512'
       },
       keyMaterial,
+      { name: 'AES-GCM', length: KEY_LENGTH },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    // Legacy key: for backward compatibility with existing documents (100k iterations, old salt)
+    const legacySalt = saltString
+      ? encoder.encode(saltString)
+      : encoder.encode(`${secret.toLowerCase().trim()}:sivara-docs-persistent-key-v2`);
+    const legacyKeyMaterial = await crypto.subtle.importKey(
+      'raw', encoder.encode(secret), 'PBKDF2', false, ['deriveBits', 'deriveKey']
+    );
+    this.legacyKey = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: legacySalt,
+        iterations: PBKDF2_ITERATIONS_LEGACY,
+        hash: 'SHA-512'
+      },
+      legacyKeyMaterial,
       { name: 'AES-GCM', length: KEY_LENGTH },
       false,
       ['encrypt', 'decrypt']
@@ -100,20 +130,31 @@ export class EncryptionService {
   async decrypt(encrypted: string, ivBase64: string): Promise<string> {
     if (!this.masterKey) throw new Error('Encryption service not initialized');
 
-    try {
-      const encryptedData = this.base64ToArrayBuffer(encrypted);
-      const iv = this.base64ToArrayBuffer(ivBase64);
+    const encryptedData = this.base64ToArrayBuffer(encrypted);
+    const iv = this.base64ToArrayBuffer(ivBase64);
 
+    // Try new key first, then fall back to legacy key for backward compatibility
+    try {
       const decryptedData = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv: iv, tagLength: 128 },
         this.masterKey,
         encryptedData
       );
-
-      const decoder = new TextDecoder();
-      return decoder.decode(decryptedData);
-    } catch (error) {
-      console.error("Decryption failed:", error);
+      return new TextDecoder().decode(decryptedData);
+    } catch (_) {
+      // Legacy fallback: document was encrypted with old KDF params
+      if (this.legacyKey) {
+        try {
+          const decryptedData = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: iv, tagLength: 128 },
+            this.legacyKey,
+            encryptedData
+          );
+          return new TextDecoder().decode(decryptedData);
+        } catch (e) {
+          throw new Error('Clé incorrecte ou données corrompues.');
+        }
+      }
       throw new Error('Clé incorrecte ou données corrompues.');
     }
   }
