@@ -430,14 +430,12 @@ const Index = () => {
                   {/* Right — City Image */}
                   <div className="hidden lg:block flex-shrink-0 animate-in fade-in slide-in-from-right-8 duration-1000" style={{ animationDelay: '200ms' }}>
                     <img 
-                      src="/city-hero.png" 
+                      src="/landing-tags/city.jpg" 
                       alt="Sivara city" 
                       style={{ 
                         width: '480px', 
                         maxWidth: '40vw',
                         height: 'auto',
-                        filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.1))',
-                        mixBlendMode: 'multiply',
                       }} 
                     />
                   </div>
