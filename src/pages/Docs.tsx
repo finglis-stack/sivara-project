@@ -521,13 +521,13 @@ const Docs = () => {
         setIsImporting(true);
 
         if (data.auto_key) {
-            // SECURITY PATCH : On utilise la clé sécurisée générée sans mot de passe
-            await encryptionService.initialize(data.auto_key);
+            // .sivara auto_key: direct PBKDF2 derivation (NOT KEK/DEK)
+            await encryptionService.initializeDirect(data.auto_key);
         } else if (data.header === 'SIVARA_SECURE_DOC_V2' && password && data.salt) {
-            await encryptionService.initialize(password, data.salt);
+            await encryptionService.initializeDirect(password, data.salt);
         } else if (data.owner_id) {
             // Rétrocompatibilité pour les anciens fichiers qui exposaient l'owner_id
-            await encryptionService.initialize(data.owner_id);
+            await encryptionService.initializeDirect(data.owner_id);
         } else {
             throw new Error("Format ou clé non supporté");
         }
@@ -548,6 +548,7 @@ const Docs = () => {
             throw new Error("Clé de déchiffrement invalide.");
         }
 
+        encryptionService.invalidateCache();
         await encryptionService.initialize(user.id);
         
         const { encrypted: newEncTitle, iv: newTitleIv } = await encryptionService.encrypt(decryptedTitle + " (Import)");
@@ -577,7 +578,10 @@ const Docs = () => {
 
     } catch (err: any) {
         console.error(err);
-        if (user) await encryptionService.initialize(user.id);
+        if (user) {
+            encryptionService.invalidateCache();
+            await encryptionService.initialize(user.id);
+        }
         showError(err.message || "Erreur lors de l'importation");
     } finally {
         setIsImporting(false);
@@ -591,7 +595,7 @@ const Docs = () => {
 
     try {
         setIsImporting(true);
-        const data = await sivaraVM.decompile(file);
+        const data = await sivaraVM.decompile(file, user.id);
         
         if (data.header === 'SIVARA_SECURE_DOC_V2' && data.salt && !data.auto_key) {
             setImportPasswordDialog({ isOpen: true, fileData: data });

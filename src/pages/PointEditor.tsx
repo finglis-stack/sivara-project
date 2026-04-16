@@ -489,8 +489,12 @@ export default function PointEditor() {
     if (permission !== 'write') return;
 
     try {
-      const effectiveKey = getEffectiveKey(docRow.owner_id);
-      await encryptionService.initialize(effectiveKey);
+      const { key: effectiveKey, isDirect } = getEffectiveKey(docRow.owner_id);
+      if (isDirect) {
+        await encryptionService.initializeDirect(effectiveKey);
+      } else {
+        await encryptionService.initialize(effectiveKey);
+      }
 
       const { encrypted: encTitle, iv: titleIv } = await encryptionService.encrypt(titleRef.current || 'Point');
       const { encrypted: encContent, iv: contentIv } = await encryptionService.encrypt(JSON.stringify(point));
@@ -512,11 +516,12 @@ export default function PointEditor() {
     }
   };
 
-  const getEffectiveKey = (ownerId: string) => {
+  const getEffectiveKey = (ownerId: string): { key: string; isDirect: boolean } => {
     const hash = window.location.hash || '';
     const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
     const shareKey = params.get('key');
-    return shareKey && shareKey !== 'share' ? shareKey : ownerId;
+    if (shareKey && shareKey !== 'share') return { key: shareKey, isDirect: true };
+    return { key: ownerId, isDirect: false };
   };
 
   const computePermission = async (doc: DbDocument): Promise<Permission> => {
@@ -539,8 +544,12 @@ export default function PointEditor() {
       setIsOwner(Boolean(user?.id && user.id === docTyped.owner_id));
       setPermission(await computePermission(docTyped));
 
-      const effectiveKey = getEffectiveKey(docTyped.owner_id);
-      await encryptionService.initialize(effectiveKey);
+      const { key: effectiveKey, isDirect } = getEffectiveKey(docTyped.owner_id);
+      if (isDirect) {
+        await encryptionService.initializeDirect(effectiveKey);
+      } else {
+        await encryptionService.initialize(effectiveKey);
+      }
 
       let decryptedTitle = 'Point';
       let decryptedContent = '';

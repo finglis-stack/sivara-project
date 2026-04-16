@@ -621,9 +621,12 @@ const DocEditor = () => {
       const hash = window.location.hash || '';
       const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
       const shareKey = params.get('key');
-      const effectiveKey = shareKey && shareKey !== 'share' ? shareKey : doc.owner_id;
-
-      await encryptionService.initialize(effectiveKey);
+      // If there's a share key, use direct derivation (not KEK/DEK)
+      if (shareKey && shareKey !== 'share') {
+        await encryptionService.initializeDirect(shareKey);
+      } else {
+        await encryptionService.initialize(doc.owner_id);
+      }
 
       const isDocOwner = user?.id === doc.owner_id;
       setIsOwner(isDocOwner);
@@ -746,7 +749,7 @@ const DocEditor = () => {
 
         if (exportPassword) {
             const saltValue = crypto.randomUUID();
-            await encryptionService.initialize(exportPassword, saltValue);
+            await encryptionService.initializeDirect(exportPassword, saltValue);
             const { encrypted: encTitle, iv: tIv } = await encryptionService.encrypt(titleRef.current);
             const { encrypted: encContent, iv: cIv } = await encryptionService.encrypt(contentRef.current);
             encryptedTitle = encTitle;
@@ -754,11 +757,11 @@ const DocEditor = () => {
             titleIv = tIv;
             contentIv = cIv;
             salt = saltValue;
+            encryptionService.invalidateCache();
             await encryptionService.initialize(user.id);
         } else {
-            // SECURITY (v8): Use user.id as embedded_key — file becomes owner-bound
-            // Only the authenticated owner can open this file (auto_key NOT stored in file)
-            await encryptionService.initialize(user.id);
+            // SECURITY (v8): Use user.id derived key for .sivara — owner-bound via direct PBKDF2
+            await encryptionService.initializeDirect(user.id);
             const { encrypted: encTitle, iv: tIv } = await encryptionService.encrypt(titleRef.current);
             const { encrypted: encContent, iv: cIv } = await encryptionService.encrypt(contentRef.current);
             encryptedTitle = encTitle;
@@ -767,7 +770,8 @@ const DocEditor = () => {
             contentIv = cIv;
             exportKeyToEmbed = user.id;
             
-            // Restore DB key
+            // Restore DEK-based encryption for Supabase session
+            encryptionService.invalidateCache();
             await encryptionService.initialize(user.id);
         }
 
@@ -822,7 +826,10 @@ const DocEditor = () => {
         showError(e.message || "Erreur lors de l'exportation");
     } finally {
         setIsExporting(false);
-        if (user) await encryptionService.initialize(user.id);
+        if (user) {
+            encryptionService.invalidateCache();
+            await encryptionService.initialize(user.id);
+        }
     }
   };
 

@@ -58,23 +58,30 @@ class CryptoService {
   private searchKey: CryptoKey | null = null;
 
   async initialize(secretKey: string) {
-    // TODO: SECURITY — padEnd is not a proper KDF. Ideally use SHA-256 or PBKDF2.
-    // Kept for backward compatibility with existing encrypted crawler data.
-    const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
-    this.key = await crypto.subtle.importKey('raw', keyData, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-    const searchKeyData = await crypto.subtle.digest('SHA-256', keyData);
-    this.searchKey = await crypto.subtle.importKey('raw', searchKeyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    // SECURITY: Proper KDF via PBKDF2 (100k iterations, SHA-512)
+    // MIGRATION: Existing crawled_pages data encrypted with old padEnd KDF must be re-crawled.
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw', encoder.encode(secretKey), 'PBKDF2', false, ['deriveBits', 'deriveKey']
+    );
+    this.key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: encoder.encode('sivara-crawler-aes-v2'), iterations: 100000, hash: 'SHA-512' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+    const searchBits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: encoder.encode('sivara-crawler-hmac-v2'), iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      256
+    );
+    this.searchKey = await crypto.subtle.importKey('raw', searchBits, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   }
 
-  async encrypt(text: string, deterministic: boolean = false): Promise<string> {
+  async encrypt(text: string): Promise<string> {
     if (!this.key) throw new Error('Crypto not initialized');
-    let iv: Uint8Array;
-    if (deterministic) {
-       const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(text));
-       iv = new Uint8Array(hashBuffer).slice(0, 12);
-    } else {
-       iv = crypto.getRandomValues(new Uint8Array(12));
-    }
+    // SECURITY: Always use random IV — deterministic IV destroys AES-GCM security guarantees
+    const iv = crypto.getRandomValues(new Uint8Array(12));
     const data = encoder.encode(text);
     const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, this.key, data);
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
@@ -276,7 +283,7 @@ serve(async (req) => {
     const encryptedTitle = await cryptoService.encrypt(metadata.title)
     const encryptedDescription = await cryptoService.encrypt(metadata.description)
     const encryptedContent = await cryptoService.encrypt(metadata.content)
-    const encryptedUrl = await cryptoService.encrypt(url, true)
+    const encryptedUrl = await cryptoService.encrypt(url)
     const encryptedDomain = await cryptoService.encrypt(urlObj.hostname)
     
     const searchHash = await cryptoService.hash(url);
@@ -297,7 +304,7 @@ serve(async (req) => {
         search_hash: searchHash,
         blind_index: blindIndex,
         updated_at: new Date().toISOString()
-      }, { onConflict: 'url' })
+      }, { onConflict: 'search_hash' })
 
     if (error) throw error
 

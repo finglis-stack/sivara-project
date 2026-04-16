@@ -15,12 +15,13 @@ class CryptoService {
   private key: CryptoKey | null = null;
 
   async initialize(secretKey: string) {
-    // TODO: SECURITY — padEnd is not a proper KDF. Ideally use SHA-256 or PBKDF2.
-    // Kept for backward compatibility with existing encrypted crawler data.
-    const keyData = encoder.encode(secretKey.padEnd(32, '0').substring(0, 32));
-    this.key = await crypto.subtle.importKey(
-      'raw',
-      keyData,
+    // SECURITY: Proper KDF via PBKDF2 (100k iterations, SHA-512)
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw', encoder.encode(secretKey), 'PBKDF2', false, ['deriveKey']
+    );
+    this.key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: encoder.encode('sivara-crawler-aes-v2'), iterations: 100000, hash: 'SHA-512' },
+      keyMaterial,
       { name: 'AES-GCM', length: 256 },
       false,
       ['encrypt', 'decrypt']
