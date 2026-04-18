@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Check, Loader2, ArrowRight, Server, Sparkles, Globe, Shield } from 'lucide-react';
+import { Check, Loader2, ArrowRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import Footer from '@/components/Footer';
 import UserMenu from '@/components/UserMenu';
+import { useTranslation } from 'react-i18next';
 
 interface UserProfile {
   is_pro: boolean;
@@ -17,6 +18,7 @@ interface UserProfile {
 const Pricing = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
@@ -61,7 +63,7 @@ const Pricing = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F4] font-sans selection:bg-[#00236F] selection:text-white flex flex-col">
+    <div className="min-h-screen bg-[#FAFAFA] font-sans selection:bg-[#00236F] selection:text-white flex flex-col">
       <div className="bg-[#FAF9F4] text-[#111111] flex flex-col antialiased relative font-sans flex-1">
         <style>{`
           .grid-bg-pattern {
@@ -103,10 +105,10 @@ const Pricing = () => {
           
           <div className="text-center space-y-4 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-1000">
              <h1 className="text-4xl md:text-6xl font-light tracking-[-0.02em] text-[#111111] leading-tight font-serif">
-               Choisissez l'espace qui vous correspond
+               {t('pricing.title')}
              </h1>
              <p className="text-lg md:text-xl font-light text-[#5a5b67]">
-               Une infrastructure souveraine adaptée à vos besoins. Aucun engagement, pas de trackers.
+               {t('pricing.subtitle')}
              </p>
           </div>
 
@@ -115,19 +117,19 @@ const Pricing = () => {
             {/* Carte GRATUITE */}
             <div className="bg-white border border-[#c5c5d3]/30 rounded-none p-8 lg:p-12 shadow-sm flex flex-col transition-all hover:shadow-md">
                <div className="space-y-2 mb-8">
-                  <h3 className="text-2xl font-medium text-[#111111]">Sivara Libre</h3>
-                  <p className="text-[#5a5b67] font-light">L'essentiel pour reprendre le contrôle.</p>
+                  <h3 className="text-2xl font-medium text-[#111111]">{t('pricing.freeTitle')}</h3>
+                  <p className="text-[#5a5b67] font-light">{t('pricing.freeSubtitle')}</p>
                </div>
                <div className="mb-8 font-light flex items-end gap-2">
-                  <span className="text-5xl tracking-tight text-[#111111]">0$</span>
-                  <span className="text-[#5a5b67] pb-1">/ mois</span>
+                  <span className="text-5xl tracking-tight text-[#111111]">{t('pricing.freePrice')}</span>
+                  <span className="text-[#5a5b67] pb-1">{t('pricing.perMonth')}</span>
                </div>
                <div className="flex-1">
                   <ul className="space-y-4 text-sm font-light text-[#2c2d38]">
-                      <li className="flex gap-4 items-start"><span className="text-[#00236F] font-bold">—</span> <span>Moteur de recherche anonyme sans publicité</span></li>
-                      <li className="flex gap-4 items-start"><span className="text-[#00236F] font-bold">—</span> <span>Boîte courriel sécurisée de base</span></li>
-                      <li className="flex gap-4 items-start"><span className="text-[#00236F] font-bold">—</span> <span>Éditeur de documents avec chiffrement Zero-Knowledge</span></li>
-                      <li className="flex gap-4 items-start"><span className="text-[#00236F] font-bold">—</span> <span>Hébergement souverain certifié au Québec</span></li>
+                      <li className="flex gap-4 items-start"><span className="text-[#00236F] font-bold">—</span> <span>{t('pricing.freeFeatures.search')}</span></li>
+                      <li className="flex gap-4 items-start"><span className="text-[#00236F] font-bold">—</span> <span>{t('pricing.freeFeatures.mail')}</span></li>
+                      <li className="flex gap-4 items-start"><span className="text-[#00236F] font-bold">—</span> <span>{t('pricing.freeFeatures.docs')}</span></li>
+                      <li className="flex gap-4 items-start"><span className="text-[#00236F] font-bold">—</span> <span>{t('pricing.freeFeatures.hosting')}</span></li>
                   </ul>
                </div>
                <div className="pt-8 mt-8 border-t border-[#c5c5d3]/20">
@@ -136,7 +138,7 @@ const Pricing = () => {
                     variant="outline"
                     className="w-full h-14 bg-transparent border-[#c5c5d3]/50 hover:bg-[#faf9f4] text-[#111111] font-medium text-lg rounded-none transition-all shadow-none"
                   >
-                    {!user ? "Créer un compte gratuit" : "Accéder à mon espace"}
+                    {!user ? t('pricing.freeBtnCreate') : t('pricing.freeBtnAccess')}
                   </Button>
                </div>
             </div>
@@ -150,21 +152,21 @@ const Pricing = () => {
                
                <div className="relative z-10 space-y-3 mb-8">
                   <div className="inline-block px-3 py-1 mb-2 text-white border border-white/40 rounded-none text-xs font-semibold uppercase tracking-widest shadow-sm">
-                     RECOMMANDÉ
+                     {t('pricing.recommended')}
                   </div>
-                  <h3 className="text-2xl font-medium text-white">Sivara Pro</h3>
-                  <p className="text-blue-100 font-light">La suite complète pour créateurs et professionnels.</p>
+                  <h3 className="text-2xl font-medium text-white">{t('pricing.proTitle')}</h3>
+                  <p className="text-blue-100 font-light">{t('pricing.proSubtitle')}</p>
                </div>
                <div className="relative z-10 mb-8 font-light flex items-end gap-2">
-                  <span className="text-5xl tracking-tight text-white">4.99$</span>
-                  <span className="text-blue-200 pb-1">/ mois</span>
+                  <span className="text-5xl tracking-tight text-white">{t('pricing.proPrice')}</span>
+                  <span className="text-blue-200 pb-1">{t('pricing.perMonth')}</span>
                </div>
                <div className="relative z-10 flex-1">
                   <ul className="space-y-4 text-sm font-light text-white">
-                      <li className="flex gap-4 items-start"><span className="text-blue-300 font-bold">—</span> <span><strong className="font-medium">30 GB d'espace NVMe.</strong> Sauvegardez tous vos documents et photos à très haute vitesse.</span></li>
-                      <li className="flex gap-4 items-start"><span className="text-blue-300 font-bold">—</span> <span><strong className="font-medium">IA à des buts génératifs.</strong> L'IA souveraine pour assister la rédaction sans limites.</span></li>
-                      <li className="flex gap-4 items-start"><span className="text-blue-300 font-bold">—</span> <span><strong className="font-medium">Nom de domaine personnalisé.</strong> (ex. votrenom.com) avec gestion DNS automatique.</span></li>
-                      <li className="flex gap-4 items-start"><span className="text-blue-300 font-bold">—</span> <span><strong className="font-medium">Support prioritaire.</strong> Accès direct VIP à notre équipe.</span></li>
+                      <li className="flex gap-4 items-start"><span className="text-blue-300 font-bold">—</span> <span dangerouslySetInnerHTML={{ __html: t('pricing.proFeatures.storage') }}></span></li>
+                      <li className="flex gap-4 items-start"><span className="text-blue-300 font-bold">—</span> <span dangerouslySetInnerHTML={{ __html: t('pricing.proFeatures.ai') }}></span></li>
+                      <li className="flex gap-4 items-start"><span className="text-blue-300 font-bold">—</span> <span dangerouslySetInnerHTML={{ __html: t('pricing.proFeatures.domain') }}></span></li>
+                      <li className="flex gap-4 items-start"><span className="text-blue-300 font-bold">—</span> <span dangerouslySetInnerHTML={{ __html: t('pricing.proFeatures.support') }}></span></li>
                   </ul>
                </div>
                <div className="relative z-10 pt-8 mt-8 border-t border-blue-500/30">
@@ -174,8 +176,8 @@ const Pricing = () => {
                     className="w-full h-14 bg-white hover:bg-gray-100 text-[#00236F] font-medium text-lg rounded-none transition-all shadow-lg flex items-center justify-center gap-2"
                   >
                     {isLoadingProfile ? <Loader2 className="animate-spin w-5 h-5" /> : (
-                       profile?.is_pro ? "Déjà Abonné" : (
-                          <span className="flex items-center justify-center gap-2 tracking-wide">Passer à Pro</span>
+                       profile?.is_pro ? t('pricing.proBtnActive') : (
+                          <span className="flex items-center justify-center gap-2 tracking-wide">{t('pricing.proBtnSub')}</span>
                        )
                     )}
                   </Button>
@@ -186,7 +188,7 @@ const Pricing = () => {
 
           {/* FAQ or Bottom Info */}
           <div className="text-center text-sm text-[#5a5b67] font-light mt-4">
-             * Les 14 premiers jours sont gratuits pour tout nouvel abonnement Pro. Annulable en un clic.
+             {t('pricing.faq')}
           </div>
 
         </main>

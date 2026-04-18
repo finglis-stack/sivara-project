@@ -148,5 +148,34 @@
     "techDesc": "L'innovation de Sivara, c'est d'être incroyablement robuste tout en restant simple à utiliser. Sous le capot, des mathématiques avancées verrouillent vos informations avant même qu'elles ne quittent votre écran d'ordinateur. Pour vous, cela reste aussi naturel que de naviguer sur Internet, mais vos documents ou ceux de votre entreprise restent les vôtres, bien à l'abri au Québec.",
     "founderTitle": "Une création étudiante",
     "founderDesc": "Imaginé et conçu par Félix I. et Léa C., élèves de l'École secondaire Marie-Anne, Sivara naît de la conviction que tous et toutes méritent un espace numérique éthique et souverain."
+  },
+  "pricing": {
+    "title": "Choisissez l'espace qui vous correspond",
+    "subtitle": "Une infrastructure souveraine adaptée à vos besoins. Aucun engagement, pas de trackers.",
+    "freeTitle": "Sivara Libre",
+    "freeSubtitle": "L'essentiel pour reprendre le contrôle.",
+    "freePrice": "0$",
+    "perMonth": "/ mois",
+    "freeFeatures": {
+        "search": "Moteur de recherche anonyme sans publicité",
+        "mail": "Boîte courriel sécurisée de base",
+        "docs": "Éditeur de documents avec chiffrement Zero-Knowledge",
+        "hosting": "Hébergement souverain certifié au Québec"
+    },
+    "freeBtnCreate": "Créer un compte gratuit",
+    "freeBtnAccess": "Accéder à mon espace",
+    "recommended": "RECOMMANDÉ",
+    "proTitle": "Sivara Pro",
+    "proSubtitle": "La suite complète pour créateurs et professionnels.",
+    "proPrice": "4.99$",
+    "proFeatures": {
+        "storage": "<strong className=\"font-medium\">30 GB d'espace NVMe.</strong> Sauvegardez tous vos documents et photos à très haute vitesse.",
+        "ai": "<strong className=\"font-medium\">IA à des buts génératifs.</strong> L'IA souveraine pour assister la rédaction sans limites.",
+        "domain": "<strong className=\"font-medium\">Nom de domaine personnalisé.</strong> (ex. votrenom.com) avec gestion DNS automatique.",
+        "support": "<strong className=\"font-medium\">Support prioritaire.</strong> Accès direct VIP à notre équipe."
+    },
+    "proBtnSub": "Passer à Pro",
+    "proBtnActive": "Déjà Abonné",
+    "faq": "* Les 14 premiers jours sont gratuits pour tout nouvel abonnement Pro. Annulable en un clic."
   }
 }

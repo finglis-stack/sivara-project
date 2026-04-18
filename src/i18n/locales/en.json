@@ -148,5 +148,34 @@
     "techDesc": "Sivara's innovation lies in being incredibly robust while remaining simple to use. Under the hood, advanced mathematics lock your information before it even leaves your computer screen. For you, it remains as natural as browsing the Internet, but your secrets or those of your business remain yours, safely protected in Quebec.",
     "founderTitle": "A student creation",
     "founderDesc": "Imagined and designed by Félix I. and Léa C., students at Marie-Anne High School, Sivara was born from the conviction that everyone deserves an ethical and sovereign digital space."
+  },
+  "pricing": {
+    "title": "Choose the space that suits you",
+    "subtitle": "A sovereign infrastructure tailored to your needs. No commitment, no trackers.",
+    "freeTitle": "Sivara Free",
+    "freeSubtitle": "The essentials to regain control.",
+    "freePrice": "$0",
+    "perMonth": "/ month",
+    "freeFeatures": {
+        "search": "Anonymous search engine without ads",
+        "mail": "Basic secure email inbox",
+        "docs": "Document editor with Zero-Knowledge encryption",
+        "hosting": "Certified sovereign hosting in Quebec"
+    },
+    "freeBtnCreate": "Create a free account",
+    "freeBtnAccess": "Access my space",
+    "recommended": "RECOMMENDED",
+    "proTitle": "Sivara Pro",
+    "proSubtitle": "The complete suite for creators and professionals.",
+    "proPrice": "$4.99",
+    "proFeatures": {
+        "storage": "<strong className=\"font-medium\">30 GB NVMe space.</strong> Save all your documents and photos at very high speed.",
+        "ai": "<strong className=\"font-medium\">Generative AI.</strong> Sovereign AI to assist writing without limits.",
+        "domain": "<strong className=\"font-medium\">Custom domain name.</strong> (e.g., yourname.com) with automatic DNS management.",
+        "support": "<strong className=\"font-medium\">Priority support.</strong> Direct VIP access to our team."
+    },
+    "proBtnSub": "Upgrade to Pro",
+    "proBtnActive": "Already Subscribed",
+    "faq": "* The first 14 days are free for any new Pro subscription. Cancel with one click."
   }
 }
