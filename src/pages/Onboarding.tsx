@@ -297,29 +297,29 @@ const Onboarding = () => {
 
       {/* RECOVERY KEY DIALOG */}
       <Dialog open={recoveryKey !== null} onOpenChange={() => { }}>
-        <DialogContent className="sm:max-w-lg [&>button]:hidden" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+        <DialogContent className="sm:max-w-lg bg-[#faf9f4] border-[#c5c5d3]/30 rounded-none p-8 [&>button]:hidden shadow-2xl" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
           <DialogHeader>
-            <div className="mx-auto w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-2">
-              <Key className="h-7 w-7 text-gray-900" />
+            <div className="mx-auto w-12 h-12 bg-white border border-[#c5c5d3]/30 rounded-none flex items-center justify-center mb-4">
+              <Key className="h-6 w-6 text-[#111111]" />
             </div>
-            <DialogTitle className="text-center text-xl">{t('onboarding.recoveryTitle')}</DialogTitle>
-            <DialogDescription className="text-center">
+            <DialogTitle className="text-center text-2xl font-light text-[#111111]">{t('onboarding.recoveryTitle')}</DialogTitle>
+            <DialogDescription className="text-center font-light text-[#5a5b67] text-sm mt-2">
               {t('onboarding.recoveryDesc1')}
               <br />{t('onboarding.recoveryDesc2')}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="my-4 p-4 bg-gray-900 rounded-xl text-center">
-            <code className="text-lg font-mono text-white tracking-widest select-all">
+          <div className="my-4 p-4 bg-white border border-[#c5c5d3]/30 rounded-none text-center">
+            <code className="text-lg font-mono text-[#111111] font-bold tracking-widest select-all">
               {recoveryKey}
             </code>
           </div>
 
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={handleCopyRecoveryKey}>
+            <Button variant="outline" className="flex-1 rounded-none border-[#c5c5d3]/30 uppercase tracking-widest text-xs font-medium text-[#5a5b67] hover:bg-white hover:text-[#111111]" onClick={handleCopyRecoveryKey}>
               <Copy className="mr-2 h-4 w-4" /> {t('onboarding.copyBtn')}
             </Button>
-            <Button variant="outline" className="flex-1" onClick={() => {
+            <Button variant="outline" className="flex-1 rounded-none border-[#c5c5d3]/30 uppercase tracking-widest text-xs font-medium text-[#5a5b67] hover:bg-white hover:text-[#111111]" onClick={() => {
               if (recoveryKey) {
                 const blob = new Blob([`SIVARA RECOVERY KEY\n\n${recoveryKey}\n\nKeep this file safe.\nWithout this key, your documents will be lost if you forget your password.`], { type: 'text/plain' });
                 const a = document.createElement('a');
@@ -333,24 +333,24 @@ const Onboarding = () => {
           </div>
 
           <div className="mt-4 space-y-3">
-            <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
-              <p className="text-xs text-red-700 font-medium">{t('onboarding.recoveryWarning')}</p>
+            <div className="p-4 bg-[#111111] rounded-none">
+              <p className="text-[10px] text-white uppercase tracking-widest leading-relaxed opacity-90">{t('onboarding.recoveryWarning')}</p>
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-gray-500">{t('onboarding.recoveryInput')}</Label>
+            <div className="space-y-2 pt-2">
+              <Label className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">{t('onboarding.recoveryInput')}</Label>
               <Input
                 placeholder={t('onboarding.recoveryPlaceholder')}
                 value={recoveryTypedConfirm}
                 onChange={(e) => setRecoveryTypedConfirm(e.target.value.toUpperCase())}
-                className="h-11 text-center font-mono tracking-widest text-lg"
+                className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] text-center font-mono tracking-widest text-lg"
                 maxLength={4}
               />
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-2">
             <Button
-              className="w-full h-11 bg-gray-900 hover:bg-black text-white"
+              className="w-full h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-light rounded-none transition-all uppercase tracking-widest text-sm disabled:bg-[#c5c5d3]/50 disabled:text-[#5a5b67]/50"
               disabled={recoveryTypedConfirm !== recoveryKey?.substring(0, 4)}
               onClick={handleRecoveryAcknowledge}
             >
