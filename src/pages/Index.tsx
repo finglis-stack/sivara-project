@@ -348,20 +348,28 @@ const Index = () => {
       {hasSearched && (
         <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
           <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-            <div 
-              onClick={() => {
-                setHasSearched(false);
-                setResults([]);
-                setTotalResults(0);
-                setDocResults([]);
-                setSearchQuery('');
-                setSearchParams({}, { replace: true });
-              }}
-              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-            >
-              <img src="/sivara-logo.png" alt="Sivara" className="w-8 h-8 object-contain" />
-              <span className="text-xl font-bold text-gray-900 tracking-tight">Sivara</span>
-            </div>
+              <div className="flex items-center gap-6">
+                <div 
+                  onClick={() => {
+                    setHasSearched(false);
+                    setResults([]);
+                    setTotalResults(0);
+                    setDocResults([]);
+                    setSearchQuery('');
+                    setSearchParams({}, { replace: true });
+                  }}
+                  className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                >
+                  <img src="/sivara-logo.png" alt="Sivara" className="w-8 h-8 object-contain" />
+                  <span className="text-xl font-bold text-gray-900 tracking-tight">Sivara</span>
+                </div>
+                <button 
+                  onClick={() => navigate('/about')} 
+                  className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block"
+                >
+                  {t('about.navLink')}
+                </button>
+              </div>
             <div className="flex items-center gap-4">
               <LanguageSelector />
               {isStaff && (
@@ -391,10 +399,18 @@ const Index = () => {
             {/* TopNavBar */}
             <nav className="sticky top-0 z-50 bg-[#FAF9F4]/80 backdrop-blur-xl w-full border-b border-[#c5c5d3]/30">
               <div className="flex justify-between items-center w-full px-8 py-4 max-w-screen-2xl mx-auto">
-                {/* Brand */}
-                <div className="flex items-center gap-3 cursor-pointer transition-all active:scale-95">
-                  <img src="/sivara-logo.png" alt="Sivara" className="w-8 h-8 object-contain" />
-                  <span className="text-xl font-bold tracking-tighter text-[#111111]">Sivara</span>
+                {/* Brand & About Link */}
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-3 cursor-pointer transition-all active:scale-95">
+                    <img src="/sivara-logo.png" alt="Sivara" className="w-8 h-8 object-contain" />
+                    <span className="text-xl font-bold tracking-tighter text-[#111111]">Sivara</span>
+                  </div>
+                  <button 
+                    onClick={() => navigate('/about')} 
+                    className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block"
+                  >
+                    {t('about.navLink')}
+                  </button>
                 </div>
 
                 {/* Trailing Actions */}

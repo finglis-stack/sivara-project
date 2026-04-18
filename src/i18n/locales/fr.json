@@ -135,5 +135,18 @@
     "recoveryInput": "Tapez les 4 premiers caractères de votre clé pour confirmer :",
     "recoveryPlaceholder": "Ex: A1B2",
     "recoverySaveBtn": "J'ai sauvegardé ma clé"
+  },
+  "about": {
+    "navLink": "À propos",
+    "title": "Reprenez le contrôle de votre vie numérique.",
+    "subtitle": "Sivara est une initiative québécoise qui vous redonne la propriété absolue de vos données personnelles sur Internet.",
+    "missionTitle": "Notre Mission",
+    "missionDesc": "Aujourd'hui, nos informations personnelles sont souvent collectées, analysées et revendues par les géants d'Internet. Nous avons créé Sivara avec un objectif simple : vous redonner le volant. Nous vous offrons des outils pratiques pour tous les jours (moteur de recherche, boîte courriel ou éditeur de documents), mais avec une garantie de fer : personne d'autre que vous ne peut lire ce que vous y mettez. Pas même nous.",
+    "complianceTitle": "Au-delà de la Loi 25",
+    "complianceDesc": "Au Québec, la nouvelle Loi 25 oblige les entreprises à mieux protéger la vie privée des citoyens. Sivara va bien au-delà de cette loi : notre système fonctionne comme un coffre-fort dont vous êtes le seul à posséder la clé. Pour les entreprises comme pour tous, utiliser Sivara signifie avoir la conscience tout à fait tranquille quant à la sécurité de ses courriels et fichiers personnels.",
+    "techTitle": "La sécurité, sans effort",
+    "techDesc": "L'innovation de Sivara, c'est d'être incroyablement robuste tout en restant simple à utiliser. Sous le capot, des mathématiques avancées verrouillent vos informations avant même qu'elles ne quittent votre écran d'ordinateur. Pour vous, cela reste aussi naturel que de naviguer sur Internet, mais vos documents ou ceux de votre entreprise restent les vôtres, bien à l'abri au Québec.",
+    "founderTitle": "Une création étudiante",
+    "founderDesc": "Imaginé et conçu par Félix I. et Léa C., élèves de l'École secondaire Marie-Anne, Sivara naît de la conviction que tous et toutes méritent un espace numérique éthique et souverain."
   }
 }

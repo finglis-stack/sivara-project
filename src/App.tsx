@@ -14,6 +14,7 @@ import '@/i18n/config';
 
 // Apps
 import Index from "./pages/Index";
+import About from "./pages/About";
 import Docs from "./pages/Docs";
 import DocEditor from "./pages/DocEditor";
 import Login from "./pages/Login";
@@ -199,6 +200,7 @@ const AppRoutes = () => {
         <>
           <Route path="/" element={<Index />} />
           <Route path="/search" element={<Index />} />
+          <Route path="/about" element={<About />} />
           <Route path="/monitor" element={
             <ProtectedRoute>
               <Monitor />

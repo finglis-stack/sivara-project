@@ -135,5 +135,18 @@
     "recoveryInput": "Type the first 4 characters of your key to confirm:",
     "recoveryPlaceholder": "Ex: A1B2",
     "recoverySaveBtn": "I saved my key"
+  },
+  "about": {
+    "navLink": "About",
+    "title": "Take back control of your digital life.",
+    "subtitle": "Sivara is a Quebec initiative that gives you absolute ownership of your personal data on the Internet.",
+    "missionTitle": "Our Mission",
+    "missionDesc": "Today, our personal information is often collected, analyzed, and sold by internet giants. We created Sivara with a simple goal: to put you back in the driver's seat. We offer practical everyday tools (like a search engine, an email inbox, or a document editor), but with an ironclad guarantee: no one but you can read what you put in them. Not even us.",
+    "complianceTitle": "Beyond Law 25",
+    "complianceDesc": "In Quebec, the new Law 25 requires companies to better protect citizens' privacy. Sivara goes far beyond this law: our system works like a safe to which only you have the key. For both businesses and individuals, using Sivara means having complete peace of mind regarding the security of emails and personal files.",
+    "techTitle": "Security, effortlessly",
+    "techDesc": "Sivara's innovation lies in being incredibly robust while remaining simple to use. Under the hood, advanced mathematics lock your information before it even leaves your computer screen. For you, it remains as natural as browsing the Internet, but your secrets or those of your business remain yours, safely protected in Quebec.",
+    "founderTitle": "A student creation",
+    "founderDesc": "Imagined and designed by Félix I. and Léa C., students at Marie-Anne High School, Sivara was born from the conviction that everyone deserves an ethical and sovereign digital space."
   }
 }
