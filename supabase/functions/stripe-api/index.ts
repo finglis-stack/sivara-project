@@ -172,38 +172,30 @@ serve(async (req) => {
         limit: 5
       });
 
-      // On cherche une souscription "incomplete" (en attente de paiement) ou "active" qui correspondrait à une tentative récente
-      const pendingSub = existingSubscriptions.data.find((sub: any) => 
-        (sub.status === 'incomplete' || sub.status === 'active' || sub.status === 'trialing') &&
-        // On vérifie que ce n'est pas une location d'appareil
-        sub.metadata?.type !== 'device_rental'
+      // On supprime toute souscription incomplète existante pour éviter les conflits d'intent expirés
+      const pendingIncompleteSubs = existingSubscriptions.data.filter((sub: any) => 
+        sub.status === 'incomplete' && sub.metadata?.type !== 'device_rental'
       );
 
-      // SI TROUVÉ : On recycle !
-      if (pendingSub) {
-          console.log(`[Stripe API] Abonnement existant trouvé (${pendingSub.id}), réutilisation.`);
+      for (const sub of pendingIncompleteSubs) {
+         try {
+             await stripe.subscriptions.cancel(sub.id);
+             console.log(`[Stripe API] Ancienne souscription incomplète annulée (${sub.id}).`);
+         } catch(e) {}
+      }
+
+      const activeSub = existingSubscriptions.data.find((sub: any) => 
+        (sub.status === 'active' || sub.status === 'trialing') && sub.metadata?.type !== 'device_rental'
+      );
+
+      if (activeSub) {
+          // Si l'utilisateur a déjà un abonnement pro ACTIF, on ne re-génère pas de paiement !
+          // On s'assure juste d'avoir profil "is_pro": true
+          const service = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+          const endDate = new Date(activeSub.current_period_end * 1000).toISOString();
+          await service.from('profiles').update({ is_pro: true, subscription_status: activeSub.status, subscription_end_date: endDate }).eq('id', user.id);
           
-          // On récupère le clientSecret associé
-          let clientSecret;
-          const subDetails = await stripe.subscriptions.retrieve(pendingSub.id, {
-             expand: ['latest_invoice.payment_intent', 'pending_setup_intent']
-          });
-
-          // @ts-ignore
-          if (subDetails.pending_setup_intent) {
-              // @ts-ignore
-              clientSecret = subDetails.pending_setup_intent.client_secret;
-          // @ts-ignore
-          } else if (subDetails.latest_invoice?.payment_intent) {
-              // @ts-ignore
-              clientSecret = subDetails.latest_invoice.payment_intent.client_secret;
-          }
-
-          if (clientSecret) {
-             const isTrial = subDetails.status === 'trialing' || (subDetails.trial_end && subDetails.trial_end > Date.now()/1000);
-             return new Response(JSON.stringify({ clientSecret, isTrialActive: isTrial }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-          }
-          // Si pas de secret trouvé (cas rare), on continue pour en recréer un
+          throw new Error("Vous avez déjà un abonnement pro actif.");
       }
 
       // 2. Création (Si aucun doublon trouvé)
