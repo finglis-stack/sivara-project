@@ -8,6 +8,8 @@ import { encryptionService } from '@/lib/encryption';
 import { showSuccess, showError } from '@/utils/toast';
 import { Loader2, ArrowRight, Check, ShieldCheck, Zap, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import LanguageSelector from '@/components/LanguageSelector';
 import Lottie from 'lottie-react';
 import animationData from '../../public/animal.json';
 
@@ -15,6 +17,7 @@ const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { setLanguage } = useLanguage();
   
   const [step, setStep] = useState<'email' | 'password' | 'recovery'>('email');
   const [isChecking, setIsChecking] = useState(false);
@@ -77,6 +80,17 @@ const Login = () => {
           console.warn('Encryption init (may be first-time user):', encError.message);
           // Non-blocking: user may not have DEK yet (legacy account)
         }
+
+        // Update cookie based on the profile language
+        const { data: profile } = await supabase
+           .from('profiles')
+           .select('language')
+           .eq('id', data.user.id)
+           .single();
+           
+        if (profile?.language) {
+            setLanguage(profile.language as any);
+        }
       }
 
       showSuccess('Connexion réussie');
@@ -115,10 +129,13 @@ const Login = () => {
       <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-[#c5c5d3]/30">
         <div className="max-w-sm mx-auto w-full space-y-10">
           
-          {/* Logo */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
-             <img src="/sivara-logo.png" alt="Sivara" className="h-10 w-10 object-contain" />
-             <span className="text-xl font-bold tracking-tight text-[#111111]">Sivara</span>
+          {/* Logo & Language */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
+               <img src="/sivara-logo.png" alt="Sivara" className="h-10 w-10 object-contain" />
+               <span className="text-xl font-bold tracking-tight text-[#111111]">Sivara</span>
+            </div>
+            <LanguageSelector />
           </div>
 
           {/* Header */}

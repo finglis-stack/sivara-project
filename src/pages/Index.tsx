@@ -8,6 +8,7 @@ import AdminLayout from '@/components/AdminLayout';
 import UserMenu from '@/components/UserMenu';
 import Footer from '@/components/Footer';
 import CategoryImageButton from '@/components/CategoryImageButton';
+import LanguageSelector from '@/components/LanguageSelector';
 import { showError } from '@/utils/toast';
 import {
   Settings, Globe, FileText, ArrowRight, Folder,
@@ -360,6 +361,7 @@ const Index = () => {
               <span className="text-xl font-bold text-gray-900 tracking-tight">Sivara</span>
             </div>
             <div className="flex items-center gap-4">
+              <LanguageSelector />
               {isStaff && (
                 <button onClick={() => setShowManage(true)} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-all duration-300" title="Gérer l'indexation">
                   <Settings size={20} strokeWidth={1.5} />
@@ -394,7 +396,8 @@ const Index = () => {
                 </div>
 
                 {/* Trailing Actions */}
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-4 lg:gap-6">
+                  <LanguageSelector />
                   {isStaff && (
                     <button onClick={() => setShowManage(true)} className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block">Contribution</button>
                   )}

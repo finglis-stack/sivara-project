@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptionService } from '@/lib/encryption';
+import { useLanguage } from '@/contexts/LanguageContext';
+import LanguageSelector from '@/components/LanguageSelector';
 import { showSuccess, showError } from '@/utils/toast';
 import { Building2, User, Loader2, ArrowRight, ArrowLeft, CheckCircle2, Shield, Copy, Key } from 'lucide-react';
 import Lottie from 'lottie-react';
@@ -33,6 +35,7 @@ const Onboarding = () => {
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const { language } = useLanguage();
 
   const returnTo = searchParams.get('returnTo') || '/';
 
@@ -110,6 +113,7 @@ const Onboarding = () => {
             account_type: formData.accountType,
             terms_accepted: formData.termsAccepted,
             terms_accepted_at: new Date().toISOString(),
+            language: language,
           });
 
         if (profileError) throw profileError;
@@ -157,9 +161,12 @@ const Onboarding = () => {
 
           {/* Header */}
           <div className="space-y-6">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
-              <img src="/sivara-logo.png" alt="Sivara" className="h-10 w-10 object-contain" />
-              <span className="text-xl font-bold tracking-tight text-[#111111]">Sivara</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
+                <img src="/sivara-logo.png" alt="Sivara" className="h-10 w-10 object-contain" />
+                <span className="text-xl font-bold tracking-tight text-[#111111]">Sivara</span>
+              </div>
+              <LanguageSelector />
             </div>
 
             <div className="space-y-2">
