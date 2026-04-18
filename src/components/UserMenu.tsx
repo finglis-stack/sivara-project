@@ -106,7 +106,7 @@ const UserMenu = () => {
     return (
       <Button
         onClick={handleLoginClick}
-        className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-800 transition-all duration-300 text-white"
+        className="flex items-center gap-2 px-4 py-2 rounded-none bg-[#00236F] hover:bg-[#1e3a8a] transition-all duration-300 text-white"
       >
         <User size={18} />
         <span className="text-sm font-light">Connexion</span>

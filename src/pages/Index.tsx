@@ -382,6 +382,7 @@ const Index = () => {
                   background-size: 40px 40px;
               }
             `}</style>
+            <div className="fixed inset-0 grid-bg-pattern opacity-50 z-0 pointer-events-none"></div>
             
             {/* TopNavBar */}
             <nav className="sticky top-0 z-50 bg-[#FAF9F4]/80 backdrop-blur-xl w-full border-b border-[#c5c5d3]/30">
@@ -406,21 +407,20 @@ const Index = () => {
             <main className="flex-1 w-full max-w-screen-2xl mx-auto px-6 md:px-12 py-12 flex flex-col gap-12 relative z-10">
               
               {/* Hero Search Area */}
-              <section className="flex flex-col items-center justify-center py-16 gap-8 bg-[#f5f4ef] rounded-xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <div className="absolute inset-0 grid-bg-pattern opacity-50 z-0"></div>
+              <section className="flex flex-col items-center justify-center py-16 gap-8 bg-transparent rounded-xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-1000">
                 <div className="relative z-10 flex flex-col items-center w-full max-w-3xl text-center gap-6 px-4">
                   
                   <div>
                     <h1 className="text-5xl md:text-6xl font-light tracking-[-0.02em] text-[#111111] leading-tight flex flex-col gap-2">
                         <span>Recherchez le web.</span>
-                        <span className="font-medium text-[#00236F]">Sans surveillance.</span>
+                        <span className="text-[#00236F]">Sans surveillance.</span>
                     </h1>
                     <p className="text-[13px] font-light text-[#5a5b67] mt-4 italic">
                         Conceptualisé par Félix I. et Léa C., École secondaire Marie-Anne
                     </p>
                   </div>
                   
-                  <p className="text-lg md:text-xl font-medium text-[#2c2d38] max-w-2xl">
+                  <p className="text-lg md:text-xl font-light text-[#2c2d38] max-w-2xl">
                     Sivara vous aide à trouver l'information rapidement, dans une expérience claire, immersive et sans publicité.
                   </p>
                   
@@ -446,8 +446,8 @@ const Index = () => {
 
               {/* Dashboard Bento Grid */}
               <section className="grid grid-cols-1 md:grid-cols-12 gap-6 w-full animate-in fade-in slide-in-from-bottom-12 duration-1000" style={{ animationDelay: '200ms' }}>
-                {/* Visual Block (Span 8) */}
-                <div className="md:col-span-8 bg-white rounded-xl p-8 flex flex-col gap-6 relative overflow-hidden outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15">
+                {/* Visual Block (Span 12) */}
+                <div className="md:col-span-12 bg-white rounded-xl p-8 flex flex-col gap-6 relative overflow-hidden outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15">
                   <div className="flex justify-between items-start z-10">
                     <div>
                       <h2 className="text-2xl font-medium tracking-tight text-[#111111]">L'information accessible</h2>
@@ -468,32 +468,6 @@ const Index = () => {
                       <span className="text-xl font-medium text-[#00236F] flex items-center gap-2">
                         <Activity className="h-4 w-4" /> En temps réel
                       </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Score/Performance (Span 4) */}
-                <div className="md:col-span-4 flex flex-col gap-6">
-                  <div className="flex-1 bg-white rounded-xl p-8 flex flex-col justify-between relative overflow-hidden outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15">
-                    <div className="flex justify-between items-start">
-                      <h2 className="text-xl font-medium tracking-tight text-[#111111]">Rapidité de réponse</h2>
-                      <Target className="h-6 w-6 text-[#115740]" />
-                    </div>
-                    <div className="flex flex-col items-center justify-center py-6">
-                      <div className="relative w-32 h-32 flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                          <circle cx="50" cy="50" fill="none" r="45" stroke="#EFEEE9" strokeWidth="8"></circle>
-                          <circle className="transition-all duration-1000" cx="50" cy="50" fill="none" r="45" stroke="#115740" strokeDasharray="282" strokeDashoffset="40" strokeWidth="8"></circle>
-                        </svg>
-                        <div className="absolute flex flex-col items-center">
-                          <span className="text-4xl font-medium text-[#115740]">98</span>
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-[#2c2d38]">/ 100</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-[#115740]/10 px-4 py-3 rounded flex items-center gap-3">
-                      <Award className="h-5 w-5 text-[#115740]" />
-                      <span className="text-sm font-medium text-[#115740]">Requêtes traitées sans délai.</span>
                     </div>
                   </div>
                 </div>
