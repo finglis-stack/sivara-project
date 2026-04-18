@@ -306,7 +306,7 @@ const Profile = () => {
                 </div>
             </div>
         ) : (
-            <div className="mb-6 sm:mb-8 bg-white rounded-none p-6 sm:p-8 border border-[#c5c5d3]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="mb-6 sm:mb-8 bg-transparent rounded-none p-6 sm:p-8 border border-[#c5c5d3]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
                    <div className="h-12 w-12 sm:h-14 sm:w-14 bg-gradient-to-tr from-[#00236F] to-[#1e3a8a] rounded-none flex items-center justify-center">
                       <span className="text-xl sm:text-2xl font-light text-white">S</span>
@@ -347,7 +347,7 @@ const Profile = () => {
             </div>
         )}
 
-        <div className="bg-white rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
+        <div className="bg-transparent rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
             <div className="relative group shrink-0">
               <Avatar className="h-24 w-24 sm:h-32 sm:w-32 rounded-none border border-[#c5c5d3]/30">
@@ -370,7 +370,7 @@ const Profile = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
+        <div className="bg-transparent rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
           <div className="flex items-center gap-3 mb-4 sm:mb-6">
             <Grid3x3 className="h-5 w-5 sm:h-6 sm:w-6 text-gray-700" />
             <h2 className="text-xl sm:text-2xl font-light text-gray-900">{t('profile.myApps')}</h2>
@@ -412,7 +412,7 @@ const Profile = () => {
         </div>
 
         {/* NOUVELLE SECTION PREFERENCES */}
-        <div className="bg-white rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
+        <div className="bg-transparent rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
             <div className="flex items-center gap-3 mb-4 sm:mb-6">
                 <Search className="h-5 w-5 sm:h-6 sm:w-6 text-[#111111]" />
                 <h2 className="text-xl sm:text-2xl font-light text-[#111111]">{t('profile.preferences')}</h2>
@@ -428,7 +428,7 @@ const Profile = () => {
                         </p>
                     </div>
                     <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
-                      <SelectTrigger className="w-[120px] bg-white rounded-none border-[#c5c5d3]/30 focus:ring-[#111111]">
+                      <SelectTrigger className="w-[120px] bg-[#faf9f4] rounded-none border-[#c5c5d3]/30 focus:ring-[#111111]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="rounded-none border-[#c5c5d3]/30">
@@ -457,17 +457,17 @@ const Profile = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="shadow-none rounded-none border border-[#c5c5d3]/30">
+          <Card className="shadow-none flex flex-col justify-start bg-transparent rounded-none border border-[#c5c5d3]/30">
             <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl text-[#111111]">{t('profile.personalInfo')}</CardTitle><CardDescription className="font-light text-[#5a5b67]">{t('profile.personalInfoDesc')}</CardDescription></CardHeader>
             <CardContent className="space-y-4 sm:space-y-5 px-5 sm:px-6 pb-6">
               <div className="space-y-2"><Label htmlFor="firstName" className="text-sm font-light text-[#111111]">{t('profile.firstName')}</Label><Input id="firstName" value={profile.first_name} onChange={(e) => setProfile({ ...profile, first_name: e.target.value })} placeholder="Jean" className="h-10 sm:h-11 rounded-none border-[#c5c5d3]/30 focus-visible:ring-[#111111] bg-[#faf9f4]" /></div>
               <div className="space-y-2"><Label htmlFor="lastName" className="text-sm font-light text-[#111111]">{t('profile.lastName')}</Label><Input id="lastName" value={profile.last_name} onChange={(e) => setProfile({ ...profile, last_name: e.target.value })} placeholder="Dupont" className="h-10 sm:h-11 rounded-none border-[#c5c5d3]/30 focus-visible:ring-[#111111] bg-[#faf9f4]" /></div>
             </CardContent>
           </Card>
-          <Card className="shadow-none rounded-none border border-[#c5c5d3]/30">
+          <Card className="shadow-none flex flex-col justify-start bg-transparent rounded-none border border-[#c5c5d3]/30">
             <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl text-[#111111]">{t('profile.contact')}</CardTitle><CardDescription className="font-light text-[#5a5b67]">{t('profile.contactDesc')}</CardDescription></CardHeader>
             <CardContent className="space-y-4 sm:space-y-5 px-5 sm:px-6 pb-6">
-              <div className="space-y-2"><Label htmlFor="email" className="text-sm font-light text-[#111111]">{t('profile.email')}</Label><Input id="email" type="email" value={user?.email || ''} disabled className="h-10 sm:h-11 bg-white border border-[#c5c5d3]/30 text-[#5a5b67] rounded-none" /><p className="text-xs text-[#5a5b67] font-light">{t('profile.emailLock')}</p></div>
+              <div className="space-y-2"><Label htmlFor="email" className="text-sm font-light text-[#111111]">{t('profile.email')}</Label><Input id="email" type="email" value={user?.email || ''} disabled className="h-10 sm:h-11 bg-transparent opacity-60 border border-[#c5c5d3]/30 text-[#5a5b67] rounded-none" /><p className="text-xs text-[#5a5b67] font-light">{t('profile.emailLock')}</p></div>
               <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-light text-[#111111]">{t('profile.phone')}</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[110px] sm:w-[140px] h-10 sm:h-11 text-xs sm:text-sm rounded-none border-[#c5c5d3]/30 bg-[#faf9f4] focus:ring-[#111111]"><SelectValue /></SelectTrigger><SelectContent className="rounded-none border-[#c5c5d3]/30">{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code} className="rounded-none"><span className="flex items-center gap-2">{country.flagUrl ? <img src={country.flagUrl} alt={country.country} className="w-5 h-auto object-contain" /> : <span>{country.flag}</span>} <span className="font-mono text-xs">{country.country}</span></span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-10 sm:h-11 rounded-none border-[#c5c5d3]/30 focus-visible:ring-[#111111] bg-[#faf9f4]" /></div></div>
             </CardContent>
           </Card>
