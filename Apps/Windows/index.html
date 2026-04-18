@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;600&display=swap" rel="stylesheet">
   <script src="node_modules/lottie-web/build/player/lottie.min.js"></script>
+  <script src="i18n.js"></script>
 </head>
 <body>
 
@@ -22,20 +23,20 @@
         <img src="assets/onboarding.jpg" alt="">
       </div>
       <div id="onboarding-content">
-        <h1>Bienvenue sur Sivara</h1>
-        <p>Connectez-vous pour synchroniser vos documents et retrouver votre espace de travail.</p>
+        <h1 data-i18n="ob.welcome">Bienvenue sur Sivara</h1>
+        <p data-i18n="ob.subtitle">Connectez-vous pour synchroniser vos documents et retrouver votre espace de travail.</p>
 
         <form id="onboarding-login-form" autocomplete="on">
-          <input type="email" id="ob-email" placeholder="Adresse e-mail" autocomplete="email" required>
-          <input type="password" id="ob-password" placeholder="Mot de passe" autocomplete="current-password" required>
-          <button type="submit" id="onboarding-login-btn">Se connecter</button>
+          <input type="email" id="ob-email" data-i18n="ob.email" placeholder="Adresse e-mail" autocomplete="email" required>
+          <input type="password" id="ob-password" data-i18n="ob.password" placeholder="Mot de passe" autocomplete="current-password" required>
+          <button type="submit" id="onboarding-login-btn" data-i18n="ob.login_btn">Se connecter</button>
           <p id="onboarding-error"></p>
         </form>
 
-        <div id="onboarding-divider"><span>ou</span></div>
+        <div id="onboarding-divider"><span data-i18n="ob.or">ou</span></div>
 
-        <button id="onboarding-signup-btn">Créer un compte</button>
-        <button id="onboarding-skip">Continuer sans compte</button>
+        <button id="onboarding-signup-btn" data-i18n="ob.signup">Créer un compte</button>
+        <button id="onboarding-skip" data-i18n="ob.skip">Continuer sans compte</button>
       </div>
     </div>
   </div>
@@ -84,7 +85,7 @@
       <div id="url-security-icon">
         <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1L2 3.5v3C2 10 4.2 12.5 7 13.5 9.8 12.5 12 10 12 6.5v-3L7 1z" stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.4"/></svg>
       </div>
-      <input type="text" id="url-bar" placeholder="Rechercher ou entrer une URL..." spellcheck="false" autocomplete="off">
+      <input type="text" id="url-bar" data-i18n="url.placeholder" placeholder="Rechercher ou entrer une URL..." spellcheck="false" autocomplete="off">
       <button id="btn-go" class="nav-btn" title="Aller">
         <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7h10M9 4l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
       </button>
@@ -97,6 +98,13 @@
       <button id="btn-open-sivara" class="nav-btn" title="Ouvrir un fichier .sivara">
         <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 2h5l3 3v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M9 2v3h3" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
       </button>
+      
+      <!-- Language Display -->
+      <div id="lang-display" style="display: flex; align-items: center; justify-content: center; margin-left: 4px; padding: 0 4px;">
+         <img src="https://flagcdn.com/w20/ca.png" alt="CA" style="height: 12px; width: 18px; object-fit: cover;" />
+         <span id="current-lang-code" style="font-size: 11px; margin-left: 4px; color: var(--text-tertiary); text-transform: uppercase;">EN</span>
+      </div>
+
       <div id="account-area">
         <button id="btn-account" class="nav-btn account-btn" title="Compte Sivara">
           <div id="account-avatar" class="account-avatar">
@@ -107,13 +115,13 @@
           <!-- Logged out state -->
           <div id="account-logged-out">
             <div class="account-panel-header">
-              <h3>Connectez-vous</h3>
-              <p>Synchronisez vos documents.</p>
+              <h3 data-i18n="account.login_title">Connectez-vous</h3>
+              <p data-i18n="account.login_sub">Synchronisez vos documents.</p>
             </div>
             <div class="account-form">
-              <input type="email" id="login-email" placeholder="Adresse e-mail" autocomplete="email">
-              <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password">
-              <button id="btn-login" class="account-submit-btn">Se connecter</button>
+              <input type="email" id="login-email" data-i18n="ob.email" placeholder="Adresse e-mail" autocomplete="email">
+              <input type="password" id="login-password" data-i18n="ob.password" placeholder="Mot de passe" autocomplete="current-password">
+              <button id="btn-login" class="account-submit-btn" data-i18n="account.btn_login">Se connecter</button>
               <p id="login-error" class="account-error" style="display: none;"></p>
             </div>
           </div>
@@ -127,11 +135,11 @@
               <p id="profile-email">—</p>
             </div>
             <div class="account-actions">
-              <button id="btn-sync-now" class="account-action-btn">
+              <button id="btn-sync-now" class="account-action-btn" data-i18n="account.btn_sync">
                 <svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 7a6 6 0 0110-4.5M13 7a6 6 0 01-10 4.5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
                 Synchroniser
               </button>
-              <button id="btn-logout" class="account-action-btn account-action-danger">
+              <button id="btn-logout" class="account-action-btn account-action-danger" data-i18n="account.btn_logout">
                 <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5 2H3a1 1 0 00-1 1v8a1 1 0 001 1h2M8 10l3-3-3-3M11 7H5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
                 Se déconnecter
               </button>
@@ -158,7 +166,7 @@
         </div>
         <div id="ntp-search">
           <svg width="18" height="18" viewBox="0 0 18 18" class="ntp-search-icon"><circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 12l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <input type="text" id="ntp-search-input" placeholder="Rechercher sur le web..." spellcheck="false" autocomplete="off">
+          <input type="text" id="ntp-search-input" data-i18n="ntp.search_placeholder" placeholder="Rechercher sur le web..." spellcheck="false" autocomplete="off">
         </div>
 
         <div id="ntp-shortcuts">

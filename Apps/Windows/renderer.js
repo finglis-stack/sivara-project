@@ -26,6 +26,13 @@ class SivaraBrowser {
     this.createNewTab();
     this.updateGreeting();
 
+    window.addEventListener('languageChanged', (e) => {
+      this.updateGreeting();
+      // Update the current lang UI indicator
+      const langCodeEl = document.getElementById('current-lang-code');
+      if (langCodeEl) langCodeEl.textContent = e.detail.toUpperCase();
+    });
+
     // Listen for .sivara file opens from main process
     if (window.electronAPI) {
       window.electronAPI.onOpenSivaraFile((filePath) => {
@@ -284,9 +291,9 @@ class SivaraBrowser {
     const el = document.getElementById('ntp-greeting');
     if (!el) return;
     const hour = new Date().getHours();
-    let greeting = 'Bonjour';
-    if (hour >= 18) greeting = 'Bonsoir';
-    else if (hour >= 12) greeting = 'Bon après-midi';
+    let greeting = window.t('ntp.greeting.morning');
+    if (hour >= 18) greeting = window.t('ntp.greeting.evening');
+    else if (hour >= 12) greeting = window.t('ntp.greeting.afternoon');
     if (this.account?.name) {
       greeting += `, ${this.account.name.split(' ')[0]}`;
     }
@@ -359,6 +366,7 @@ class SivaraBrowser {
         email: user.email,
         name: user.user_metadata?.full_name || user.email.split('@')[0],
         avatar_url: user.user_metadata?.avatar_url || null,
+        language: user.user_metadata?.language || 'en', // default logic
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       };
@@ -366,6 +374,9 @@ class SivaraBrowser {
       await window.electronAPI.saveAccount(this.account);
       this.updateAccountUI();
       this.updateGreeting();
+      if (this.account.language && window.setLanguage) {
+        window.setLanguage(this.account.language);
+      }
       console.log('Auto-login from webview successful:', this.account.email);
     } catch (err) {
       // Silently fail — user may not have completed signup yet
@@ -390,7 +401,10 @@ class SivaraBrowser {
         if (res.ok) {
           const user = await res.json();
           this.account = { ...data, user };
-          this.showLoggedIn(user);
+          this.showLoggedIn(user, data); // passing profile from local cache if saved
+          if (this.account?.language && window.setLanguage) {
+              window.setLanguage(this.account.language);
+          }
         } else {
           // Token expired — try refresh
           const refreshed = await this.refreshToken(data.refresh_token);
@@ -440,7 +454,7 @@ class SivaraBrowser {
 
       // Fetch profile
       const profileRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${data.user.id}&select=first_name,last_name,avatar_url`,
+        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${data.user.id}&select=first_name,last_name,avatar_url,language`,
         {
           headers: {
             Authorization: `Bearer ${data.access_token}`,
@@ -460,6 +474,7 @@ class SivaraBrowser {
         first_name: profile.first_name || '',
         last_name: profile.last_name || '',
         avatar_url: profile.avatar_url || '',
+        language: profile.language || 'en',
       };
 
       console.log('[Auth] Login successful! Saving account...');
@@ -475,6 +490,10 @@ class SivaraBrowser {
 
       this.account = { ...accountData, user: data.user };
       this.showLoggedIn(data.user, profile);
+      
+      if (accountData.language && window.setLanguage) {
+          window.setLanguage(accountData.language);
+      }
 
       // Clear form
       this.loginEmail.value = '';
@@ -606,7 +625,7 @@ class SivaraBrowser {
     const tabId = this.tabIdCounter++;
     const tab = {
       id: tabId,
-      title: 'Nouvel onglet',
+      title: window.t('tab.new'),
       url: url || this.homePage,
       webview: null,
       isLoading: false,
@@ -793,7 +812,7 @@ class SivaraBrowser {
     }
 
     tab.url = this.homePage;
-    tab.title = 'Nouvel onglet';
+    tab.title = window.t('tab.new');
     this.updateTabTitle(tab.id, tab.title);
     this.newTabPage.classList.add('active');
     this.urlBar.value = '';

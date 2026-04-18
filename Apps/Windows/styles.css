@@ -4,29 +4,29 @@
    ============================================ */
 
 :root {
-  --bg-primary: #FAFAF8;
-  --bg-secondary: #F5F5F0;
-  --bg-tertiary: #EEEDE8;
+  --bg-primary: #FAF9F4;
+  --bg-secondary: #F0EFEC;
+  --bg-tertiary: #E8E7E4;
   --bg-elevated: #FFFFFF;
-  --bg-hover: #F0EFE8;
-  --bg-active: #E8E7E0;
+  --bg-hover: #EBEBE6;
+  --bg-active: #E0DFDA;
 
-  --text-primary: #2D2D2D;
-  --text-secondary: #6B6B6B;
-  --text-tertiary: #9A9A9A;
-  --text-placeholder: #B8B8B8;
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-tertiary: #888888;
+  --text-placeholder: #AAAAAA;
 
-  --border-color: #E5E4DE;
-  --border-light: #EDECE6;
+  --border-color: #c5c5d3;
+  --border-light: rgba(197, 197, 211, 0.3);
 
-  --accent-primary: #2D2D2D;
-  --accent-warm: #8B7355;
-  --accent-link: #4A6FA5;
+  --accent-primary: #00236F;
+  --accent-warm: #00236F;
+  --accent-link: #00236F;
 
-  --danger: #C75050;
-  --danger-hover: #B04040;
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
 
-  --loading-gradient: linear-gradient(90deg, #B8A990, #8B7355, #B8A990, #8B7355);
+  --loading-gradient: linear-gradient(90deg, #AAB8D9, #00236F, #AAB8D9, #00236F);
 
   --titlebar-height: 36px;
   --tabbar-height: 40px;
@@ -35,10 +35,10 @@
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
 
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-pill: 100px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 0px;
 }
 
 /* ============================================
@@ -614,7 +614,7 @@ input { font-family: inherit; border: none; background: none; outline: none; col
   overflow: hidden;
 }
 
-/* Pale blue geometric shapes */
+/* Pale blue geometric shapes (Adapted to Sivara Deep Blue / corporate clean) */
 .ob-shape {
   position: absolute;
   z-index: 0;
@@ -622,21 +622,21 @@ input { font-family: inherit; border: none; background: none; outline: none; col
 .ob-shape-1 {
   top: -100px; left: -60px;
   width: 360px; height: 360px;
-  border-radius: 50%;
-  background: rgba(186, 206, 240, 0.35);
+  border-radius: 0;
+  background: rgba(0, 35, 111, 0.05);
 }
 .ob-shape-2 {
   bottom: -80px; right: -40px;
   width: 300px; height: 300px;
-  border-radius: 24px;
-  background: rgba(172, 196, 238, 0.28);
-  transform: rotate(35deg);
+  border-radius: 0;
+  background: rgba(0, 35, 111, 0.03);
+  transform: rotate(15deg);
 }
 .ob-shape-3 {
   top: 40%; right: 8%;
   width: 140px; height: 140px;
-  border-radius: 50%;
-  background: rgba(200, 216, 245, 0.25);
+  border-radius: 0;
+  background: rgba(0, 35, 111, 0.04);
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -646,8 +646,8 @@ input { font-family: inherit; border: none; background: none; outline: none; col
   max-width: 95vw;
   max-height: 90vh;
   background: var(--bg-elevated);
-  border: none;
-  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
   z-index: 1;
   position: relative;
   box-shadow: 0 24px 80px rgba(0,0,0,0.08);
