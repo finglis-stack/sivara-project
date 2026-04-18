@@ -370,7 +370,10 @@ const Index = () => {
                   {t('about.navLink')}
                 </button>
                 <button 
-                  onClick={() => navigate('/pricing')} 
+                  onClick={() => {
+                      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                      window.location.href = isLocal ? '/pricing' : 'https://account.sivara.ca/pricing';
+                  }} 
                   className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block translate-y-[2px]"
                 >
                   {t('pricing.navLink')}
@@ -418,7 +421,10 @@ const Index = () => {
                     {t('about.navLink')}
                   </button>
                   <button 
-                    onClick={() => navigate('/pricing')} 
+                    onClick={() => {
+                        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                        window.location.href = isLocal ? '/pricing' : 'https://account.sivara.ca/pricing';
+                    }} 
                     className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block translate-y-[2px]"
                   >
                     {t('pricing.navLink')}
