@@ -2,8 +2,6 @@ const i18nDictionary = {
   fr: {
     "ob.welcome": "Bienvenue sur Sivara",
     "ob.subtitle": "Connectez-vous pour synchroniser vos documents et retrouver votre espace de travail.",
-    "ob.email": "Adresse e-mail",
-    "ob.password": "Mot de passe",
     "ob.login_btn": "Se connecter",
     "ob.or": "ou",
     "ob.signup": "Créer un compte",
@@ -26,8 +24,6 @@ const i18nDictionary = {
   en: {
     "ob.welcome": "Welcome to Sivara",
     "ob.subtitle": "Log in to sync your documents and recover your workspace.",
-    "ob.email": "Email address",
-    "ob.password": "Password",
     "ob.login_btn": "Log in",
     "ob.or": "or",
     "ob.signup": "Create an account",

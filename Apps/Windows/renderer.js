@@ -75,15 +75,13 @@ class SivaraBrowser {
     this.accountAvatar = document.getElementById('account-avatar');
     this.accountLoggedOut = document.getElementById('account-logged-out');
     this.accountLoggedIn = document.getElementById('account-logged-in');
-    this.loginEmail = document.getElementById('login-email');
-    this.loginPassword = document.getElementById('login-password');
     this.btnLogin = document.getElementById('btn-login');
-    this.loginError = document.getElementById('login-error');
     this.profileName = document.getElementById('profile-name');
     this.profileEmail = document.getElementById('profile-email');
     this.profileAvatarLarge = document.getElementById('profile-avatar-large');
     this.btnSyncNow = document.getElementById('btn-sync-now');
     this.btnLogout = document.getElementById('btn-logout');
+    this.btnPanelSignup = document.getElementById('btn-panel-signup');
   }
 
   bindEvents() {
@@ -149,11 +147,16 @@ class SivaraBrowser {
       }
     });
 
-    // Login
+    // Login button => open web login page
     this.btnLogin.addEventListener('click', () => this.handleLogin());
-    this.loginPassword.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this.handleLogin();
-    });
+
+    // Panel signup button => open web onboarding page
+    if (this.btnPanelSignup) {
+      this.btnPanelSignup.addEventListener('click', () => {
+        this.accountPanel.style.display = 'none';
+        this.navigate('https://account.sivara.ca/onboarding');
+      });
+    }
 
     // Logout
     this.btnLogout.addEventListener('click', () => this.handleLogout());
@@ -201,24 +204,20 @@ class SivaraBrowser {
 
   bindOnboarding() {
     this.obOverlay = document.getElementById('onboarding-overlay');
-    this.obForm = document.getElementById('onboarding-login-form');
-    this.obEmail = document.getElementById('ob-email');
-    this.obPassword = document.getElementById('ob-password');
     this.obLoginBtn = document.getElementById('onboarding-login-btn');
-    this.obError = document.getElementById('onboarding-error');
     this.obSignupBtn = document.getElementById('onboarding-signup-btn');
     this.obSkipBtn = document.getElementById('onboarding-skip');
 
-    if (this.obForm) {
-      this.obForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        this.onboardingLogin();
+    if (this.obLoginBtn) {
+      this.obLoginBtn.addEventListener('click', () => {
+        this.obOverlay.style.display = 'none';
+        localStorage.setItem('sivara-onboarded-v2', 'true');
+        this.navigate('https://account.sivara.ca/login');
       });
     }
 
     if (this.obSignupBtn) {
       this.obSignupBtn.addEventListener('click', () => {
-        // Open signup page on sivara.ca in the browser
         this.obOverlay.style.display = 'none';
         localStorage.setItem('sivara-onboarded-v2', 'true');
         this.navigate('https://account.sivara.ca/onboarding');
@@ -234,56 +233,9 @@ class SivaraBrowser {
   }
 
   checkOnboarding() {
-    // v2 flag — resets for users who had the old dark-theme onboarding
     const onboarded = localStorage.getItem('sivara-onboarded-v2');
     if (!onboarded) {
       this.obOverlay.style.display = 'flex';
-    }
-  }
-
-  async onboardingLogin() {
-    const email = this.obEmail.value.trim();
-    const password = this.obPassword.value;
-    if (!email || !password) return;
-
-    this.obLoginBtn.textContent = 'Connexion...';
-    this.obLoginBtn.disabled = true;
-    this.obError.style.display = 'none';
-
-    try {
-      const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error_description || data.msg || 'Identifiants invalides');
-
-      // Save account
-      this.account = {
-        email: data.user.email,
-        name: data.user.user_metadata?.full_name || data.user.email.split('@')[0],
-        avatar_url: data.user.user_metadata?.avatar_url || null,
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-      };
-
-      await window.electronAPI.saveAccount(this.account);
-      this.updateAccountUI();
-
-      // Close onboarding
-      localStorage.setItem('sivara-onboarded-v2', 'true');
-      this.obOverlay.style.display = 'none';
-    } catch (err) {
-      this.obError.textContent = err.message;
-      this.obError.style.display = 'block';
-    } finally {
-      this.obLoginBtn.textContent = 'Se connecter';
-      this.obLoginBtn.disabled = false;
     }
   }
 
@@ -313,29 +265,24 @@ class SivaraBrowser {
     }
   }
 
-  // ---- Auto-login from Webview ----
+  // ---- Auto-login from Webview (Continuous Session Polling) ----
 
-  async tryExtractSessionFromWebview(webview) {
+  async checkWebviewSessionState(webview) {
     try {
-      // Wait a bit for the page to fully load and Supabase to initialize
-      await new Promise(r => setTimeout(r, 2000));
-
       const result = await webview.executeJavaScript(`
         (function() {
-          // Find the Supabase auth key in localStorage
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key.includes('auth-token')) {
+            if (key && key.startsWith('sb-') && key.includes('auth')) {
               try {
                 const val = JSON.parse(localStorage.getItem(key));
                 if (val && val.access_token) return JSON.stringify(val);
               } catch(e) {}
             }
           }
-          // Also check sb- prefixed keys
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key.startsWith('sb-') && key.includes('auth')) {
+            if (key && key.includes('auth-token')) {
               try {
                 const val = JSON.parse(localStorage.getItem(key));
                 if (val && val.access_token) return JSON.stringify(val);
@@ -346,11 +293,33 @@ class SivaraBrowser {
         })()
       `);
 
-      if (!result) return;
+      if (result) {
+        // There IS a session in the webview
+        const session = JSON.parse(result);
+        if (!session.access_token) return;
 
-      const session = JSON.parse(result);
-      if (!session.access_token) return;
+        // If we are NOT logged in natively, or token differs => sync login
+        if (!this.account || this.account.access_token !== session.access_token) {
+          console.log('[SessionSync] New session detected, syncing...');
+          await this.syncFromWebSession(session);
+        }
+      } else {
+        // There is NO session in the webview
+        // If we ARE logged in natively => user logged out on the web => sync logout
+        if (this.account) {
+          console.log('[SessionSync] Session gone from web, syncing logout...');
+          await this.handleLogout();
+          this.updateGreeting();
+        }
+      }
+    } catch (err) {
+      // Silently fail
+      console.log('[SessionSync] Poll error:', err.message);
+    }
+  }
 
+  async syncFromWebSession(session) {
+    try {
       // Fetch user info with the token
       const userResp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
         headers: {
@@ -362,25 +331,46 @@ class SivaraBrowser {
       if (!userResp.ok) return;
       const user = await userResp.json();
 
+      // Fetch profile for name, avatar, language
+      const profileRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=first_name,last_name,avatar_url,language`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+        }
+      );
+      const profiles = await profileRes.json();
+      const profile = profiles?.[0] || {};
+
       this.account = {
         email: user.email,
-        name: user.user_metadata?.full_name || user.email.split('@')[0],
-        avatar_url: user.user_metadata?.avatar_url || null,
-        language: user.user_metadata?.language || 'en', // default logic
+        user_id: user.id,
+        first_name: profile.first_name || '',
+        last_name: profile.last_name || '',
+        avatar_url: profile.avatar_url || null,
+        language: profile.language || 'en',
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       };
 
       await window.electronAPI.saveAccount(this.account);
-      this.updateAccountUI();
+      this.showLoggedIn(user, profile);
       this.updateGreeting();
       if (this.account.language && window.setLanguage) {
         window.setLanguage(this.account.language);
       }
-      console.log('Auto-login from webview successful:', this.account.email);
+
+      // Close onboarding if it's still showing
+      if (this.obOverlay) {
+        this.obOverlay.style.display = 'none';
+        localStorage.setItem('sivara-onboarded-v2', 'true');
+      }
+
+      console.log('[SessionSync] Synced from web:', this.account.email);
     } catch (err) {
-      // Silently fail — user may not have completed signup yet
-      console.log('Session extraction pending:', err.message);
+      console.log('[SessionSync] Sync error:', err.message);
     }
   }
 
@@ -419,91 +409,9 @@ class SivaraBrowser {
   }
 
   async handleLogin() {
-    const email = this.loginEmail.value.trim();
-    const password = this.loginPassword.value;
-
-    if (!email || !password) {
-      this.showLoginError('Veuillez remplir tous les champs.');
-      return;
-    }
-
-    this.btnLogin.disabled = true;
-    this.btnLogin.textContent = 'Connexion...';
-    this.loginError.style.display = 'none';
-
-    try {
-      console.log('[Auth] Attempting login for:', email);
-      console.log('[Auth] POST to:', `${SUPABASE_URL}/auth/v1/token?grant_type=password`);
-
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      console.log('[Auth] Response status:', res.status);
-      const data = await res.json();
-      console.log('[Auth] Response data:', JSON.stringify(data, null, 2));
-
-      if (!res.ok || data.error) {
-        throw new Error(data.error_description || data.msg || data.error || 'Identifiants invalides');
-      }
-
-      // Fetch profile
-      const profileRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${data.user.id}&select=first_name,last_name,avatar_url,language`,
-        {
-          headers: {
-            Authorization: `Bearer ${data.access_token}`,
-            apikey: SUPABASE_ANON_KEY,
-          },
-        }
-      );
-      const profiles = await profileRes.json();
-      const profile = profiles?.[0] || {};
-
-      // Save locally
-      const accountData = {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        user_id: data.user.id,
-        email: data.user.email,
-        first_name: profile.first_name || '',
-        last_name: profile.last_name || '',
-        avatar_url: profile.avatar_url || '',
-        language: profile.language || 'en',
-      };
-
-      console.log('[Auth] Login successful! Saving account...');
-      console.log('[Auth] electronAPI exists:', !!window.electronAPI);
-      console.log('[Auth] saveAccount exists:', !!(window.electronAPI && window.electronAPI.saveAccount));
-
-      if (window.electronAPI && window.electronAPI.saveAccount) {
-        await window.electronAPI.saveAccount(accountData);
-        console.log('[Auth] Account saved to disk.');
-      } else {
-        console.warn('[Auth] electronAPI.saveAccount not available, storing in memory only.');
-      }
-
-      this.account = { ...accountData, user: data.user };
-      this.showLoggedIn(data.user, profile);
-      
-      if (accountData.language && window.setLanguage) {
-          window.setLanguage(accountData.language);
-      }
-
-      // Clear form
-      this.loginEmail.value = '';
-      this.loginPassword.value = '';
-    } catch (err) {
-      this.showLoginError(err.message);
-    } finally {
-      this.btnLogin.disabled = false;
-      this.btnLogin.textContent = 'Se connecter';
-    }
+    // Web-based: open login page in a tab instead of local form
+    this.accountPanel.style.display = 'none';
+    this.navigate('https://account.sivara.ca/login');
   }
 
   async refreshToken(refreshToken) {
@@ -707,6 +615,11 @@ class SivaraBrowser {
 
     const tab = this.tabs[tabIndex];
 
+    // Clean up session polling interval
+    if (tab._sessionPollId) {
+      clearInterval(tab._sessionPollId);
+    }
+
     // Remove webview
     if (tab.webview) {
       tab.webview.remove();
@@ -850,9 +763,16 @@ class SivaraBrowser {
         this.updateSecurityIcon(e.url);
       }
 
-      // Auto-detect login on account.sivara.ca — extract session
-      if (e.url.includes('account.sivara.ca') && !this.account) {
-        this.tryExtractSessionFromWebview(webview);
+      // Auto-detect session changes on sivara.ca — continuous sync
+      if (e.url.includes('sivara.ca')) {
+        // Poll immediately after navigation and then set up repeat polling
+        setTimeout(() => this.checkWebviewSessionState(webview), 2000);
+        
+        // Clear any existing poll interval for this tab
+        if (tab._sessionPollId) clearInterval(tab._sessionPollId);
+        tab._sessionPollId = setInterval(() => {
+          if (tab.webview) this.checkWebviewSessionState(webview);
+        }, 4000);
       }
     });
 
