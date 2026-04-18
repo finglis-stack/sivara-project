@@ -149,28 +149,28 @@ const Onboarding = () => {
   };
 
   return (
-    <div className="min-h-screen flex bg-white font-sans selection:bg-gray-100">
+    <div className="min-h-screen flex bg-[#faf9f4] font-sans selection:bg-[#00236F]/20">
 
       {/* GAUCHE : FORMULAIRE */}
-      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-gray-100 relative z-10 bg-white">
+      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-24 flex flex-col justify-center border-r border-[#c5c5d3]/30 relative z-10 bg-[#faf9f4]">
         <div className="max-w-md mx-auto w-full space-y-8">
 
           {/* Header */}
           <div className="space-y-6">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.href = '/'}>
               <img src="/sivara-logo.png" alt="Sivara" className="h-10 w-10 object-contain" />
-              <span className="text-xl font-bold tracking-tight text-gray-900">Sivara</span>
+              <span className="text-xl font-bold tracking-tight text-[#111111]">Sivara</span>
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Créer un compte</h1>
-              <p className="text-gray-500 text-sm font-light">Rejoignez l'écosystème numérique souverain.</p>
+              <h1 className="text-4xl font-light tracking-tight text-[#111111]">Créer un compte</h1>
+              <p className="text-[#5a5b67] text-sm font-light">Rejoignez l'écosystème numérique souverain.</p>
             </div>
 
             {/* Stepper */}
             <div className="flex items-center gap-2">
-              <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${step >= 1 ? 'bg-gray-900' : 'bg-gray-100'}`}></div>
-              <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${step >= 2 ? 'bg-gray-900' : 'bg-gray-100'}`}></div>
+              <div className={`h-1 flex-1 rounded-none transition-all duration-500 ${step >= 1 ? 'bg-[#00236F]' : 'bg-[#c5c5d3]/30'}`}></div>
+              <div className={`h-1 flex-1 rounded-none transition-all duration-500 ${step >= 2 ? 'bg-[#00236F]' : 'bg-[#c5c5d3]/30'}`}></div>
             </div>
           </div>
 
@@ -181,20 +181,20 @@ const Onboarding = () => {
               <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Prénom</Label>
-                    <Input id="firstName" placeholder="Jean" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" required />
+                    <Label htmlFor="firstName" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Prénom</Label>
+                    <Input id="firstName" placeholder="Jean" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" required />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Nom</Label>
-                    <Input id="lastName" placeholder="Dupont" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" required />
+                    <Label htmlFor="lastName" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Nom</Label>
+                    <Input id="lastName" placeholder="Dupont" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" required />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="phone" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Téléphone</Label>
+                  <Label htmlFor="phone" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Téléphone</Label>
                   <div className="flex gap-2">
                     <Select value={formData.phoneCountryCode} onValueChange={(value) => setFormData({ ...formData, phoneCountryCode: value })}>
-                      <SelectTrigger className="w-[110px] h-12 bg-gray-50 border-gray-200"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-[110px] h-12 bg-white border-[#c5c5d3]/30 rounded-none shadow-sm text-[#111111]"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {countryCodes.map((country) => (
                           <SelectItem key={country.country} value={country.code}>
@@ -210,53 +210,53 @@ const Onboarding = () => {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input id="phone" type="tel" placeholder="514 123 4567" value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} className="flex-1 h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" />
+                    <Input id="phone" type="tel" placeholder="514 123 4567" value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} className="flex-1 h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" />
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-xs font-medium text-gray-700 uppercase tracking-wide">Type de compte</Label>
+                  <Label className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Type de compte</Label>
                   <RadioGroup value={formData.accountType} onValueChange={(value) => setFormData({ ...formData, accountType: value })} className="grid grid-cols-2 gap-4">
-                    <Label htmlFor="individual" className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.accountType === 'individual' ? 'border-gray-900 bg-gray-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                    <Label htmlFor="individual" className={`flex flex-col items-center justify-center p-4 rounded-none border-2 cursor-pointer transition-all ${formData.accountType === 'individual' ? 'border-[#00236F] bg-white text-[#00236F]' : 'border-[#c5c5d3]/30 bg-white text-[#5a5b67] hover:border-[#c5c5d3]'}`}>
                       <RadioGroupItem value="individual" id="individual" className="sr-only" />
-                      <User className={`h-6 w-6 mb-2 ${formData.accountType === 'individual' ? 'text-gray-900' : 'text-gray-400'}`} />
+                      <User className="h-6 w-6 mb-2" />
                       <span className="text-sm font-medium">Personnel</span>
                     </Label>
-                    <Label htmlFor="corporate" className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.accountType === 'corporate' ? 'border-gray-900 bg-gray-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                    <Label htmlFor="corporate" className={`flex flex-col items-center justify-center p-4 rounded-none border-2 cursor-pointer transition-all ${formData.accountType === 'corporate' ? 'border-[#00236F] bg-white text-[#00236F]' : 'border-[#c5c5d3]/30 bg-white text-[#5a5b67] hover:border-[#c5c5d3]'}`}>
                       <RadioGroupItem value="corporate" id="corporate" className="sr-only" />
-                      <Building2 className={`h-6 w-6 mb-2 ${formData.accountType === 'corporate' ? 'text-gray-900' : 'text-gray-400'}`} />
+                      <Building2 className="h-6 w-6 mb-2" />
                       <span className="text-sm font-medium">Entreprise</span>
                     </Label>
                   </RadioGroup>
                 </div>
 
                 <div className="flex items-start space-x-3 pt-2">
-                  <Checkbox id="terms" checked={formData.termsAccepted} onCheckedChange={(checked) => setFormData({ ...formData, termsAccepted: checked as boolean })} className="mt-1" />
-                  <label htmlFor="terms" className="text-sm text-gray-500 leading-relaxed cursor-pointer">
-                    J'accepte les <a href="https://help.sivara.ca/article/conditions-dutilisation" className="text-gray-900 underline">Conditions d'utilisation</a> et la <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="text-gray-900 underline">Politique de confidentialité</a>.
+                  <Checkbox id="terms" checked={formData.termsAccepted} onCheckedChange={(checked) => setFormData({ ...formData, termsAccepted: checked as boolean })} className="mt-1 border-[#c5c5d3]" />
+                  <label htmlFor="terms" className="text-sm text-[#5a5b67] leading-relaxed cursor-pointer font-light">
+                    J'accepte les <a href="https://help.sivara.ca/article/conditions-dutilisation" className="text-[#00236F] font-medium underline">Conditions d'utilisation</a> et la <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="text-[#00236F] font-medium underline">Politique de confidentialité</a>.
                   </label>
                 </div>
 
-                <Button type="button" onClick={handleNextStep} className="w-full h-12 bg-gray-900 hover:bg-black text-white font-medium rounded-lg transition-all" disabled={!formData.termsAccepted}>
-                  Suivant <ArrowRight className="ml-2 h-4 w-4" />
+                <Button type="button" onClick={handleNextStep} className="w-full h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-bold rounded-none transition-all uppercase tracking-widest text-sm" disabled={!formData.termsAccepted}>
+                  Suivant
                 </Button>
               </div>
             ) : (
               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Email de connexion</Label>
-                  <Input id="email" type="email" placeholder="jean@exemple.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" required />
+                  <Label htmlFor="email" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Email de connexion</Label>
+                  <Input id="email" type="email" placeholder="jean@exemple.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" required />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-xs font-medium text-gray-700 uppercase tracking-wide">Mot de passe</Label>
-                  <Input id="password" type="password" placeholder="Minimum 6 caractères" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all" required />
-                  <p className="text-xs text-gray-400">Utilisez un mot de passe fort et unique.</p>
+                  <Label htmlFor="password" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Mot de passe</Label>
+                  <Input id="password" type="password" placeholder="Minimum 6 caractères" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" required />
+                  <p className="text-xs text-[#5a5b67] font-light">Utilisez un mot de passe fort et unique.</p>
                 </div>
 
                 <div className="flex gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 px-6 border-gray-200 text-gray-600 hover:bg-gray-50">Retour</Button>
-                  <Button type="submit" className="flex-1 h-12 bg-gray-900 hover:bg-black text-white font-medium rounded-lg transition-all" disabled={isLoading}>
+                  <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 px-6 border-[#c5c5d3]/30 text-[#5a5b67] hover:bg-[#efeee9] rounded-none uppercase tracking-wider text-sm font-bold">Retour</Button>
+                  <Button type="submit" className="flex-1 h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-bold rounded-none transition-all uppercase tracking-widest text-sm" disabled={isLoading}>
                     {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Créer mon compte'}
                   </Button>
                 </div>
@@ -265,9 +265,9 @@ const Onboarding = () => {
           </form>
 
           <div className="text-center">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-[#5a5b67]">
               Déjà inscrit ?{' '}
-              <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="font-semibold text-gray-900 hover:underline">
+              <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="font-semibold text-[#00236F] hover:underline">
                 Se connecter
               </a>
             </p>
@@ -276,13 +276,13 @@ const Onboarding = () => {
       </div>
 
       {/* DROITE : LOTTIE ANIMATION */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gray-50 items-center justify-center p-12 relative overflow-hidden flex-col text-center">
+      <div className="hidden lg:flex lg:w-1/2 bg-white items-center justify-center p-12 relative overflow-hidden flex-col text-center">
         <div className="w-64 h-64 mb-8">
           <Lottie animationData={animationData} loop={true} />
         </div>
         <div className="max-w-md space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-          <h3 className="text-xl font-bold text-gray-900">Bienvenue dans la résistance.</h3>
-          <p className="text-gray-500 text-sm">Promis, on ne vendra pas votre historique à des robots publicitaires. (Sauf s'ils demandent gentiment... non, on rigole).</p>
+          <h3 className="text-xl font-light tracking-tight text-[#111111]">Bienvenue dans la résistance.</h3>
+          <p className="text-[#5a5b67] text-sm font-light">Promis, on ne vendra pas votre historique à des robots publicitaires. (Sauf s'ils demandent gentiment... non, on rigole).</p>
         </div>
       </div>
 
