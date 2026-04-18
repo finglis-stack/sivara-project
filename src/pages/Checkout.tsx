@@ -4,28 +4,46 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { showSuccess, showError } from '@/utils/toast';
-import { Loader2, ArrowRight, Check, ShieldCheck, Lock, CreditCard, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowRight, Lock, AlertCircle } from 'lucide-react';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import LanguageSelector from '@/components/LanguageSelector';
 
 // --- CONFIGURATION ---
-// ID Produit Stripe (Doit exister dans votre dashboard Stripe)
 const STRIPE_PRICE_ID_MONTHLY = 'price_1SWTi12UEuKhlvPiQdVw7Jwl'; 
 const STRIPE_PUBLISHABLE_KEY = 'pk_test_51SWTTe2UEuKhlvPiZK33IJhJSYPTaYPfkQX9KcBUt39uD4w0vEf8z5iTYufLx01PfJyNvgN4Pa20iGXskGEzPl7x00danXtwmY';
 
+// Updated appearance to match Sivara's 90-degree cream theme
 const Appearance = {
   theme: 'flat',
   variables: {
     fontFamily: '"Inter", sans-serif',
-    colorPrimary: '#000000',
-    colorBackground: '#ffffff',
-    colorText: '#30313d',
+    colorPrimary: '#00236F',
+    colorBackground: 'transparent',
+    colorText: '#111111',
     colorDanger: '#df1b41',
-    borderRadius: '8px',
+    borderRadius: '0px',
   },
   rules: {
-    '.Input': { border: '1px solid #E5E7EB', boxShadow: 'none', padding: '12px' },
-    '.Input:focus': { border: '1px solid #000000', boxShadow: 'none' },
+    '.Input': { 
+        border: '1px solid rgba(197, 197, 211, 0.4)', 
+        boxShadow: 'none', 
+        padding: '12px',
+        backgroundColor: '#FFFFFF'
+    },
+    '.Input:focus': { 
+        border: '1px solid #00236F', 
+        boxShadow: 'none' 
+    },
+    '.Tab': {
+        border: '1px solid rgba(197, 197, 211, 0.4)', 
+        backgroundColor: '#FFFFFF',
+        borderRadius: '0px',
+    },
+    '.Tab--selected': {
+        border: '1px solid #00236F', 
+        backgroundColor: '#FFFFFF',
+    }
   }
 };
 
@@ -79,29 +97,29 @@ const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 animate-in fade-in duration-700">
+    <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-700 w-full">
       <PaymentElement id="payment-element" options={{ layout: "tabs" }} />
       
-      {message && <div className="p-4 bg-red-50 text-red-600 text-sm rounded-lg">{message}</div>}
+      {message && <div className="p-4 bg-red-50 text-red-600 text-sm rounded-none border border-red-100">{message}</div>}
       
       <Button 
         type="submit" 
         disabled={isLoading || !stripe || !elements}
-        className="w-full h-14 bg-black hover:bg-gray-800 text-white rounded-xl text-lg font-light tracking-wide transition-all duration-300 hover:scale-[1.01] shadow-lg"
+        className="w-full h-14 bg-[#00236F] hover:bg-[#001b54] text-white rounded-none text-lg font-medium transition-all duration-300 shadow-md"
       >
         {isLoading ? (
           <Loader2 className="animate-spin h-5 w-5" />
         ) : (
-          <span className="flex items-center justify-center gap-3">
+          <span className="flex items-center justify-center gap-3 tracking-wide">
              {isTrial ? "Activer l'essai gratuit" : "Confirmer le paiement"}
              <ArrowRight className="h-4 w-4" />
           </span>
         )}
       </Button>
       
-      <div className="flex justify-center items-center gap-2 text-xs text-gray-400 font-light">
+      <div className="flex justify-center items-center gap-2 text-xs text-[#5a5b67] font-light mt-4">
          <Lock className="h-3 w-3" />
-         <span>Paiement chiffré de bout en bout. Aucune donnée bancaire stockée par Sivara.</span>
+         <span>Paiement chiffré. Aucune donnée bancaire stockée par Sivara.</span>
       </div>
     </form>
   );
@@ -121,7 +139,6 @@ const Checkout = () => {
   const [isDowngraded, setIsDowngraded] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
-  // SECUTIY: Anti-Double Init
   const initializationRef = useRef(false);
 
   useEffect(() => {
@@ -131,7 +148,6 @@ const Checkout = () => {
     }
 
     const initPayment = async () => {
-      // Si déjà lancé, on arrête tout de suite
       if (initializationRef.current) return;
       initializationRef.current = true;
 
@@ -172,7 +188,7 @@ const Checkout = () => {
         console.error(e);
         setErrorMessage(e.message || "Erreur inconnue");
         showError(e.message || "Impossible d'initialiser le paiement.");
-        initializationRef.current = false; // Reset en cas d'erreur pour permettre retry
+        initializationRef.current = false; 
       }
     };
 
@@ -181,14 +197,14 @@ const Checkout = () => {
 
   if (errorMessage) {
       return (
-          <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-white p-4 text-center">
-              <div className="bg-red-50 p-4 rounded-full">
+          <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#FAF9F4] p-4 text-center font-sans">
+              <div className="bg-red-50 p-4 rounded-none border border-red-100">
                   <AlertCircle className="h-8 w-8 text-red-500" />
               </div>
               <div className="max-w-md">
-                  <h1 className="text-xl font-semibold text-gray-900 mb-2">Erreur d'initialisation</h1>
-                  <p className="text-gray-600 mb-4">{errorMessage}</p>
-                  <Button onClick={() => window.location.reload()} variant="outline">Réessayer</Button>
+                  <h1 className="text-xl font-medium text-[#111111] mb-2">Erreur</h1>
+                  <p className="text-[#5a5b67] font-light mb-6">{errorMessage}</p>
+                  <Button onClick={() => window.location.reload()} variant="outline" className="rounded-none border-[#c5c5d3]/50">Réessayer</Button>
               </div>
           </div>
       );
@@ -197,100 +213,119 @@ const Checkout = () => {
   const isTrial = confirmedIsTrial;
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-white font-sans selection:bg-black selection:text-white">
-      
-      {/* GAUCHE : RÉCAPITULATIF */}
-      <div className="lg:w-5/12 bg-gray-50 p-8 lg:p-16 flex flex-col justify-between border-r border-gray-100">
-         <div>
-            <div className="flex items-center gap-3 mb-16 cursor-pointer opacity-70 hover:opacity-100 transition-opacity" onClick={() => navigate('/pricing')}>
-                <div className="h-8 w-8 bg-black text-white rounded-lg flex items-center justify-center">
-                    <span className="font-bold font-serif">S</span>
-                </div>
-                <span className="font-medium tracking-wide">Sivara Pro</span>
-            </div>
+    <div className="min-h-screen flex flex-col bg-[#FAF9F4] font-sans selection:bg-[#00236F] selection:text-white relative">
+      <style>{`
+          .grid-bg-pattern {
+              background-image: 
+                  linear-gradient(to right, rgba(197, 197, 211, 0.4) 1px, transparent 1px),
+                  linear-gradient(to bottom, rgba(197, 197, 211, 0.4) 1px, transparent 1px);
+              background-size: 40px 40px;
+          }
+      `}</style>
+      <div className="fixed inset-0 grid-bg-pattern opacity-50 z-0 pointer-events-none"></div>
 
-            <div className="space-y-2 mb-10">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-widest">Commande</p>
-                <h1 className="text-3xl md:text-4xl font-light text-gray-900 leading-tight">
-                    {isTrial ? "Activation de l'essai" : "Abonnement Mensuel"}
-                </h1>
-            </div>
-
-            <div className="space-y-6">
-                <div className="flex items-start gap-4">
-                    <div className="mt-1 h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center bg-white"><Check className="h-3 w-3 text-black" /></div>
-                    <div>
-                        <p className="font-medium text-gray-900">Domaine Personnalisé</p>
-                        <p className="text-sm text-gray-500 font-light">Votre identité numérique unique.</p>
-                    </div>
-                </div>
-                <div className="flex items-start gap-4">
-                    <div className="mt-1 h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center bg-white"><Check className="h-3 w-3 text-black" /></div>
-                    <div>
-                        <p className="font-medium text-gray-900">Stockage Cloud Illimité</p>
-                        <p className="text-sm text-gray-500 font-light">Sécurisé et chiffré.</p>
-                    </div>
-                </div>
-                <div className="flex items-start gap-4">
-                    <div className="mt-1 h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center bg-white"><Check className="h-3 w-3 text-black" /></div>
-                    <div>
-                        <p className="font-medium text-gray-900">Support Prioritaire</p>
-                        <p className="text-sm text-gray-500 font-light">Accès direct à l'équipe technique.</p>
-                    </div>
-                </div>
-            </div>
+      {/* Navigation */}
+      <nav className="relative z-50 w-full px-8 py-6 flex justify-between items-center max-w-screen-xl mx-auto">
+         <div onClick={() => navigate('/pricing')} className="flex items-center gap-3 cursor-pointer transition-all active:scale-95 group">
+             <div className="h-8 w-8 bg-[#00236F] text-white rounded-none flex items-center justify-center shadow-sm">
+                 <span className="font-bold font-serif leading-none">S</span>
+             </div>
+             <span className="font-medium tracking-wide text-[#111111] group-hover:text-[#00236F] transition-colors">Sivara Pro</span>
          </div>
-
-         <div className="mt-12 pt-8 border-t border-gray-200">
-            <div className="flex justify-between items-end">
-               <span className="text-sm text-gray-500 font-light">Total aujourd'hui</span>
-               <span className="text-4xl font-thin tracking-tighter">
-                   {isTrial ? '0.00 $' : '4.99 $'}
-               </span>
-            </div>
-            {isTrial ? (
-                <p className="text-right text-xs text-gray-400 mt-2 font-light">
-                    Puis 4.99 $/mois après 14 jours. Annulable à tout moment.
-                </p>
-            ) : (
-                <p className="text-right text-xs text-gray-400 mt-2 font-light">
-                    Facturé mensuellement. Annulable à tout moment.
-                </p>
-            )}
+         <div className="flex items-center gap-4">
+             <LanguageSelector />
          </div>
-      </div>
+      </nav>
 
-      {/* DROITE : FORMULAIRE */}
-      <div className="lg:w-7/12 p-8 lg:p-20 flex flex-col justify-center items-center">
-         <div className="w-full max-w-md space-y-8">
-            <div className="mb-8">
-                <h2 className="text-xl font-medium text-gray-900 mb-2">Paiement</h2>
-                <p className="text-sm text-gray-500 font-light">
-                   Entrez vos coordonnées bancaires pour {isTrial ? "valider l'empreinte" : "régler votre abonnement"}.
-                </p>
-            </div>
+      {/* Layout */}
+      <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-4 py-8">
+         <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-0 bg-[#FAF9F4] border border-[#c5c5d3]/40 shadow-sm relative overflow-hidden">
+             
+             {/* LEFT: RECAP */}
+             <div className="p-10 lg:p-16 flex flex-col justify-between border-b md:border-b-0 md:border-r border-[#c5c5d3]/40 bg-white/50 backdrop-blur-sm">
+                <div>
+                    <h1 className="text-3xl md:text-4xl font-light text-[#111111] leading-tight mb-2">
+                        {isTrial ? "Activation de l'essai" : "Abonnement Mensuel"}
+                    </h1>
+                    <p className="text-[#5a5b67] font-light mb-12">Finalisez votre inscription à l'espace Pro souverain.</p>
 
-            {isDowngraded && (
-                <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 mb-6 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-amber-800">
-                        <p className="font-semibold mb-1">Essai gratuit non disponible</p>
-                        <p>Vous avez déjà utilisé votre période d'essai gratuite. La facturation standard de 4.99 $ s'applique.</p>
+                    <div className="space-y-6">
+                        <div className="flex items-start gap-4">
+                            <span className="text-[#00236F] font-bold">—</span>
+                            <div>
+                                <p className="font-medium text-[#111111]">Espace Cloud Privé</p>
+                                <p className="text-sm text-[#5a5b67] font-light">30 GB NVMe hautement sécurisé.</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-4">
+                            <span className="text-[#00236F] font-bold">—</span>
+                            <div>
+                                <p className="font-medium text-[#111111]">Domaine Personnalisé</p>
+                                <p className="text-sm text-[#5a5b67] font-light">Votre identité numérique unique.</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-4">
+                            <span className="text-[#00236F] font-bold">—</span>
+                            <div>
+                                <p className="font-medium text-[#111111]">Assistance IA</p>
+                                <p className="text-sm text-[#5a5b67] font-light">Accès continu à nos modèles souverains.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            )}
 
-            {clientSecret && stripePromise ? (
-                // @ts-ignore
-                <Elements stripe={stripePromise} options={{ clientSecret, appearance: Appearance }}>
-                    <CheckoutForm clientSecret={clientSecret} isTrial={isTrial} />
-                </Elements>
-            ) : (
-                <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                    <Loader2 className="h-8 w-8 animate-spin text-gray-200" />
-                    <p className="text-sm text-gray-400 font-light">Initialisation sécurisée...</p>
+                <div className="mt-16 pt-8 border-t border-[#c5c5d3]/40">
+                    <div className="flex justify-between items-end">
+                       <span className="text-sm text-[#5a5b67] font-medium uppercase tracking-widest">Total aujourd'hui</span>
+                       <span className="text-4xl font-light tracking-tighter text-[#111111]">
+                           {isTrial ? '0.00 $' : '4.99 $'}
+                       </span>
+                    </div>
+                    {isTrial ? (
+                        <p className="text-right text-xs text-[#5a5b67] mt-2 font-light">
+                            Puis 4.99 $/mois après 14 jours. Annulable à tout moment.
+                        </p>
+                    ) : (
+                        <p className="text-right text-xs text-[#5a5b67] mt-2 font-light">
+                            Facturé mensuellement. Annulable à tout moment.
+                        </p>
+                    )}
                 </div>
-            )}
+             </div>
+
+             {/* RIGHT: STRIPE FORM */}
+             <div className="p-10 lg:p-16 flex flex-col justify-center bg-white">
+                <div className="w-full space-y-6">
+                    <div>
+                        <h2 className="text-xl font-medium text-[#111111] mb-1">Informations de facturation</h2>
+                        <p className="text-sm text-[#5a5b67] font-light">
+                           Entrez vos coordonnées pour {isTrial ? "valider l'empreinte" : "régler votre abonnement"}.
+                        </p>
+                    </div>
+
+                    {isDowngraded && (
+                        <div className="bg-[#FAF9F4] border border-[#c5c5d3]/40 rounded-none p-4 mb-6 flex items-start gap-3 animate-in fade-in">
+                            <AlertCircle className="h-5 w-5 text-[#111111] flex-shrink-0 mt-0.5" />
+                            <div className="text-sm text-[#111111]">
+                                <p className="font-medium mb-1">Essai gratuit expiré</p>
+                                <p className="font-light">Vous avez déjà utilisé votre période d'essai gratuite. La tarification normale s'applique.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {clientSecret && stripePromise ? (
+                        // @ts-ignore
+                        <Elements stripe={stripePromise} options={{ clientSecret, appearance: Appearance }}>
+                            <CheckoutForm clientSecret={clientSecret} isTrial={isTrial} />
+                        </Elements>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                            <Loader2 className="h-8 w-8 animate-spin text-[#c5c5d3]" />
+                            <p className="text-sm text-[#5a5b67] font-light">Initialisation sécurisée...</p>
+                        </div>
+                    )}
+                </div>
+             </div>
          </div>
       </div>
     </div>
