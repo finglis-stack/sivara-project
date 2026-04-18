@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { showSuccess, showError } from '@/utils/toast';
 import { ArrowLeft, Loader2, User, Mail, Phone, Building2, Calendar, Grid3x3, Camera, X, ArrowRight, CreditCard, ExternalLink, RefreshCw, Globe, Laptop, Search, FileText } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -38,6 +40,7 @@ interface Profile {
   subscription_status?: string;
   subscription_end_date?: string | null;
   search_documents_enabled?: boolean;
+  language?: string;
 }
 
 const countryCodes = [
@@ -55,6 +58,8 @@ const Profile = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { t } = useTranslation();
+  const { language, setLanguage } = useLanguage();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
@@ -184,6 +189,7 @@ const Profile = () => {
           phone_country_code: profile.phone_country_code,
           phone_number: profile.phone_number,
           search_documents_enabled: profile.search_documents_enabled,
+          language: language,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
@@ -269,13 +275,13 @@ const Profile = () => {
             <div className="flex items-center gap-2 sm:gap-4">
               <Button variant="ghost" size="sm" onClick={handleReturn} className="text-gray-600 hover:text-gray-900 pl-0 sm:pl-4">
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  <span className="hidden sm:inline">Retour à l'application</span>
-                  <span className="sm:hidden">Retour</span>
+                  <span className="hidden sm:inline">{t('profile.backToApp')}</span>
+                  <span className="sm:hidden">{t('profile.back')}</span>
               </Button>
               <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
-              <h1 className="text-lg sm:text-2xl font-light text-gray-900 hidden sm:block">Mon Profil</h1>
+              <h1 className="text-lg sm:text-2xl font-light text-gray-900 hidden sm:block">{t('profile.title')}</h1>
             </div>
-            <Button size="sm" onClick={handleSave} disabled={isSaving} className="bg-gray-700 hover:bg-gray-800 h-9 sm:h-10">{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</> : 'Enregistrer'}</Button>
+            <Button size="sm" onClick={handleSave} disabled={isSaving} className="bg-gray-700 hover:bg-gray-800 h-9 sm:h-10">{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t('profile.saving')}</> : t('profile.save')}</Button>
           </div>
         </div>
       </header>
@@ -288,14 +294,14 @@ const Profile = () => {
                 <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors duration-500" />
                 <div className="relative z-10 p-6 sm:p-10 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div className="space-y-2">
-                        <h2 className="text-2xl sm:text-3xl md:text-4xl font-light tracking-tight">Passez à <span className="font-semibold">Sivara Pro</span></h2>
-                        <p className="text-sm sm:text-base md:text-lg font-light text-white/90 max-w-xl">Débloquez le stockage illimité et la personnalisation avancée. <br className="hidden md:block"/>Essai gratuit de 14 jours, puis 4.99$/mois.</p>
+                        <h2 className="text-2xl sm:text-3xl md:text-4xl font-light tracking-tight">{t('profile.proTitle')} <span className="font-semibold">Sivara Pro</span></h2>
+                        <p className="text-sm sm:text-base md:text-lg font-light text-white/90 max-w-xl">{t('profile.proDesc')} <br className="hidden md:block"/>{t('profile.trialDesc')}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                          <Button variant="ghost" size="icon" onClick={handleSyncStripe} disabled={isSyncing} className="text-white hover:bg-white/10">
                              <RefreshCw className={`h-5 w-5 ${isSyncing ? 'animate-spin' : ''}`} />
                          </Button>
-                         <Button onClick={() => navigate('/pricing')} className="bg-white text-black hover:bg-gray-100 font-medium text-sm sm:text-base px-6 py-5 sm:px-8 sm:py-6 rounded-full shadow-xl transition-all hover:scale-105 hover:shadow-2xl border-0 flex-1 md:flex-none">Voir les offres <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" /></Button>
+                         <Button onClick={() => navigate('/pricing')} className="bg-white text-black hover:bg-gray-100 font-medium text-sm sm:text-base px-6 py-5 sm:px-8 sm:py-6 rounded-full shadow-xl transition-all hover:scale-105 hover:shadow-2xl border-0 flex-1 md:flex-none">{t('profile.seeOffers')} <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" /></Button>
                     </div>
                 </div>
             </div>
@@ -307,7 +313,7 @@ const Profile = () => {
                    </div>
                    <div>
                       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                          <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">Abonnement Pro <span className="bg-green-500 text-white text-[10px] sm:text-xs px-2 py-0.5 rounded-full">Actif</span></h2>
+                          <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">{t('profile.proSubscription')} <span className="bg-green-500 text-white text-[10px] sm:text-xs px-2 py-0.5 rounded-full">{t('profile.statusActive')}</span></h2>
                           <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -316,15 +322,15 @@ const Profile = () => {
                                     </button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p>Synchroniser le statut</p>
+                                    <p>{t('profile.syncStatus')}</p>
                                 </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                       </div>
                       <p className="text-xs sm:text-sm text-gray-500 mt-1">
                           {profile.subscription_status === 'trialing' 
-                            ? `Essai jusqu'au ${formatDate(profile.subscription_end_date!)}` 
-                            : `Renouvellement le ${formatDate(profile.subscription_end_date!)}`
+                            ? `${t('profile.trialUntil')} ${formatDate(profile.subscription_end_date!)}` 
+                            : `${t('profile.renewOn')} ${formatDate(profile.subscription_end_date!)}`
                           }
                       </p>
                    </div>
@@ -336,7 +342,7 @@ const Profile = () => {
                     className="gap-2 h-10 sm:h-12 px-4 sm:px-6 w-full md:w-auto text-sm sm:text-base"
                 >
                     {isPortalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                    Gérer mon abonnement
+                    {t('profile.manageSubscription')}
                 </Button>
             </div>
         )}
@@ -357,8 +363,8 @@ const Profile = () => {
               </div>
               <div className="space-y-2 mt-3 flex flex-col items-center sm:items-start">
                 <div className="flex items-center gap-3 text-gray-600"><Mail className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-lg truncate max-w-[250px] sm:max-w-md">{user?.email}</span></div>
-                <div className="flex items-center gap-3 text-gray-600"><Calendar className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">Membre depuis le {formatDate(profile.created_at)}</span></div>
-                <div className="flex items-center gap-3 text-gray-600">{profile.account_type === 'individual' ? <><User className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">Compte Individuel</span></> : <><Building2 className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">Compte Entreprise</span></>}</div>
+                <div className="flex items-center gap-3 text-gray-600"><Calendar className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">{t('profile.memberSince')} {formatDate(profile.created_at)}</span></div>
+                <div className="flex items-center gap-3 text-gray-600">{profile.account_type === 'individual' ? <><User className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">{t('profile.individualAccount')}</span></> : <><Building2 className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">{t('profile.businessAccount')}</span></>}</div>
               </div>
             </div>
           </div>
@@ -367,7 +373,7 @@ const Profile = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-6">
           <div className="flex items-center gap-3 mb-4 sm:mb-6">
             <Grid3x3 className="h-5 w-5 sm:h-6 sm:w-6 text-gray-700" />
-            <h2 className="text-xl sm:text-2xl font-light text-gray-900">Mes application(s)</h2>
+            <h2 className="text-xl sm:text-2xl font-light text-gray-900">{t('profile.myApps')}</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <button onClick={() => navigateToApp('docs')} className="group relative bg-white border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left active:scale-95">
@@ -409,16 +415,36 @@ const Profile = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-6">
             <div className="flex items-center gap-3 mb-4 sm:mb-6">
                 <Search className="h-5 w-5 sm:h-6 sm:w-6 text-gray-700" />
-                <h2 className="text-xl sm:text-2xl font-light text-gray-900">Préférences</h2>
+                <h2 className="text-xl sm:text-2xl font-light text-gray-900">{t('profile.preferences')}</h2>
             </div>
             <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 gap-4">
+                    <div className="space-y-1">
+                        <Label className="font-medium flex items-center gap-2">
+                             <Globe className="h-4 w-4 text-gray-500" /> {t('profile.language')}
+                        </Label>
+                        <p className="text-xs text-gray-500 max-w-[250px] sm:max-w-md">
+                            {t('profile.languageDesc')}
+                        </p>
+                    </div>
+                    <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
+                      <SelectTrigger className="w-[120px] bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fr-CA"><span className="flex items-center gap-2"><img src="/ca-flag.png" alt="CA" className="w-4 h-auto" /> <span className="font-mono text-xs">FR-CA</span></span></SelectItem>
+                        <SelectItem value="en-CA"><span className="flex items-center gap-2"><img src="/ca-flag.png" alt="CA" className="w-4 h-auto" /> <span className="font-mono text-xs">EN-CA</span></span></SelectItem>
+                      </SelectContent>
+                    </Select>
+                </div>
+
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
                     <div className="space-y-1">
                         <Label htmlFor="searchDocs" className="font-medium flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-gray-500" /> Moteur de recherche
+                            <FileText className="h-4 w-4 text-gray-500" /> {t('profile.searchEngine')}
                         </Label>
                         <p className="text-xs text-gray-500 max-w-[250px] sm:max-w-md">
-                            Autoriser le moteur de recherche Sivara à afficher vos documents personnels (chiffrés) dans les résultats.
+                            {t('profile.searchEngineDesc')}
                         </p>
                     </div>
                     <Switch 
@@ -432,17 +458,17 @@ const Profile = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="shadow-sm">
-            <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl">Informations personnelles</CardTitle><CardDescription>Modifiez vos informations de profil</CardDescription></CardHeader>
+            <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl">{t('profile.personalInfo')}</CardTitle><CardDescription>{t('profile.personalInfoDesc')}</CardDescription></CardHeader>
             <CardContent className="space-y-4 sm:space-y-5 px-5 sm:px-6 pb-6">
-              <div className="space-y-2"><Label htmlFor="firstName" className="text-sm font-medium">Prénom</Label><Input id="firstName" value={profile.first_name} onChange={(e) => setProfile({ ...profile, first_name: e.target.value })} placeholder="Jean" className="h-10 sm:h-11" /></div>
-              <div className="space-y-2"><Label htmlFor="lastName" className="text-sm font-medium">Nom</Label><Input id="lastName" value={profile.last_name} onChange={(e) => setProfile({ ...profile, last_name: e.target.value })} placeholder="Dupont" className="h-10 sm:h-11" /></div>
+              <div className="space-y-2"><Label htmlFor="firstName" className="text-sm font-medium">{t('profile.firstName')}</Label><Input id="firstName" value={profile.first_name} onChange={(e) => setProfile({ ...profile, first_name: e.target.value })} placeholder="Jean" className="h-10 sm:h-11" /></div>
+              <div className="space-y-2"><Label htmlFor="lastName" className="text-sm font-medium">{t('profile.lastName')}</Label><Input id="lastName" value={profile.last_name} onChange={(e) => setProfile({ ...profile, last_name: e.target.value })} placeholder="Dupont" className="h-10 sm:h-11" /></div>
             </CardContent>
           </Card>
           <Card className="shadow-sm">
-            <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl">Contact</CardTitle><CardDescription>Gérez vos informations de contact</CardDescription></CardHeader>
+            <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl">{t('profile.contact')}</CardTitle><CardDescription>{t('profile.contactDesc')}</CardDescription></CardHeader>
             <CardContent className="space-y-4 sm:space-y-5 px-5 sm:px-6 pb-6">
-              <div className="space-y-2"><Label htmlFor="email" className="text-sm font-medium">Email</Label><Input id="email" type="email" value={user?.email || ''} disabled className="h-10 sm:h-11 bg-gray-50 text-gray-500" /><p className="text-xs text-gray-400">L'email ne peut pas être modifié</p></div>
-              <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-medium">Numéro de téléphone</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[110px] sm:w-[140px] h-10 sm:h-11 text-xs sm:text-sm"><SelectValue /></SelectTrigger><SelectContent>{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code}><span className="flex items-center gap-2">{country.flagUrl ? <img src={country.flagUrl} alt={country.country} className="w-5 h-auto object-contain" /> : <span>{country.flag}</span>} <span className="font-mono text-xs">{country.country}</span></span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-10 sm:h-11" /></div></div>
+              <div className="space-y-2"><Label htmlFor="email" className="text-sm font-medium">{t('profile.email')}</Label><Input id="email" type="email" value={user?.email || ''} disabled className="h-10 sm:h-11 bg-gray-50 text-gray-500" /><p className="text-xs text-gray-400">{t('profile.emailLock')}</p></div>
+              <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-medium">{t('profile.phone')}</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[110px] sm:w-[140px] h-10 sm:h-11 text-xs sm:text-sm"><SelectValue /></SelectTrigger><SelectContent>{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code}><span className="flex items-center gap-2">{country.flagUrl ? <img src={country.flagUrl} alt={country.country} className="w-5 h-auto object-contain" /> : <span>{country.flag}</span>} <span className="font-mono text-xs">{country.country}</span></span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-10 sm:h-11" /></div></div>
             </CardContent>
           </Card>
         </div>
