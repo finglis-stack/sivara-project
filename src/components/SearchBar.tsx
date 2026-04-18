@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
 
 interface SearchBarProps {
   onSearch: (query: string) => void;
@@ -11,9 +12,9 @@ interface SearchBarProps {
 }
 
 const SearchBar = ({ onSearch, isLoading = false, value, onChange }: SearchBarProps) => {
+  const { t } = useTranslation();
   const [internalQuery, setInternalQuery] = useState('');
   
-  // Utiliser la valeur contrôlée si fournie, sinon utiliser l'état interne
   const query = value !== undefined ? value : internalQuery;
   const setQuery = onChange || setInternalQuery;
 
@@ -27,30 +28,28 @@ const SearchBar = ({ onSearch, isLoading = false, value, onChange }: SearchBarPr
   return (
     <form onSubmit={handleSubmit} className="w-full">
       <div className="relative group">
-        <div className="absolute -inset-1 bg-gray-200 rounded-full blur opacity-20 group-hover:opacity-30 transition duration-300"></div>
-        <div className="relative flex items-center bg-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-200">
-          <Search className="absolute left-6 text-gray-400 group-hover:text-gray-600 transition-colors duration-300" size={24} />
+        <div className="relative flex items-center w-full bg-white rounded-none border border-[#c5c5d3]/30 focus-within:border-[#00236F] focus-within:ring-1 focus-within:ring-[#00236F] shadow-sm transition-colors overflow-hidden">
+          <Search className="absolute left-6 text-[#00236F] transition-colors duration-300" size={20} />
           <Input
             type="text"
-            placeholder="Rechercher sur Sivara..."
+            placeholder={t('index.searchPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 pl-16 pr-6 py-7 text-lg border-0 rounded-full focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
+            className="flex-1 pl-14 pr-40 py-6 text-lg border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-[#111111] placeholder:text-[#5a5b67]/80"
             disabled={isLoading}
           />
           <Button 
             type="submit" 
             size="lg" 
             disabled={isLoading || !query.trim()}
-            className="mr-2 px-8 py-6 rounded-full bg-gray-700 hover:bg-gray-800 transition-all duration-300 hover:scale-105 shadow-md text-white"
+            className="absolute right-2 top-2 bottom-2 bg-[#00236F] hover:bg-[#1e3a8a] text-white px-6 rounded-none font-bold uppercase tracking-wider shadow-sm transition-colors text-sm"
           >
             {isLoading ? (
               <div className="flex items-center gap-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                <span>Recherche...</span>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               </div>
             ) : (
-              'Rechercher'
+              t('index.searchButton')
             )}
           </Button>
         </div>

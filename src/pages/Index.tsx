@@ -344,9 +344,19 @@ const Index = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] font-sans selection:bg-yellow-400 selection:text-black flex flex-col">
+    <div className="bg-[#FAF9F4] text-[#111111] min-h-screen flex flex-col antialiased relative font-sans selection:bg-[#00236F] selection:text-white">
+      <style>{`
+        .grid-bg-pattern {
+            background-image: 
+                linear-gradient(to right, rgba(197, 197, 211, 0.4) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(197, 197, 211, 0.4) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+      `}</style>
+      <div className="fixed inset-0 grid-bg-pattern opacity-50 z-0 pointer-events-none"></div>
+
       {hasSearched && (
-        <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
+        <header className="fixed top-0 left-0 right-0 z-50 bg-[#FAF9F4]/90 backdrop-blur-xl border-b border-[#c5c5d3]/30">
           <div className="container mx-auto px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-6">
                 <div 
@@ -394,17 +404,7 @@ const Index = () => {
 
       <div className={`flex-1 ${hasSearched ? "pt-24" : ""}`}>
         {!hasSearched ? (
-          <div className="bg-[#faf9f4] text-[#111111] min-h-screen flex flex-col antialiased relative font-sans">
-            <style>{`
-              .grid-bg-pattern {
-                  background-image: 
-                      linear-gradient(to right, rgba(197, 197, 211, 0.4) 1px, transparent 1px),
-                      linear-gradient(to bottom, rgba(197, 197, 211, 0.4) 1px, transparent 1px);
-                  background-size: 40px 40px;
-              }
-            `}</style>
-            <div className="fixed inset-0 grid-bg-pattern opacity-50 z-0 pointer-events-none"></div>
-            
+          <div className="w-full flex-1 flex flex-col relative z-10">
             {/* TopNavBar */}
             <nav className="sticky top-0 z-50 bg-[#FAF9F4]/80 backdrop-blur-xl w-full border-b border-[#c5c5d3]/30">
               <div className="flex justify-between items-center w-full px-8 py-4 max-w-screen-2xl mx-auto">
@@ -464,17 +464,17 @@ const Index = () => {
                   </p>
                   
                   <form onSubmit={(e) => { e.preventDefault(); if(searchQuery.trim()) handleSearch(searchQuery.trim()); }} className="w-full mt-4 relative">
-                    <div className="relative flex items-center w-full bg-white rounded border border-[#5a5b67]/30 focus-within:border-[#00236F] focus-within:ring-1 focus-within:ring-[#00236F] transition-colors shadow-sm overflow-hidden">
+                    <div className="relative flex items-center w-full bg-white rounded-none border border-[#c5c5d3]/30 focus-within:border-[#00236F] focus-within:ring-1 focus-within:ring-[#00236F] transition-colors shadow-sm overflow-hidden">
                       <Search className="ml-5 text-[#00236F] h-5 w-5" />
                       <input 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         aria-label="Rechercher sur Sivara..." 
-                        className="w-full bg-transparent border-none focus:ring-0 text-[#111111] text-lg py-4 pl-4 pr-32 font-medium placeholder:text-[#5a5b67] outline-none" 
+                        className="w-full bg-transparent border-none focus:ring-0 text-[#111111] text-lg py-4 pl-4 pr-32 font-medium placeholder:text-[#5a5b67] outline-none rounded-none" 
                         placeholder={t('index.searchPlaceholder')}
                         type="text"
                       />
-                      <button type="submit" disabled={isSearching} className="absolute right-2 top-2 bottom-2 bg-[#00236F] hover:bg-[#1e3a8a] text-white px-6 rounded font-bold transition-colors text-sm uppercase tracking-wider flex items-center gap-2">
+                      <button type="submit" disabled={isSearching} className="absolute right-2 top-2 bottom-2 bg-[#00236F] hover:bg-[#1e3a8a] text-white px-6 rounded-none font-bold transition-colors text-sm uppercase tracking-wider flex items-center gap-2 shadow-sm">
                         {isSearching ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : null}
                         {t('index.searchButton')}
                       </button>
@@ -559,7 +559,7 @@ const Index = () => {
                                 return (
                                   <Card 
                                       key={doc.id} 
-                                      className="group hover:scale-[1.01] transition-all cursor-pointer shadow-lg hover:shadow-xl relative overflow-hidden border-0"
+                                      className="group hover:scale-[1.01] transition-all cursor-pointer shadow-sm hover:shadow-md relative overflow-hidden border-0 rounded-none bg-white/50 backdrop-blur-sm"
                                       onClick={() => openDoc(doc)}
                                   >
                                       {/* BACKGROUND IMAGE & OVERLAY */}
@@ -570,7 +570,7 @@ const Index = () => {
                                       
                                       <div className="p-5 flex items-center justify-between relative z-10">
                                           <div className="flex items-center gap-4">
-                                              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/10 backdrop-blur-sm border border-white/20">
+                                              <div className="w-10 h-10 rounded-none flex items-center justify-center bg-white/10 backdrop-blur-sm border border-white/20">
                                                   <Folder className="h-5 w-5 text-white" />
                                               </div>
                                               <div>
@@ -586,15 +586,15 @@ const Index = () => {
                                 return (
                                   <Card 
                                       key={doc.id} 
-                                      className="group hover:border-blue-400 transition-all cursor-pointer border-l-4 shadow-sm hover:shadow-md"
-                                      style={{ borderLeftColor: doc.color || '#3B82F6' }}
+                                      className="group hover:border-[#00236F]/50 transition-all cursor-pointer border-l-4 shadow-sm hover:shadow-md rounded-none bg-white"
+                                      style={{ borderLeftColor: doc.color || '#00236F' }}
                                       onClick={() => openDoc(doc)}
                                   >
                                       <div className="p-4 flex items-center justify-between">
                                           <div className="flex items-center gap-4">
                                               <div 
-                                                className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm"
-                                                style={{ backgroundColor: doc.color || '#3B82F6' }}
+                                                className="w-10 h-10 rounded-none flex items-center justify-center text-white shadow-sm"
+                                                style={{ backgroundColor: doc.color || '#00236F' }}
                                               >
                                                   <IconComponent className="h-5 w-5" />
                                               </div>

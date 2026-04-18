@@ -55,8 +55,8 @@ const SearchResult = ({
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
 
   return (
-    <div className="space-y-2">
-      <div className={`group hover:bg-gray-50 rounded-2xl p-6 transition-all duration-300 ${isMainDomain ? 'bg-gray-50/50' : ''}`}>
+    <div className="space-y-4">
+      <div className={`group bg-white rounded-none border border-[#c5c5d3]/30 hover:border-[#00236F]/40 hover:shadow-sm p-6 transition-all duration-300 ${isMainDomain ? 'bg-[#FAFAFA]' : ''}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
@@ -132,7 +132,7 @@ const SearchResult = ({
               {relatedResults.map((result) => {
                 const path = getUrlPath(result.url);
                 return (
-                  <div key={result.id} className="group hover:bg-gray-50 rounded-xl p-3 transition-all duration-300">
+                  <div key={result.id} className="group hover:bg-white border border-transparent hover:border-[#c5c5d3]/30 hover:shadow-sm rounded-none p-3 transition-all duration-300">
                     <div className="flex items-start gap-2">
                       <CornerDownRight className="h-4 w-4 text-gray-300 mt-1.5 flex-shrink-0" />
                       <div>
