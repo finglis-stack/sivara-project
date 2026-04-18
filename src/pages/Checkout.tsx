@@ -8,6 +8,7 @@ import { Loader2, ArrowRight, Lock, AlertCircle } from 'lucide-react';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import LanguageSelector from '@/components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 // --- CONFIGURATION ---
 const STRIPE_PRICE_ID_MONTHLY = 'price_1SWTi12UEuKhlvPiQdVw7Jwl'; 
@@ -51,6 +52,7 @@ const Appearance = {
 const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial: boolean }) => {
   const stripe = useStripe();
   const elements = useElements();
+  const { t } = useTranslation();
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -111,7 +113,7 @@ const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial
           <Loader2 className="animate-spin h-5 w-5" />
         ) : (
           <span className="flex items-center justify-center gap-3 tracking-wide">
-             {isTrial ? "Activer l'essai gratuit" : "Confirmer le paiement"}
+             {isTrial ? t('checkout.btnTrial') : t('checkout.btnPro')}
              <ArrowRight className="h-4 w-4" />
           </span>
         )}
@@ -119,7 +121,7 @@ const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial
       
       <div className="flex justify-center items-center gap-2 text-xs text-[#5a5b67] font-light mt-4">
          <Lock className="h-3 w-3" />
-         <span>Paiement chiffré. Aucune donnée bancaire stockée par Sivara.</span>
+         <span>{t('checkout.encryptionNote')}</span>
       </div>
     </form>
   );
@@ -129,6 +131,7 @@ const CheckoutForm = ({ clientSecret, isTrial }: { clientSecret: string, isTrial
 const Checkout = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   
   const requestedTrial = searchParams.get('trial') === 'true';
@@ -202,9 +205,9 @@ const Checkout = () => {
                   <AlertCircle className="h-8 w-8 text-red-500" />
               </div>
               <div className="max-w-md">
-                  <h1 className="text-xl font-medium text-[#111111] mb-2">Erreur</h1>
+                  <h1 className="text-xl font-medium text-[#111111] mb-2">{t('checkout.errorTitle')}</h1>
                   <p className="text-[#5a5b67] font-light mb-6">{errorMessage}</p>
-                  <Button onClick={() => window.location.reload()} variant="outline" className="rounded-none border-[#c5c5d3]/50">Réessayer</Button>
+                  <Button onClick={() => window.location.reload()} variant="outline" className="rounded-none border-[#c5c5d3]/50">{t('checkout.errorRetryBtn')}</Button>
               </div>
           </div>
       );
@@ -230,7 +233,7 @@ const Checkout = () => {
              <div className="h-8 w-8 bg-[#00236F] text-white rounded-none flex items-center justify-center shadow-sm">
                  <span className="font-bold font-serif leading-none">S</span>
              </div>
-             <span className="font-medium tracking-wide text-[#111111] group-hover:text-[#00236F] transition-colors">Sivara Pro</span>
+             <span className="font-medium tracking-wide text-[#111111] group-hover:text-[#00236F] transition-colors">{t('pricing.proTitle')}</span>
          </div>
          <div className="flex items-center gap-4">
              <LanguageSelector />
@@ -245,30 +248,30 @@ const Checkout = () => {
              <div className="p-10 lg:p-16 flex flex-col justify-between border-b md:border-b-0 md:border-r border-[#c5c5d3]/40 bg-white/50 backdrop-blur-sm">
                 <div>
                     <h1 className="text-3xl md:text-4xl font-light text-[#111111] leading-tight mb-2">
-                        {isTrial ? "Activation de l'essai" : "Abonnement Mensuel"}
+                        {isTrial ? t('checkout.titleTrial') : t('checkout.titlePro')}
                     </h1>
-                    <p className="text-[#5a5b67] font-light mb-12">Finalisez votre inscription à l'espace Pro souverain.</p>
+                    <p className="text-[#5a5b67] font-light mb-12">{t('checkout.subtitle')}</p>
 
                     <div className="space-y-6">
                         <div className="flex items-start gap-4">
                             <span className="text-[#00236F] font-bold">—</span>
                             <div>
-                                <p className="font-medium text-[#111111]">Espace Cloud Privé</p>
-                                <p className="text-sm text-[#5a5b67] font-light">30 GB NVMe hautement sécurisé.</p>
+                                <p className="font-medium text-[#111111]">{t('checkout.featStorageTitle')}</p>
+                                <p className="text-sm text-[#5a5b67] font-light">{t('checkout.featStorageDesc')}</p>
                             </div>
                         </div>
                         <div className="flex items-start gap-4">
                             <span className="text-[#00236F] font-bold">—</span>
                             <div>
-                                <p className="font-medium text-[#111111]">Domaine Personnalisé</p>
-                                <p className="text-sm text-[#5a5b67] font-light">Votre identité numérique unique.</p>
+                                <p className="font-medium text-[#111111]">{t('checkout.featDomainTitle')}</p>
+                                <p className="text-sm text-[#5a5b67] font-light">{t('checkout.featDomainDesc')}</p>
                             </div>
                         </div>
                         <div className="flex items-start gap-4">
                             <span className="text-[#00236F] font-bold">—</span>
                             <div>
-                                <p className="font-medium text-[#111111]">Assistance IA</p>
-                                <p className="text-sm text-[#5a5b67] font-light">Accès continu à nos modèles souverains.</p>
+                                <p className="font-medium text-[#111111]">{t('checkout.featAITitle')}</p>
+                                <p className="text-sm text-[#5a5b67] font-light">{t('checkout.featAIDesc')}</p>
                             </div>
                         </div>
                     </div>
@@ -276,18 +279,18 @@ const Checkout = () => {
 
                 <div className="mt-16 pt-8 border-t border-[#c5c5d3]/40">
                     <div className="flex justify-between items-end">
-                       <span className="text-sm text-[#5a5b67] font-medium uppercase tracking-widest">Total aujourd'hui</span>
+                       <span className="text-sm text-[#5a5b67] font-medium uppercase tracking-widest">{t('checkout.totalToday')}</span>
                        <span className="text-4xl font-light tracking-tighter text-[#111111]">
                            {isTrial ? '0.00 $' : '4.99 $'}
                        </span>
                     </div>
                     {isTrial ? (
                         <p className="text-right text-xs text-[#5a5b67] mt-2 font-light">
-                            Puis 4.99 $/mois après 14 jours. Annulable à tout moment.
+                            {t('checkout.trialNotice')}
                         </p>
                     ) : (
                         <p className="text-right text-xs text-[#5a5b67] mt-2 font-light">
-                            Facturé mensuellement. Annulable à tout moment.
+                            {t('checkout.standardNotice')}
                         </p>
                     )}
                 </div>
@@ -297,9 +300,9 @@ const Checkout = () => {
              <div className="p-10 lg:p-16 flex flex-col justify-center bg-white">
                 <div className="w-full space-y-6">
                     <div>
-                        <h2 className="text-xl font-medium text-[#111111] mb-1">Informations de facturation</h2>
+                        <h2 className="text-xl font-medium text-[#111111] mb-1">{t('checkout.billingInfo')}</h2>
                         <p className="text-sm text-[#5a5b67] font-light">
-                           Entrez vos coordonnées pour {isTrial ? "valider l'empreinte" : "régler votre abonnement"}.
+                           {isTrial ? t('checkout.billingSubtitleTrial') : t('checkout.billingSubtitlePro')}
                         </p>
                     </div>
 
@@ -307,8 +310,8 @@ const Checkout = () => {
                         <div className="bg-[#FAF9F4] border border-[#c5c5d3]/40 rounded-none p-4 mb-6 flex items-start gap-3 animate-in fade-in">
                             <AlertCircle className="h-5 w-5 text-[#111111] flex-shrink-0 mt-0.5" />
                             <div className="text-sm text-[#111111]">
-                                <p className="font-medium mb-1">Essai gratuit expiré</p>
-                                <p className="font-light">Vous avez déjà utilisé votre période d'essai gratuite. La tarification normale s'applique.</p>
+                                <p className="font-medium mb-1">{t('checkout.expiredTrialTitle')}</p>
+                                <p className="font-light">{t('checkout.expiredTrialDesc')}</p>
                             </div>
                         </div>
                     )}
@@ -321,7 +324,7 @@ const Checkout = () => {
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 space-y-4">
                             <Loader2 className="h-8 w-8 animate-spin text-[#c5c5d3]" />
-                            <p className="text-sm text-[#5a5b67] font-light">Initialisation sécurisée...</p>
+                            <p className="text-sm text-[#5a5b67] font-light">{t('checkout.loading')}</p>
                         </div>
                     )}
                 </div>
