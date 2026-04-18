@@ -4,7 +4,9 @@ import SearchResult from '@/components/SearchResult';
 import CrawlManager from '@/components/CrawlManager';
 import StatsDisplay from '@/components/StatsDisplay';
 import SearchManagement from '@/components/SearchManagement';
+import EntitiesManager, { SearchEntity } from '@/components/admin/EntitiesManager';
 import AdminLayout from '@/components/AdminLayout';
+import KnowledgePanel from '@/components/KnowledgePanel';
 import UserMenu from '@/components/UserMenu';
 import Footer from '@/components/Footer';
 import CategoryImageButton from '@/components/CategoryImageButton';
@@ -69,6 +71,7 @@ const Index = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
+  const [activeEntity, setActiveEntity] = useState<SearchEntity | null>(null);
   const [showManage, setShowManage] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isStaff, setIsStaff] = useState(false);
@@ -131,9 +134,9 @@ const Index = () => {
       setHasSearched(true);
       setSearchQuery(query);
 
-      // Mettre à jour l'URL avec le paramètre ?q=
       setSearchParams({ q: query }, { replace: true });
       setDocResults([]);
+      setActiveEntity(null);
 
       console.log('Searching for:', query);
 
@@ -178,8 +181,32 @@ const Index = () => {
           }
       }
 
-      const [webResponse, docData] = await Promise.all([webSearchPromise, docSearchPromise]);
+      // Recherche d'Entité Frontend Fast
+      const lowerQuery = query.toLowerCase().trim();
+      const entitySearchPromise = supabase
+        .from('search_entities')
+        .select('*')
+        .or(`name.ilike.%${query}%`) // Initial fast check
+        .order('priority', { ascending: false })
+        .limit(10)
+        .then(({ data }) => {
+            if (!data) return null;
+            // Precise local keyword check
+            const exactMatch = data.find(e => e.name.toLowerCase() === lowerQuery || e.keywords.some((k: string) => k.toLowerCase() === lowerQuery));
+            return exactMatch || data[0] || null;
+        })
+        .catch(() => null);
+
+      const [webResponse, docData, entityData] = await Promise.all([
+          webSearchPromise, 
+          docSearchPromise, 
+          entitySearchPromise
+      ]);
       const webData = await webResponse.json();
+      
+      if (entityData) {
+          setActiveEntity(entityData as SearchEntity);
+      }
       
       if (!webResponse.ok) {
         showError(webData.details || 'Erreur lors de la recherche web');
@@ -248,6 +275,8 @@ const Index = () => {
         );
       case 'search':
         return <SearchManagement />;
+      case 'entities':
+        return <EntitiesManager />;
       case 'crawl':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -623,10 +652,12 @@ const Index = () => {
                   <p className="text-sm text-gray-400 mb-6 px-2 font-medium tracking-wide uppercase">
                     {totalResults} {totalResults > 1 ? t('index.results') : t('index.result')} {totalResults > 1 ? t('index.founds') : t('index.found')}
                   </p>
-                  <div className="space-y-6">
-                    {groupedResults.map((group, index) => (
-                      <div 
-                        key={group.mainResult.id}
+                  
+                  <div className={activeEntity ? "grid grid-cols-1 lg:grid-cols-3 gap-8 items-start" : "w-full"}>
+                    <div className={activeEntity ? "lg:col-span-2 space-y-6" : "space-y-6"}>
+                      {groupedResults.map((group, index) => (
+                        <div 
+                          key={group.mainResult.id}
                         className="animate-in fade-in slide-in-from-bottom-2 duration-500"
                         style={{ animationDelay: `${index * 50}ms` }}
                       >
@@ -642,7 +673,20 @@ const Index = () => {
                         />
                       </div>
                     ))}
+                    </div>
+                    {/* Colonne latérale droite: Knowledge Panel */}
+                    {activeEntity && (
+                      <div className="lg:col-span-1 hidden lg:block">
+                        <KnowledgePanel entity={activeEntity} />
+                      </div>
+                    )}
                   </div>
+                  {/* Affichage Mobile de l'entité (en dessous) */}
+                  {activeEntity && (
+                      <div className="block lg:hidden mt-8">
+                        <KnowledgePanel entity={activeEntity} />
+                      </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-20 animate-in fade-in duration-500">

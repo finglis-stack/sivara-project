@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   LayoutDashboard, Search, Settings, Activity, ChevronLeft, 
-  ChevronRight, Home, Database, Globe, FileText, BarChart3
+  ChevronRight, Home, Database, Globe, FileText, BarChart3, Building
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ type MenuItem = {
 const menuItems: MenuItem[] = [
   { id: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="h-5 w-5" /> },
   { id: 'search', label: 'Gestion des recherches', icon: <Search className="h-5 w-5" /> },
+  { id: 'entities', label: 'Gestion des entités', icon: <Building className="h-5 w-5" /> },
   { id: 'crawl', label: 'Crawling', icon: <Globe className="h-5 w-5" /> },
   { id: 'monitor', label: 'Monitoring', icon: <Activity className="h-5 w-5" /> },
   { id: 'stats', label: 'Statistiques', icon: <BarChart3 className="h-5 w-5" /> },
