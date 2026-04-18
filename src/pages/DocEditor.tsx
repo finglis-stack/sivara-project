@@ -294,7 +294,11 @@ const DocEditor = () => {
   const myColorRef = useRef(CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const shareSecretRef = useRef<string | null>(null);
+  const anonIdRef = useRef(`anon_${Math.random().toString(36).substring(2, 9)}`);
   
+  // Track latest user object for closures
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
   // --- FIX: PREVENT RELOAD ON TAB SWITCH ---
   const isLoadedRef = useRef(false);
 
@@ -444,13 +448,16 @@ const DocEditor = () => {
       
       if (!isUpdatingFromRemoteRef.current) {
         const broadcastSecurely = async () => {
-            if (channelRef.current && user) {
+            const currentUser = userRef.current;
+            const senderId = currentUser ? currentUser.id : anonIdRef.current;
+            
+            if (channelRef.current) {
                 try {
                     const { encrypted, iv } = await encryptionService.encrypt(html);
                     channelRef.current.send({
                         type: 'broadcast',
                         event: 'content_update',
-                        payload: { content: encrypted, iv: iv, sender: user.id }
+                        payload: { content: encrypted, iv: iv, sender: senderId }
                     });
                 } catch (e) { console.error("Erreur chiffrement broadcast", e); }
             }
@@ -510,20 +517,23 @@ const DocEditor = () => {
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
   
   useEffect(() => { 
-      if (id && user && !isLoading && !decryptionError) { 
+      // Si le document est chargé et déchiffré, lancer la sync (même si anon)
+      if (id && !isLoading && !decryptionError && !channelRef.current) { 
           setTimeout(() => setupRealtime(), 500);
       } 
   }, [id, user, isLoading, decryptionError, userProfile]);
 
   const setupRealtime = () => {
-    if (!id || !user) return;
+    if (!id) return;
+    
+    const myId = userRef.current ? userRef.current.id : anonIdRef.current;
     
     const myPresenceState = { 
-        id: user.id, 
-        email: user.email, 
+        id: myId, 
+        email: userRef.current?.email || '', 
         color: myColorRef.current, 
         avatar_url: userProfile?.avatar_url, 
-        name: user.email?.split('@')[0] || 'Anonyme', 
+        name: userRef.current ? (userRef.current.email?.split('@')[0] || 'Anonyme') : 'Invité', 
         online_at: Date.now() 
     };
     
@@ -532,7 +542,7 @@ const DocEditor = () => {
         return; 
     }
     
-    const channel = supabase.channel(`doc:${id}`, { config: { presence: { key: user.id, }, }, });
+    const channel = supabase.channel(`doc:${id}`, { config: { presence: { key: myId, }, }, });
     
     channel
       .on('presence', { event: 'sync' }, () => {
@@ -562,12 +572,14 @@ const DocEditor = () => {
         }
       })
       .on('broadcast', { event: 'title_update' }, ({ payload }) => {
-        if (payload.sender !== user.id) {
+        const myId = userRef.current ? userRef.current.id : anonIdRef.current;
+        if (payload.sender !== myId) {
            setTitle(payload.title);
         }
       })
       .on('broadcast', { event: 'content_update' }, async ({ payload }) => {
-        if (payload.sender !== user.id && editor) {
+        const myId = userRef.current ? userRef.current.id : anonIdRef.current;
+        if (payload.sender !== myId && editor) {
            isUpdatingFromRemoteRef.current = true;
            try {
                const decryptedContent = await encryptionService.decrypt(payload.content, payload.iv);
@@ -575,6 +587,8 @@ const DocEditor = () => {
                editor.commands.setContent(decryptedContent);
                editor.commands.setTextSelection({ from, to });
            } catch (e) { console.error("Broadcast decrypt error", e); }
+           
+           // Slight delay to allow internal editor updates to finish
            setTimeout(() => isUpdatingFromRemoteRef.current = false, 50);
         }
       })
@@ -584,14 +598,18 @@ const DocEditor = () => {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!channelRef.current || !editorRef.current || !user) return;
+    if (!channelRef.current || !editorRef.current) return;
     const now = Date.now();
     if ((editorRef.current as any).lastMove && now - (editorRef.current as any).lastMove < 30) return;
     (editorRef.current as any).lastMove = now;
     const rect = editorRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top + editorRef.current.scrollTop;
-    channelRef.current.send({ type: 'broadcast', event: 'cursor-pos', payload: { id: user.id, name: user.email?.split('@')[0], color: myColorRef.current, x, y } });
+    
+    const myId = userRef.current ? userRef.current.id : anonIdRef.current;
+    const myName = userRef.current ? (userRef.current.email?.split('@')[0] || 'Anonyme') : 'Invité';
+    
+    channelRef.current.send({ type: 'broadcast', event: 'cursor-pos', payload: { id: myId, name: myName, color: myColorRef.current, x, y } });
   };
 
   useEffect(() => {
