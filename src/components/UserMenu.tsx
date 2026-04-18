@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { showSuccess, showError } from '@/utils/toast';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 interface Profile {
   first_name: string;
@@ -22,6 +23,7 @@ interface Profile {
 
 const UserMenu = () => {
   const { user, signOut: authSignOut } = useAuth();
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -109,7 +111,7 @@ const UserMenu = () => {
         className="flex items-center gap-2 px-4 py-2 rounded-none bg-[#00236F] hover:bg-[#1e3a8a] transition-all duration-300 text-white"
       >
         <User size={18} />
-        <span className="text-sm font-light">Connexion</span>
+        <span className="text-sm font-light">{t('userMenu.login')}</span>
       </Button>
     );
   }
@@ -165,7 +167,7 @@ const UserMenu = () => {
           }}
         >
           <UserCircle className="mr-2 h-4 w-4" />
-          <span>Mon profil (Sivara Account)</span>
+          <span>{t('userMenu.profile')}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem 
@@ -176,7 +178,7 @@ const UserMenu = () => {
           disabled={isSigningOut}
         >
           <LogOut className="mr-2 h-4 w-4" />
-          <span>{isSigningOut ? 'Déconnexion...' : 'Se déconnecter'}</span>
+          <span>{isSigningOut ? t('userMenu.loggingOut') : t('userMenu.logout')}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

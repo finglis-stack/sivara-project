@@ -59,6 +59,12 @@
     "tempLink": "A temporary login link will be sent to",
     "sendLink": "Send link"
   },
+  "userMenu": {
+    "login": "Log in",
+    "profile": "My profile (Sivara Account)",
+    "logout": "Log out",
+    "loggingOut": "Logging out..."
+  },
   "onboarding": {
     "title": "Create an account",
     "subtitle": "Join the sovereign digital ecosystem.",

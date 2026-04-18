@@ -59,6 +59,12 @@
     "tempLink": "Un lien de connexion temporaire sera envoyé à",
     "sendLink": "Envoyer le lien"
   },
+  "userMenu": {
+    "login": "Connexion",
+    "profile": "Mon profil (Sivara Account)",
+    "logout": "Se déconnecter",
+    "loggingOut": "Déconnexion..."
+  },
   "onboarding": {
     "title": "Créer un compte",
     "subtitle": "Rejoignez l'écosystème numérique souverain.",
