@@ -169,8 +169,8 @@ const Onboarding = () => {
 
             {/* Stepper */}
             <div className="flex items-center gap-2">
-              <div className={`h-1 flex-1 rounded-none transition-all duration-500 ${step >= 1 ? 'bg-[#00236F]' : 'bg-[#c5c5d3]/30'}`}></div>
-              <div className={`h-1 flex-1 rounded-none transition-all duration-500 ${step >= 2 ? 'bg-[#00236F]' : 'bg-[#c5c5d3]/30'}`}></div>
+              <div className={`h-1 flex-1 rounded-none transition-all duration-500 ${step >= 1 ? 'bg-[#111111]' : 'bg-[#c5c5d3]/30'}`}></div>
+              <div className={`h-1 flex-1 rounded-none transition-all duration-500 ${step >= 2 ? 'bg-[#111111]' : 'bg-[#c5c5d3]/30'}`}></div>
             </div>
           </div>
 
@@ -182,11 +182,11 @@ const Onboarding = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Prénom</Label>
-                    <Input id="firstName" placeholder="Jean" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" required />
+                    <Input id="firstName" placeholder="Jean" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Nom</Label>
-                    <Input id="lastName" placeholder="Dupont" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" required />
+                    <Input id="lastName" placeholder="Dupont" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
                   </div>
                 </div>
 
@@ -210,30 +210,30 @@ const Onboarding = () => {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input id="phone" type="tel" placeholder="514 123 4567" value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} className="flex-1 h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" />
+                    <Input id="phone" type="tel" placeholder="514 123 4567" value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} className="flex-1 h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" />
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   <Label className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Type de compte</Label>
                   <RadioGroup value={formData.accountType} onValueChange={(value) => setFormData({ ...formData, accountType: value })} className="grid grid-cols-2 gap-4">
-                    <Label htmlFor="individual" className={`flex flex-col items-center justify-center p-4 rounded-none border-2 cursor-pointer transition-all ${formData.accountType === 'individual' ? 'border-[#00236F] bg-white text-[#00236F]' : 'border-[#c5c5d3]/30 bg-white text-[#5a5b67] hover:border-[#c5c5d3]'}`}>
+                    <Label htmlFor="individual" className={`flex flex-col items-center justify-center p-4 rounded-none border-2 cursor-pointer transition-all ${formData.accountType === 'individual' ? 'border-[#111111] bg-[#faf9f4] text-[#111111]' : 'border-[#c5c5d3]/30 bg-white text-[#5a5b67] hover:border-[#c5c5d3]'}`}>
                       <RadioGroupItem value="individual" id="individual" className="sr-only" />
                       <User className="h-6 w-6 mb-2" />
-                      <span className="text-sm font-medium">Personnel</span>
+                      <span className="text-sm font-light">Personnel</span>
                     </Label>
-                    <Label htmlFor="corporate" className={`flex flex-col items-center justify-center p-4 rounded-none border-2 cursor-pointer transition-all ${formData.accountType === 'corporate' ? 'border-[#00236F] bg-white text-[#00236F]' : 'border-[#c5c5d3]/30 bg-white text-[#5a5b67] hover:border-[#c5c5d3]'}`}>
+                    <Label htmlFor="corporate" className={`flex flex-col items-center justify-center p-4 rounded-none border-2 cursor-pointer transition-all ${formData.accountType === 'corporate' ? 'border-[#111111] bg-[#faf9f4] text-[#111111]' : 'border-[#c5c5d3]/30 bg-white text-[#5a5b67] hover:border-[#c5c5d3]'}`}>
                       <RadioGroupItem value="corporate" id="corporate" className="sr-only" />
                       <Building2 className="h-6 w-6 mb-2" />
-                      <span className="text-sm font-medium">Entreprise</span>
+                      <span className="text-sm font-light">Entreprise</span>
                     </Label>
                   </RadioGroup>
                 </div>
 
                 <div className="flex items-start space-x-3 pt-2">
-                  <Checkbox id="terms" checked={formData.termsAccepted} onCheckedChange={(checked) => setFormData({ ...formData, termsAccepted: checked as boolean })} className="mt-1 border-[#c5c5d3]" />
+                  <Checkbox id="terms" checked={formData.termsAccepted} onCheckedChange={(checked) => setFormData({ ...formData, termsAccepted: checked as boolean })} className="mt-1 border-[#c5c5d3] data-[state=checked]:bg-[#111111] data-[state=checked]:border-[#111111]" />
                   <label htmlFor="terms" className="text-sm text-[#5a5b67] leading-relaxed cursor-pointer font-light">
-                    J'accepte les <a href="https://help.sivara.ca/article/conditions-dutilisation" className="text-[#00236F] font-medium underline">Conditions d'utilisation</a> et la <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="text-[#00236F] font-medium underline">Politique de confidentialité</a>.
+                    J'accepte les <a href="https://help.sivara.ca/article/conditions-dutilisation" className="text-[#111111] font-medium hover:underline">Conditions d'utilisation</a> et la <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="text-[#111111] font-medium hover:underline">Politique de confidentialité</a>.
                   </label>
                 </div>
 
@@ -245,12 +245,12 @@ const Onboarding = () => {
               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Email de connexion</Label>
-                  <Input id="email" type="email" placeholder="jean@exemple.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" required />
+                  <Input id="email" type="email" placeholder="jean@exemple.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Mot de passe</Label>
-                  <Input id="password" type="password" placeholder="Minimum 6 caractères" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#00236F] focus:border-[#00236F] text-[#111111]" required />
+                  <Input id="password" type="password" placeholder="Minimum 6 caractères" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
                   <p className="text-xs text-[#5a5b67] font-light">Utilisez un mot de passe fort et unique.</p>
                 </div>
 
@@ -265,9 +265,9 @@ const Onboarding = () => {
           </form>
 
           <div className="text-center">
-            <p className="text-sm text-[#5a5b67]">
+            <p className="text-sm text-[#5a5b67] font-light">
               Déjà inscrit ?{' '}
-              <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="font-semibold text-[#00236F] hover:underline">
+              <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="text-[#111111] font-light hover:font-medium hover:underline transition-all">
                 Se connecter
               </a>
             </p>
@@ -276,7 +276,7 @@ const Onboarding = () => {
       </div>
 
       {/* DROITE : LOTTIE ANIMATION */}
-      <div className="hidden lg:flex lg:w-1/2 bg-white items-center justify-center p-12 relative overflow-hidden flex-col text-center">
+      <div className="hidden lg:flex lg:w-1/2 bg-[#faf9f4] items-center justify-center p-12 relative overflow-hidden flex-col text-center">
         <div className="w-64 h-64 mb-8">
           <Lottie animationData={animationData} loop={true} />
         </div>

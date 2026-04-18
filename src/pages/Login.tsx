@@ -146,7 +146,7 @@ const Login = () => {
                     placeholder="nom@entreprise.com" 
                     value={email} 
                     onChange={(e) => setEmail(e.target.value)} 
-                    className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white focus:ring-1 focus:ring-[#00236F] focus:border-[#00236F] transition-all rounded-none shadow-sm text-[#111111]" 
+                    className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white focus:ring-1 focus:ring-[#111111] focus:border-[#111111] transition-all rounded-none shadow-sm text-[#111111] font-light" 
                     required 
                     autoFocus 
                     disabled={isChecking} 
@@ -163,7 +163,7 @@ const Login = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <Label htmlFor="password" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Mot de passe</Label>
-                    <button type="button" onClick={() => setStep('recovery')} className="text-xs text-[#5a5b67] hover:text-[#00236F]">Oublié ?</button>
+                    <button type="button" onClick={() => setStep('recovery')} className="text-xs text-[#5a5b67] hover:text-[#111111] font-light">Oublié ?</button>
                   </div>
                   <Input 
                     id="password" 
@@ -171,7 +171,7 @@ const Login = () => {
                     placeholder="••••••••" 
                     value={password} 
                     onChange={(e) => setPassword(e.target.value)} 
-                    className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white focus:ring-1 focus:ring-[#00236F] focus:border-[#00236F] transition-all rounded-none shadow-sm text-[#111111]" 
+                    className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white focus:ring-1 focus:ring-[#111111] focus:border-[#111111] transition-all rounded-none shadow-sm text-[#111111] font-light" 
                     required 
                     autoFocus 
                     disabled={isLoading} 
@@ -189,7 +189,7 @@ const Login = () => {
             {step === 'recovery' && (
                 <form onSubmit={handleRecoverySubmit} className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
                     <div className="p-4 bg-[#efeee9] text-[#2c2d38] text-sm rounded-none border border-[#c5c5d3]/30">
-                        Un lien de connexion temporaire sera envoyé à <strong className="text-[#00236F]">{email}</strong>.
+                        Un lien de connexion temporaire sera envoyé à <strong className="text-[#111111] font-bold">{email}</strong>.
                     </div>
                     <div className="flex gap-3">
                         <Button type="button" variant="outline" onClick={() => setStep('password')} className="h-12 px-6 border-[#c5c5d3]/30 text-[#5a5b67] hover:bg-[#efeee9] rounded-none uppercase tracking-wider text-sm font-bold">Annuler</Button>
@@ -206,9 +206,9 @@ const Login = () => {
             </div>
 
             <div className="text-center">
-              <p className="text-sm text-[#5a5b67]">
+              <p className="text-sm text-[#5a5b67] font-light">
                 Pas encore de compte ?{' '}
-                <a href={`/onboarding?returnTo=${encodeURIComponent(returnTo)}`} className="font-semibold text-[#00236F] hover:underline">
+                <a href={`/onboarding?returnTo=${encodeURIComponent(returnTo)}`} className="text-[#111111] font-light hover:underline hover:font-medium transition-all">
                   S'inscrire gratuitement
                 </a>
               </p>
@@ -217,15 +217,15 @@ const Login = () => {
 
           {/* Footer Links */}
           <div className="pt-8 flex gap-6 text-xs text-[#5a5b67] uppercase tracking-widest font-bold">
-            <a href="https://help.sivara.ca/article/conditions-dutilisation" className="hover:text-[#00236F]">Conditions</a>
-            <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="hover:text-[#00236F]">Confidentialité</a>
-            <a href="https://help.sivara.ca" className="hover:text-[#00236F]">Aide</a>
+            <a href="https://help.sivara.ca/article/conditions-dutilisation" className="hover:text-[#111111] transition-colors">Conditions</a>
+            <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="hover:text-[#111111] transition-colors">Confidentialité</a>
+            <a href="https://help.sivara.ca" className="hover:text-[#111111] transition-colors">Aide</a>
           </div>
         </div>
       </div>
 
       {/* DROITE : LOTTIE ANIMATION */}
-      <div className="hidden lg:flex lg:w-1/2 bg-white items-center justify-center p-12 relative overflow-hidden flex-col text-center">
+      <div className="hidden lg:flex lg:w-1/2 bg-[#faf9f4] items-center justify-center p-12 relative overflow-hidden flex-col text-center">
          <div className="w-64 h-64 mb-8">
             <Lottie animationData={animationData} loop={true} />
          </div>
