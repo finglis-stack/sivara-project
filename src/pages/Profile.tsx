@@ -265,23 +265,23 @@ const Profile = () => {
     return new Date(dateString).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  if (isLoading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
+  if (isLoading) return <div className="min-h-screen bg-[#faf9f4] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#111111]" /></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-[env(safe-area-inset-top)]">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div className="min-h-screen bg-[#faf9f4] pt-[env(safe-area-inset-top)] font-sans text-[#111111]">
+      <header className="bg-transparent border-b border-[#c5c5d3]/30 sticky top-0 z-10 backdrop-blur-md">
         <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-4">
-              <Button variant="ghost" size="sm" onClick={handleReturn} className="text-gray-600 hover:text-gray-900 pl-0 sm:pl-4">
+              <Button variant="ghost" size="sm" onClick={handleReturn} className="text-[#5a5b67] hover:bg-white hover:text-[#111111] rounded-none pl-0 sm:pl-4 uppercase tracking-widest text-xs">
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   <span className="hidden sm:inline">{t('profile.backToApp')}</span>
                   <span className="sm:hidden">{t('profile.back')}</span>
               </Button>
-              <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
-              <h1 className="text-lg sm:text-2xl font-light text-gray-900 hidden sm:block">{t('profile.title')}</h1>
+              <div className="h-6 w-px bg-[#c5c5d3]/30 hidden sm:block"></div>
+              <h1 className="text-lg sm:text-2xl font-light text-[#111111] hidden sm:block">{t('profile.title')}</h1>
             </div>
-            <Button size="sm" onClick={handleSave} disabled={isSaving} className="bg-gray-700 hover:bg-gray-800 h-9 sm:h-10">{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t('profile.saving')}</> : t('profile.save')}</Button>
+            <Button size="sm" onClick={handleSave} disabled={isSaving} className="bg-[#00236F] hover:bg-[#1e3a8a] text-white font-light rounded-none transition-all uppercase tracking-widest text-xs h-10 px-6">{isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t('profile.saving')}</> : t('profile.save')}</Button>
           </div>
         </div>
       </header>
@@ -289,45 +289,45 @@ const Profile = () => {
       <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
         
         {!profile.is_pro ? (
-            <div className="mb-6 sm:mb-8 relative rounded-xl sm:rounded-2xl overflow-hidden shadow-lg group">
+            <div className="mb-6 sm:mb-8 relative rounded-none overflow-hidden group">
                 <div className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 group-hover:scale-105" style={{ backgroundImage: 'url(/pro-banner.jpg)' }} />
                 <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors duration-500" />
-                <div className="relative z-10 p-6 sm:p-10 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div className="relative z-10 p-6 sm:p-10 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border-b border-[#c5c5d3]/30">
                     <div className="space-y-2">
                         <h2 className="text-2xl sm:text-3xl md:text-4xl font-light tracking-tight">{t('profile.proTitle')} <span className="font-semibold">Sivara Pro</span></h2>
                         <p className="text-sm sm:text-base md:text-lg font-light text-white/90 max-w-xl">{t('profile.proDesc')} <br className="hidden md:block"/>{t('profile.trialDesc')}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                         <Button variant="ghost" size="icon" onClick={handleSyncStripe} disabled={isSyncing} className="text-white hover:bg-white/10">
+                         <Button variant="ghost" size="icon" onClick={handleSyncStripe} disabled={isSyncing} className="rounded-none text-white hover:bg-white/10">
                              <RefreshCw className={`h-5 w-5 ${isSyncing ? 'animate-spin' : ''}`} />
                          </Button>
-                         <Button onClick={() => navigate('/pricing')} className="bg-white text-black hover:bg-gray-100 font-medium text-sm sm:text-base px-6 py-5 sm:px-8 sm:py-6 rounded-full shadow-xl transition-all hover:scale-105 hover:shadow-2xl border-0 flex-1 md:flex-none">{t('profile.seeOffers')} <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" /></Button>
+                         <Button onClick={() => navigate('/pricing')} className="bg-white text-[#111111] hover:bg-gray-100 font-light text-sm sm:text-base px-6 py-5 sm:px-8 sm:py-6 rounded-none transition-all hover:scale-105 border-0 flex-1 md:flex-none uppercase tracking-widest">{t('profile.seeOffers')} <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" /></Button>
                     </div>
                 </div>
             </div>
         ) : (
-            <div className="mb-6 sm:mb-8 bg-white rounded-xl sm:rounded-2xl p-6 sm:p-8 shadow-sm border border-gray-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="mb-6 sm:mb-8 bg-white rounded-none p-6 sm:p-8 border border-[#c5c5d3]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
-                   <div className="h-12 w-12 sm:h-14 sm:w-14 bg-gradient-to-tr from-yellow-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
-                      <span className="text-xl sm:text-2xl font-bold text-white">S</span>
+                   <div className="h-12 w-12 sm:h-14 sm:w-14 bg-gradient-to-tr from-[#00236F] to-[#1e3a8a] rounded-none flex items-center justify-center">
+                      <span className="text-xl sm:text-2xl font-light text-white">S</span>
                    </div>
                    <div>
                       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                          <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">{t('profile.proSubscription')} <span className="bg-green-500 text-white text-[10px] sm:text-xs px-2 py-0.5 rounded-full">{t('profile.statusActive')}</span></h2>
+                          <h2 className="text-lg sm:text-2xl font-light text-[#111111] flex items-center gap-2">{t('profile.proSubscription')} <span className="bg-[#111111] text-white text-[10px] sm:text-xs px-2 py-0.5 rounded-none uppercase tracking-widest">{t('profile.statusActive')}</span></h2>
                           <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <button onClick={handleSyncStripe} disabled={isSyncing} className="text-gray-400 hover:text-gray-600 transition-colors p-1 bg-gray-50 rounded-full ml-1">
+                                    <button onClick={handleSyncStripe} disabled={isSyncing} className="text-[#5a5b67] hover:text-[#111111] transition-colors p-1 bg-white border border-[#c5c5d3]/30 rounded-none ml-1">
                                         <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${isSyncing ? 'animate-spin' : ''}`} />
                                     </button>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{t('profile.syncStatus')}</p>
+                                <TooltipContent className="rounded-none border-[#c5c5d3]/30">
+                                    <p className="text-xs uppercase tracking-widest">{t('profile.syncStatus')}</p>
                                 </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                       </div>
-                      <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                      <p className="text-xs sm:text-sm text-[#5a5b67] mt-1 font-light">
                           {profile.subscription_status === 'trialing' 
                             ? `${t('profile.trialUntil')} ${formatDate(profile.subscription_end_date!)}` 
                             : `${t('profile.renewOn')} ${formatDate(profile.subscription_end_date!)}`
@@ -339,7 +339,7 @@ const Profile = () => {
                     variant="outline" 
                     onClick={handleManageSubscription} 
                     disabled={isPortalLoading}
-                    className="gap-2 h-10 sm:h-12 px-4 sm:px-6 w-full md:w-auto text-sm sm:text-base"
+                    className="gap-2 h-10 sm:h-12 px-4 sm:px-6 w-full md:w-auto text-xs uppercase tracking-widest font-medium rounded-none border-[#c5c5d3]/30 text-[#111111] hover:bg-white hover:text-[#00236F]"
                 >
                     {isPortalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
                     {t('profile.manageSubscription')}
@@ -347,103 +347,103 @@ const Profile = () => {
             </div>
         )}
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-6">
+        <div className="bg-white rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
             <div className="relative group shrink-0">
-              <Avatar className="h-24 w-24 sm:h-32 sm:w-32">
-                {profile.avatar_url ? <AvatarImage src={profile.avatar_url} alt={profile.first_name} /> : <AvatarFallback className="bg-gray-700 text-white text-3xl sm:text-4xl">{getInitials()}</AvatarFallback>}
+              <Avatar className="h-24 w-24 sm:h-32 sm:w-32 rounded-none border border-[#c5c5d3]/30">
+                {profile.avatar_url ? <AvatarImage src={profile.avatar_url} alt={profile.first_name} className="rounded-none object-cover" /> : <AvatarFallback className="bg-white text-[#111111] font-light text-3xl sm:text-4xl rounded-none">{getInitials()}</AvatarFallback>}
               </Avatar>
-              <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera className="h-6 w-6 sm:h-8 sm:w-8 text-white" /></button>
+              <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 bg-[#faf9f4]/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center border border-[#111111] rounded-none"><Camera className="h-6 w-6 sm:h-8 sm:w-8 text-[#111111]" /></button>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
             </div>
             <div className="flex-1 text-center sm:text-left w-full">
               <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 mb-1 justify-center sm:justify-start">
-                <h2 className="text-2xl sm:text-3xl font-light text-gray-900 truncate max-w-full">{profile.first_name} {profile.last_name}</h2>
-                {profile.is_pro && <span className="bg-black text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1">PRO</span>}
+                <h2 className="text-2xl sm:text-3xl font-light text-[#111111] truncate max-w-full">{profile.first_name} {profile.last_name}</h2>
+                {profile.is_pro && <span className="bg-[#111111] text-white text-[10px] uppercase font-bold tracking-widest px-2 py-1 rounded-none flex items-center gap-1">PRO</span>}
               </div>
               <div className="space-y-2 mt-3 flex flex-col items-center sm:items-start">
-                <div className="flex items-center gap-3 text-gray-600"><Mail className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-lg truncate max-w-[250px] sm:max-w-md">{user?.email}</span></div>
-                <div className="flex items-center gap-3 text-gray-600"><Calendar className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">{t('profile.memberSince')} {formatDate(profile.created_at)}</span></div>
-                <div className="flex items-center gap-3 text-gray-600">{profile.account_type === 'individual' ? <><User className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">{t('profile.individualAccount')}</span></> : <><Building2 className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base">{t('profile.businessAccount')}</span></>}</div>
+                <div className="flex items-center gap-3 text-[#5a5b67]"><Mail className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-lg truncate max-w-[250px] sm:max-w-md font-light">{user?.email}</span></div>
+                <div className="flex items-center gap-3 text-[#5a5b67]"><Calendar className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base font-light">{t('profile.memberSince')} {formatDate(profile.created_at)}</span></div>
+                <div className="flex items-center gap-3 text-[#5a5b67]">{profile.account_type === 'individual' ? <><User className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base font-light">{t('profile.individualAccount')}</span></> : <><Building2 className="h-4 w-4 sm:h-5 sm:w-5" /><span className="text-sm sm:text-base font-light">{t('profile.businessAccount')}</span></>}</div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-6">
+        <div className="bg-white rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
           <div className="flex items-center gap-3 mb-4 sm:mb-6">
             <Grid3x3 className="h-5 w-5 sm:h-6 sm:w-6 text-gray-700" />
             <h2 className="text-xl sm:text-2xl font-light text-gray-900">{t('profile.myApps')}</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <button onClick={() => navigateToApp('docs')} className="group relative bg-white border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left active:scale-95">
+            <button onClick={() => navigateToApp('docs')} className="group relative bg-[#faf9f4] border border-[#c5c5d3]/30 rounded-none p-3 sm:p-4 hover:border-[#111111] transition-all duration-200 text-left active:scale-95">
               <div className="flex flex-col items-center gap-2">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-50 rounded-xl flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-50/50 rounded-none border border-blue-100/50 flex items-center justify-center group-hover:bg-blue-100/50 transition-colors">
                   <img src="/docs-icon.png" alt="Docs" className="h-6 w-6 sm:h-7 sm:w-7" />
                 </div>
-                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Docs</h3></div>
+                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-light text-[#111111] truncate uppercase tracking-wider">Docs</h3></div>
               </div>
             </button>
-            <button onClick={() => navigateToApp('mail')} className="group relative bg-white border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left active:scale-95">
+            <button onClick={() => navigateToApp('mail')} className="group relative bg-[#faf9f4] border border-[#c5c5d3]/30 rounded-none p-3 sm:p-4 hover:border-[#111111] transition-all duration-200 text-left active:scale-95">
               <div className="flex flex-col items-center gap-2">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-orange-50 rounded-xl flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-orange-50/50 rounded-none border border-orange-100/50 flex items-center justify-center group-hover:bg-orange-100/50 transition-colors">
                   <Mail className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
                 </div>
-                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Mail</h3></div>
+                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-light text-[#111111] truncate uppercase tracking-wider">Mail</h3></div>
               </div>
             </button>
-            <button onClick={() => navigateToApp('www')} className="group relative bg-white border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left active:scale-95">
+            <button onClick={() => navigateToApp('www')} className="group relative bg-[#faf9f4] border border-[#c5c5d3]/30 rounded-none p-3 sm:p-4 hover:border-[#111111] transition-all duration-200 text-left active:scale-95">
               <div className="flex flex-col items-center gap-2">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-gray-50 rounded-xl flex items-center justify-center group-hover:bg-gray-100 transition-colors">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-gray-50 rounded-none border border-gray-200/50 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
                   <Globe className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
                 </div>
-                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Moteur</h3></div>
+                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-light text-[#111111] truncate uppercase tracking-wider">Moteur</h3></div>
               </div>
             </button>
-            <button onClick={() => navigateToApp('device')} className="group relative bg-white border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200 text-left active:scale-95">
+            <button onClick={() => navigateToApp('device')} className="group relative bg-[#faf9f4] border border-[#c5c5d3]/30 rounded-none p-3 sm:p-4 hover:border-[#111111] transition-all duration-200 text-left active:scale-95">
               <div className="flex flex-col items-center gap-2">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-zinc-50 rounded-xl flex items-center justify-center group-hover:bg-zinc-100 transition-colors">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-zinc-50 rounded-none border border-zinc-200/50 flex items-center justify-center group-hover:bg-zinc-100 transition-colors">
                   <Laptop className="h-5 w-5 sm:h-6 sm:w-6 text-zinc-900" />
                 </div>
-                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-medium text-gray-900 truncate">Book</h3></div>
+                <div className="text-center w-full"><h3 className="text-xs sm:text-sm font-light text-[#111111] truncate uppercase tracking-wider">Book</h3></div>
               </div>
             </button>
           </div>
         </div>
 
         {/* NOUVELLE SECTION PREFERENCES */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-6">
+        <div className="bg-white rounded-none border border-[#c5c5d3]/30 p-6 sm:p-8 mb-6">
             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-                <Search className="h-5 w-5 sm:h-6 sm:w-6 text-gray-700" />
-                <h2 className="text-xl sm:text-2xl font-light text-gray-900">{t('profile.preferences')}</h2>
+                <Search className="h-5 w-5 sm:h-6 sm:w-6 text-[#111111]" />
+                <h2 className="text-xl sm:text-2xl font-light text-[#111111]">{t('profile.preferences')}</h2>
             </div>
             <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-[#faf9f4] rounded-none border border-[#c5c5d3]/30 gap-4">
                     <div className="space-y-1">
-                        <Label className="font-medium flex items-center gap-2">
-                             <Globe className="h-4 w-4 text-gray-500" /> {t('profile.language')}
+                        <Label className="font-light flex items-center gap-2 text-[#111111]">
+                             <Globe className="h-4 w-4 text-[#5a5b67]" /> {t('profile.language')}
                         </Label>
-                        <p className="text-xs text-gray-500 max-w-[250px] sm:max-w-md">
+                        <p className="text-xs text-[#5a5b67] max-w-[250px] sm:max-w-md font-light">
                             {t('profile.languageDesc')}
                         </p>
                     </div>
                     <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
-                      <SelectTrigger className="w-[120px] bg-white">
+                      <SelectTrigger className="w-[120px] bg-white rounded-none border-[#c5c5d3]/30 focus:ring-[#111111]">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="fr-CA"><span className="flex items-center gap-2"><img src="/ca-flag.png" alt="CA" className="w-4 h-auto" /> <span className="font-mono text-xs">FR-CA</span></span></SelectItem>
-                        <SelectItem value="en-CA"><span className="flex items-center gap-2"><img src="/ca-flag.png" alt="CA" className="w-4 h-auto" /> <span className="font-mono text-xs">EN-CA</span></span></SelectItem>
+                      <SelectContent className="rounded-none border-[#c5c5d3]/30">
+                        <SelectItem value="fr-CA" className="rounded-none"><span className="flex items-center gap-2"><img src="/ca-flag.png" alt="CA" className="w-4 h-auto" /> <span className="font-mono text-xs">FR-CA</span></span></SelectItem>
+                        <SelectItem value="en-CA" className="rounded-none"><span className="flex items-center gap-2"><img src="/ca-flag.png" alt="CA" className="w-4 h-auto" /> <span className="font-mono text-xs">EN-CA</span></span></SelectItem>
                       </SelectContent>
                     </Select>
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="flex items-center justify-between p-4 bg-[#faf9f4] rounded-none border border-[#c5c5d3]/30">
                     <div className="space-y-1">
-                        <Label htmlFor="searchDocs" className="font-medium flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-gray-500" /> {t('profile.searchEngine')}
+                        <Label htmlFor="searchDocs" className="font-light flex items-center gap-2 text-[#111111]">
+                            <FileText className="h-4 w-4 text-[#5a5b67]" /> {t('profile.searchEngine')}
                         </Label>
-                        <p className="text-xs text-gray-500 max-w-[250px] sm:max-w-md">
+                        <p className="text-xs text-[#5a5b67] max-w-[250px] sm:max-w-md font-light">
                             {t('profile.searchEngineDesc')}
                         </p>
                     </div>
@@ -457,28 +457,28 @@ const Profile = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="shadow-sm">
-            <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl">{t('profile.personalInfo')}</CardTitle><CardDescription>{t('profile.personalInfoDesc')}</CardDescription></CardHeader>
+          <Card className="shadow-none rounded-none border border-[#c5c5d3]/30">
+            <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl text-[#111111]">{t('profile.personalInfo')}</CardTitle><CardDescription className="font-light text-[#5a5b67]">{t('profile.personalInfoDesc')}</CardDescription></CardHeader>
             <CardContent className="space-y-4 sm:space-y-5 px-5 sm:px-6 pb-6">
-              <div className="space-y-2"><Label htmlFor="firstName" className="text-sm font-medium">{t('profile.firstName')}</Label><Input id="firstName" value={profile.first_name} onChange={(e) => setProfile({ ...profile, first_name: e.target.value })} placeholder="Jean" className="h-10 sm:h-11" /></div>
-              <div className="space-y-2"><Label htmlFor="lastName" className="text-sm font-medium">{t('profile.lastName')}</Label><Input id="lastName" value={profile.last_name} onChange={(e) => setProfile({ ...profile, last_name: e.target.value })} placeholder="Dupont" className="h-10 sm:h-11" /></div>
+              <div className="space-y-2"><Label htmlFor="firstName" className="text-sm font-light text-[#111111]">{t('profile.firstName')}</Label><Input id="firstName" value={profile.first_name} onChange={(e) => setProfile({ ...profile, first_name: e.target.value })} placeholder="Jean" className="h-10 sm:h-11 rounded-none border-[#c5c5d3]/30 focus-visible:ring-[#111111] bg-[#faf9f4]" /></div>
+              <div className="space-y-2"><Label htmlFor="lastName" className="text-sm font-light text-[#111111]">{t('profile.lastName')}</Label><Input id="lastName" value={profile.last_name} onChange={(e) => setProfile({ ...profile, last_name: e.target.value })} placeholder="Dupont" className="h-10 sm:h-11 rounded-none border-[#c5c5d3]/30 focus-visible:ring-[#111111] bg-[#faf9f4]" /></div>
             </CardContent>
           </Card>
-          <Card className="shadow-sm">
-            <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl">{t('profile.contact')}</CardTitle><CardDescription>{t('profile.contactDesc')}</CardDescription></CardHeader>
+          <Card className="shadow-none rounded-none border border-[#c5c5d3]/30">
+            <CardHeader className="px-5 sm:px-6"><CardTitle className="font-light text-lg sm:text-xl text-[#111111]">{t('profile.contact')}</CardTitle><CardDescription className="font-light text-[#5a5b67]">{t('profile.contactDesc')}</CardDescription></CardHeader>
             <CardContent className="space-y-4 sm:space-y-5 px-5 sm:px-6 pb-6">
-              <div className="space-y-2"><Label htmlFor="email" className="text-sm font-medium">{t('profile.email')}</Label><Input id="email" type="email" value={user?.email || ''} disabled className="h-10 sm:h-11 bg-gray-50 text-gray-500" /><p className="text-xs text-gray-400">{t('profile.emailLock')}</p></div>
-              <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-medium">{t('profile.phone')}</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[110px] sm:w-[140px] h-10 sm:h-11 text-xs sm:text-sm"><SelectValue /></SelectTrigger><SelectContent>{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code}><span className="flex items-center gap-2">{country.flagUrl ? <img src={country.flagUrl} alt={country.country} className="w-5 h-auto object-contain" /> : <span>{country.flag}</span>} <span className="font-mono text-xs">{country.country}</span></span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-10 sm:h-11" /></div></div>
+              <div className="space-y-2"><Label htmlFor="email" className="text-sm font-light text-[#111111]">{t('profile.email')}</Label><Input id="email" type="email" value={user?.email || ''} disabled className="h-10 sm:h-11 bg-white border border-[#c5c5d3]/30 text-[#5a5b67] rounded-none" /><p className="text-xs text-[#5a5b67] font-light">{t('profile.emailLock')}</p></div>
+              <div className="space-y-2"><Label htmlFor="phone" className="text-sm font-light text-[#111111]">{t('profile.phone')}</Label><div className="flex gap-2"><Select value={profile.phone_country_code} onValueChange={(value) => setProfile({ ...profile, phone_country_code: value })}><SelectTrigger className="w-[110px] sm:w-[140px] h-10 sm:h-11 text-xs sm:text-sm rounded-none border-[#c5c5d3]/30 bg-[#faf9f4] focus:ring-[#111111]"><SelectValue /></SelectTrigger><SelectContent className="rounded-none border-[#c5c5d3]/30">{countryCodes.map((country) => (<SelectItem key={country.code} value={country.code} className="rounded-none"><span className="flex items-center gap-2">{country.flagUrl ? <img src={country.flagUrl} alt={country.country} className="w-5 h-auto object-contain" /> : <span>{country.flag}</span>} <span className="font-mono text-xs">{country.country}</span></span></SelectItem>))}</SelectContent></Select><Input id="phone" type="tel" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} placeholder="6 12 34 56 78" className="flex-1 h-10 sm:h-11 rounded-none border-[#c5c5d3]/30 focus-visible:ring-[#111111] bg-[#faf9f4]" /></div></div>
             </CardContent>
           </Card>
         </div>
       </div>
 
       <Dialog open={showAvatarDialog} onOpenChange={setShowAvatarDialog}>
-        <DialogContent className="sm:max-w-[500px] max-w-[95vw]">
-          <DialogHeader><DialogTitle>Ajuster votre photo</DialogTitle><DialogDescription>Déplacez l'image pour la centrer dans le cercle</DialogDescription></DialogHeader>
-          <div className="space-y-4">
-            <div className="relative w-full h-[300px] sm:h-[400px] bg-gray-100 rounded-lg overflow-hidden cursor-move touch-none" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onTouchStart={(e) => { setIsDragging(true); const touch = e.touches[0]; setDragStart({ x: touch.clientX - imagePosition.x, y: touch.clientY - imagePosition.y }); }} onTouchMove={(e) => { if (!isDragging) return; const touch = e.touches[0]; setImagePosition({ x: touch.clientX - dragStart.x, y: touch.clientY - dragStart.y }); }} onTouchEnd={() => setIsDragging(false)}>
+        <DialogContent className="sm:max-w-[500px] max-w-[95vw] rounded-none border-[#c5c5d3]/30 bg-white p-0 overflow-hidden shadow-2xl">
+          <DialogHeader className="p-6 pb-0"><DialogTitle className="font-light text-2xl text-[#111111]">Ajuster votre photo</DialogTitle><DialogDescription className="font-light text-[#5a5b67]">Déplacez l'image pour la centrer dans le cercle</DialogDescription></DialogHeader>
+          <div className="space-y-4 p-6 pt-2">
+            <div className="relative w-full h-[300px] sm:h-[400px] bg-[#faf9f4] border border-[#c5c5d3]/30 rounded-none overflow-hidden cursor-move touch-none" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onTouchStart={(e) => { setIsDragging(true); const touch = e.touches[0]; setDragStart({ x: touch.clientX - imagePosition.x, y: touch.clientY - imagePosition.y }); }} onTouchMove={(e) => { if (!isDragging) return; const touch = e.touches[0]; setImagePosition({ x: touch.clientX - dragStart.x, y: touch.clientY - dragStart.y }); }} onTouchEnd={() => setIsDragging(false)}>
               {selectedImage && (
                 <>
                   <img ref={imageRef} src={selectedImage} alt="Preview" className="absolute select-none" style={{ transform: `translate(${imagePosition.x}px, ${imagePosition.y}px)`, maxWidth: 'none', height: '100%', width: 'auto', }} draggable={false} />
@@ -486,7 +486,7 @@ const Profile = () => {
                 </>
               )}
             </div>
-            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setShowAvatarDialog(false); setSelectedImage(null); }}><X className="mr-2 h-4 w-4" />Annuler</Button><Button onClick={handleValidateAvatar} disabled={isUploadingAvatar} className="bg-gray-700 hover:bg-gray-800">{isUploadingAvatar ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Upload...</> : 'Valider'}</Button></div>
+            <div className="flex justify-end gap-2"><Button variant="outline" className="rounded-none border-[#c5c5d3]/30 text-[#111111] hover:bg-[#faf9f4] font-light uppercase tracking-widest text-xs h-10 px-6" onClick={() => { setShowAvatarDialog(false); setSelectedImage(null); }}><X className="mr-2 h-4 w-4" />Annuler</Button><Button onClick={handleValidateAvatar} disabled={isUploadingAvatar} className="bg-[#00236F] hover:bg-[#1e3a8a] text-white font-light rounded-none transition-all uppercase tracking-widest text-xs h-10 px-6">{isUploadingAvatar ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Upload...</> : 'Valider'}</Button></div>
           </div>
         </DialogContent>
       </Dialog>
