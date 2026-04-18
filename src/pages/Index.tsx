@@ -369,6 +369,12 @@ const Index = () => {
                 >
                   {t('about.navLink')}
                 </button>
+                <button 
+                  onClick={() => navigate('/pricing')} 
+                  className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block translate-y-[2px]"
+                >
+                  {t('pricing.navLink')}
+                </button>
               </div>
             <div className="flex items-center gap-4">
               <LanguageSelector />
@@ -410,6 +416,12 @@ const Index = () => {
                     className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block translate-y-[2px]"
                   >
                     {t('about.navLink')}
+                  </button>
+                  <button 
+                    onClick={() => navigate('/pricing')} 
+                    className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block translate-y-[2px]"
+                  >
+                    {t('pricing.navLink')}
                   </button>
                 </div>
 
