@@ -13,7 +13,7 @@ import {
   Settings, Globe, FileText, ArrowRight, Folder,
   Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
   Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart, Activity,
-  Presentation
+  Presentation, Shield, Lock, Search
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -373,77 +373,152 @@ const Index = () => {
 
       <div className={`flex-1 ${hasSearched ? "pt-24" : ""}`}>
         {!hasSearched ? (
-          <div className="relative min-h-screen w-full overflow-hidden flex flex-col" style={{ background: '#FAFAF8', fontFamily: "'Inter', sans-serif" }}>
-
-            <nav className="w-full z-50" style={{ background: '#FAFAF8' }}>
-              <div className="container mx-auto px-6 h-20 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <img src="/sivara-logo.png" alt="Logo" className="w-10 h-10 object-contain" />
-                  <span style={{ fontWeight: 450, fontSize: '20px', color: '#2D2D2D', letterSpacing: '-0.3px' }}>Sivara</span>
+          <div className="bg-[#faf9f4] text-[#111111] min-h-screen flex flex-col antialiased relative font-sans">
+            <style>{`
+              .grid-bg-pattern {
+                  background-image: 
+                      linear-gradient(to right, rgba(197, 197, 211, 0.4) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(197, 197, 211, 0.4) 1px, transparent 1px);
+                  background-size: 40px 40px;
+              }
+            `}</style>
+            
+            {/* TopNavBar */}
+            <nav className="sticky top-0 z-50 bg-[#FAF9F4]/80 backdrop-blur-xl w-full border-b border-[#c5c5d3]/30">
+              <div className="flex justify-between items-center w-full px-8 py-4 max-w-screen-2xl mx-auto">
+                {/* Brand */}
+                <div className="flex items-center gap-3 cursor-pointer transition-all active:scale-95">
+                  <img src="/sivara-logo.png" alt="Sivara" className="w-8 h-8 object-contain" />
+                  <span className="text-xl font-bold tracking-tighter text-[#00236F]">Sivara</span>
                 </div>
-                <div className="flex items-center gap-4">
+
+                {/* Trailing Actions */}
+                <div className="flex items-center gap-6">
                   {isStaff && (
-                    <button onClick={() => setShowManage(true)} style={{ color: '#6B6B6B', fontWeight: 400, fontSize: '14px' }} className="hover:opacity-70 transition-opacity hidden sm:block">Contribution</button>
+                    <button onClick={() => setShowManage(true)} className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block">Contribution</button>
                   )}
                   <UserMenu />
                 </div>
               </div>
             </nav>
 
-            <div className="flex-1 flex items-center">
-              <div className="container mx-auto px-6">
-                <div className="flex items-center justify-between gap-8">
+            {/* Main Content Canvas */}
+            <main className="flex-1 w-full max-w-screen-2xl mx-auto px-6 md:px-12 py-12 flex flex-col gap-12 relative z-10">
+              
+              {/* Hero Search Area */}
+              <section className="flex flex-col items-center justify-center py-16 gap-8 bg-[#f5f4ef] rounded-xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                <div className="absolute inset-0 grid-bg-pattern opacity-50 z-0"></div>
+                <div className="relative z-10 flex flex-col items-center w-full max-w-3xl text-center gap-6 px-4">
                   
-                  {/* Left — Text + Search */}
-                  <div className="flex-1 max-w-xl space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                    <div>
-                      <p style={{ fontSize: '13px', fontWeight: 400, color: '#8B7355', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '12px' }}>Moteur de recherche</p>
-                      <h1 style={{ fontSize: 'clamp(36px, 5vw, 56px)', fontWeight: 300, color: '#2D2D2D', lineHeight: 1.1, letterSpacing: '-1px' }}>
-                        Recherchez le web.
-                        <br />
-                        <span style={{ fontWeight: 450 }}>Sans surveillance.</span>
-                      </h1>
-                      <p style={{ fontSize: '13px', fontWeight: 300, color: '#9A9A9A', marginTop: '6px', fontStyle: 'italic' }}>
+                  <div>
+                    <h1 className="text-5xl md:text-6xl font-light tracking-[-0.02em] text-[#111111] leading-tight flex flex-col gap-2">
+                        <span>Recherchez le web.</span>
+                        <span className="font-medium text-[#00236F]">Sans surveillance.</span>
+                    </h1>
+                    <p className="text-[13px] font-light text-[#5a5b67] mt-4 italic">
                         Conceptualisé par Félix I. et Léa C., École secondaire Marie-Anne
-                      </p>
-                    </div>
-                    <p style={{ fontSize: '16px', fontWeight: 300, color: '#6B6B6B', lineHeight: 1.7, maxWidth: '440px' }}>
-                      Sivara vous aide à trouver l'information rapidement, dans une expérience claire et immersive.
                     </p>
-
-                    <div className="w-full" style={{ maxWidth: '480px' }}>
-                      <SearchBar onSearch={handleSearch} isLoading={isSearching} value={searchQuery} onChange={setSearchQuery} />
-                    </div>
-
-                    <div className="flex flex-wrap gap-3 pt-2">
-                      {quickCategories.map((c) => (
-                        <CategoryImageButton
-                          key={c.label}
-                          label={c.label}
-                          imageSrc={c.imageSrc}
-                          onClick={() => handleSearch(c.query)}
-                        />
-                      ))}
-                    </div>
                   </div>
-
-                  {/* Right — City Image */}
-                  <div className="hidden lg:block flex-shrink-0 animate-in fade-in slide-in-from-right-8 duration-1000" style={{ animationDelay: '200ms' }}>
-                    <img 
-                      src="/landing-tags/city.jpg" 
-                      alt="Sivara city" 
-                      style={{ 
-                        width: '480px', 
-                        maxWidth: '40vw',
-                        height: 'auto',
-                      }} 
-                    />
-                  </div>
-
+                  
+                  <p className="text-lg md:text-xl font-medium text-[#2c2d38] max-w-2xl">
+                    Sivara vous aide à trouver l'information rapidement, dans une expérience claire, immersive et sans publicité.
+                  </p>
+                  
+                  <form onSubmit={(e) => { e.preventDefault(); if(searchQuery.trim()) handleSearch(searchQuery.trim()); }} className="w-full mt-4 relative">
+                    <div className="relative flex items-center w-full bg-white rounded border border-[#5a5b67]/30 focus-within:border-[#00236F] focus-within:ring-1 focus-within:ring-[#00236F] transition-colors shadow-sm overflow-hidden">
+                      <Search className="ml-5 text-[#00236F] h-5 w-5" />
+                      <input 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        aria-label="Rechercher sur Sivara..." 
+                        className="w-full bg-transparent border-none focus:ring-0 text-[#111111] text-lg py-4 pl-4 pr-32 font-medium placeholder:text-[#5a5b67] outline-none" 
+                        placeholder="Saisir une requête..." 
+                        type="text"
+                      />
+                      <button type="submit" disabled={isSearching} className="absolute right-2 top-2 bottom-2 bg-[#00236F] hover:bg-[#1e3a8a] text-white px-6 rounded font-bold transition-colors text-sm uppercase tracking-wider flex items-center gap-2">
+                        {isSearching ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : null}
+                        Rechercher
+                      </button>
+                    </div>
+                  </form>
                 </div>
-              </div>
-            </div>
+              </section>
 
+              {/* Dashboard Bento Grid */}
+              <section className="grid grid-cols-1 md:grid-cols-12 gap-6 w-full animate-in fade-in slide-in-from-bottom-12 duration-1000" style={{ animationDelay: '200ms' }}>
+                {/* Visual Block (Span 8) */}
+                <div className="md:col-span-8 bg-white rounded-xl p-8 flex flex-col gap-6 relative overflow-hidden outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15">
+                  <div className="flex justify-between items-start z-10">
+                    <div>
+                      <h2 className="text-2xl font-medium tracking-tight text-[#111111]">L'information accessible</h2>
+                      <p className="text-base font-medium text-[#2c2d38] mt-1">Sivara rassemble l'information du monde entier pour vous la présenter simplement.</p>
+                    </div>
+                    <div className="p-2 bg-[#00236F]/5 rounded text-[#00236F]">
+                      <Globe className="h-6 w-6" />
+                    </div>
+                  </div>
+                  <div className="relative w-full h-80 bg-[#efeee9] rounded overflow-hidden mt-2 z-10 border border-[#c5c5d3]/20">
+                    <img 
+                      alt="Famille utilisant une tablette" 
+                      className="w-full h-full object-cover opacity-90" 
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-3Tw_nNyf1d6mYO4ighNUcyr0R5LiUrPjXUoSV593-TNEtSg_ER03HmFpdD0sBR1k0pC8JMVLsRWCtlD1QGWz0SqYFYOVx4OSzqDGv1XGF02uxkCch4d4jGty7wcNcvPZ6wBOQHhicM-VEjBdNjrA5FCnPY-srVYO1MZm6pvZ438yhG5-vnDWURuDdYh7_Cb353aUylGAGy1YDb7WvQBQ4sOqX63i3LRAsTUiilbrBQQP-k7OYifEUpZVnSfiZest_F7axR_FGtZD"
+                    />
+                    <div className="absolute bottom-4 left-4 bg-[#faf9f4]/90 backdrop-blur-md px-3 py-2 rounded border border-[#c5c5d3]/30 flex flex-col gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#2c2d38]">Contenus indexés</span>
+                      <span className="text-xl font-medium text-[#00236F] flex items-center gap-2">
+                        <Activity className="h-4 w-4" /> En temps réel
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Score/Performance (Span 4) */}
+                <div className="md:col-span-4 flex flex-col gap-6">
+                  <div className="flex-1 bg-white rounded-xl p-8 flex flex-col justify-between relative overflow-hidden outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15">
+                    <div className="flex justify-between items-start">
+                      <h2 className="text-xl font-medium tracking-tight text-[#111111]">Rapidité de réponse</h2>
+                      <Target className="h-6 w-6 text-[#115740]" />
+                    </div>
+                    <div className="flex flex-col items-center justify-center py-6">
+                      <div className="relative w-32 h-32 flex items-center justify-center">
+                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                          <circle cx="50" cy="50" fill="none" r="45" stroke="#EFEEE9" strokeWidth="8"></circle>
+                          <circle className="transition-all duration-1000" cx="50" cy="50" fill="none" r="45" stroke="#115740" strokeDasharray="282" strokeDashoffset="40" strokeWidth="8"></circle>
+                        </svg>
+                        <div className="absolute flex flex-col items-center">
+                          <span className="text-4xl font-medium text-[#115740]">98</span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-[#2c2d38]">/ 100</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-[#115740]/10 px-4 py-3 rounded flex items-center gap-3">
+                      <Award className="h-5 w-5 text-[#115740]" />
+                      <span className="text-sm font-medium text-[#115740]">Requêtes traitées sans délai.</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Categories List (Span 12) */}
+                <div className="md:col-span-12 bg-[#f5f4ef] rounded-xl p-8 outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15 flex flex-col gap-6">
+                  <div className="flex items-end justify-between border-b border-[#c5c5d3]/30 pb-4">
+                    <div>
+                      <h2 className="text-2xl font-medium tracking-tight text-[#111111]">Explorer les catégories</h2>
+                      <p className="text-base font-medium text-[#2c2d38] mt-1">Découvrez des résultats de recherche organisés par thématiques.</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-start gap-4">
+                    {quickCategories.map((c) => (
+                      <CategoryImageButton
+                        key={c.label}
+                        label={c.label}
+                        imageSrc={c.imageSrc}
+                        onClick={() => handleSearch(c.query)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </main>
           </div>
         ) : (
           <div className="container mx-auto px-4 pb-12">
