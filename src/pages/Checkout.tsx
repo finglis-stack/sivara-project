@@ -230,10 +230,8 @@ const Checkout = () => {
       {/* Navigation */}
       <nav className="relative z-50 w-full px-8 py-6 flex justify-between items-center max-w-screen-xl mx-auto">
          <div onClick={() => navigate('/pricing')} className="flex items-center gap-3 cursor-pointer transition-all active:scale-95 group">
-             <div className="h-8 w-8 bg-[#00236F] text-white rounded-none flex items-center justify-center shadow-sm">
-                 <span className="font-bold font-serif leading-none">S</span>
-             </div>
-             <span className="font-medium tracking-wide text-[#111111] group-hover:text-[#00236F] transition-colors">{t('pricing.proTitle')}</span>
+             <img src="/sivara-logo.png" alt="Sivara" className="w-8 h-8 object-contain" />
+             <span className="text-xl font-bold tracking-tighter text-[#111111] group-hover:text-[#00236F] transition-colors">Sivara</span>
          </div>
          <div className="flex items-center gap-4">
              <LanguageSelector />
