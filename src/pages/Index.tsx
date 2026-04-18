@@ -446,32 +446,6 @@ const Index = () => {
 
               {/* Dashboard Bento Grid */}
               <section className="grid grid-cols-1 md:grid-cols-12 gap-6 w-full animate-in fade-in slide-in-from-bottom-12 duration-1000" style={{ animationDelay: '200ms' }}>
-                {/* Visual Block (Span 12) */}
-                <div className="md:col-span-12 bg-white rounded-xl p-8 flex flex-col gap-6 relative overflow-hidden outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15">
-                  <div className="flex justify-between items-start z-10">
-                    <div>
-                      <h2 className="text-2xl font-medium tracking-tight text-[#111111]">L'information accessible</h2>
-                      <p className="text-base font-medium text-[#2c2d38] mt-1">Sivara rassemble l'information du monde entier pour vous la présenter simplement.</p>
-                    </div>
-                    <div className="p-2 bg-[#00236F]/5 rounded text-[#00236F]">
-                      <Globe className="h-6 w-6" />
-                    </div>
-                  </div>
-                  <div className="relative w-full h-80 bg-[#efeee9] rounded overflow-hidden mt-2 z-10 border border-[#c5c5d3]/20">
-                    <img 
-                      alt="Famille utilisant une tablette" 
-                      className="w-full h-full object-cover opacity-90" 
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-3Tw_nNyf1d6mYO4ighNUcyr0R5LiUrPjXUoSV593-TNEtSg_ER03HmFpdD0sBR1k0pC8JMVLsRWCtlD1QGWz0SqYFYOVx4OSzqDGv1XGF02uxkCch4d4jGty7wcNcvPZ6wBOQHhicM-VEjBdNjrA5FCnPY-srVYO1MZm6pvZ438yhG5-vnDWURuDdYh7_Cb353aUylGAGy1YDb7WvQBQ4sOqX63i3LRAsTUiilbrBQQP-k7OYifEUpZVnSfiZest_F7axR_FGtZD"
-                    />
-                    <div className="absolute bottom-4 left-4 bg-[#faf9f4]/90 backdrop-blur-md px-3 py-2 rounded border border-[#c5c5d3]/30 flex flex-col gap-1">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#2c2d38]">Contenus indexés</span>
-                      <span className="text-xl font-medium text-[#00236F] flex items-center gap-2">
-                        <Activity className="h-4 w-4" /> En temps réel
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Quick Categories List (Span 12) */}
                 <div className="md:col-span-12 bg-[#f5f4ef] rounded-xl p-8 outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15 flex flex-col gap-6">
                   <div className="flex items-end justify-between border-b border-[#c5c5d3]/30 pb-4">
@@ -489,6 +463,32 @@ const Index = () => {
                         onClick={() => handleSearch(c.query)}
                       />
                     ))}
+                  </div>
+                </div>
+
+                {/* Visual Block (Span 12) */}
+                <div className="md:col-span-12 bg-white rounded-xl p-8 flex flex-col gap-6 relative overflow-hidden outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15">
+                  <div className="flex justify-between items-start z-10">
+                    <div>
+                      <h2 className="text-2xl font-medium tracking-tight text-[#111111]">L'information accessible</h2>
+                      <p className="text-base font-medium text-[#2c2d38] mt-1">Sivara rassemble l'information du monde entier pour vous la présenter simplement.</p>
+                    </div>
+                    <div className="p-2 bg-[#00236F]/5 rounded text-[#00236F]">
+                      <Globe className="h-6 w-6" />
+                    </div>
+                  </div>
+                  <div className="relative w-full h-80 bg-[#efeee9] rounded overflow-hidden mt-2 z-10 border border-[#c5c5d3]/20">
+                    <img 
+                      alt="Famille utilisant une tablette" 
+                      className="w-full h-full object-cover opacity-90" 
+                      src="/help-hero.jpg"
+                    />
+                    <div className="absolute bottom-4 left-4 bg-[#faf9f4]/90 backdrop-blur-md px-3 py-2 rounded border border-[#c5c5d3]/30 flex flex-col gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#2c2d38]">Contenus indexés</span>
+                      <span className="text-xl font-medium text-[#00236F] flex items-center gap-2">
+                        <Activity className="h-4 w-4" /> En temps réel
+                      </span>
+                    </div>
                   </div>
                 </div>
               </section>
