@@ -152,7 +152,7 @@ const Login = () => {
                     disabled={isChecking} 
                   />
                 </div>
-                <Button type="submit" className="w-full h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-bold rounded-none transition-all uppercase tracking-wider text-sm" disabled={isChecking}>
+                <Button type="submit" className="w-full h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-light rounded-none transition-all uppercase tracking-wider text-sm" disabled={isChecking}>
                   {isChecking ? <Loader2 className="h-5 w-5 animate-spin" /> : <span>Continuer</span>}
                 </Button>
               </form>
@@ -178,8 +178,8 @@ const Login = () => {
                   />
                 </div>
                 <div className="flex gap-3">
-                    <Button type="button" variant="outline" onClick={() => setStep('email')} className="h-12 px-6 border-[#c5c5d3]/30 text-[#5a5b67] hover:bg-[#efeee9] rounded-none uppercase tracking-wider text-sm font-bold">Retour</Button>
-                    <Button type="submit" className="flex-1 h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-bold rounded-none transition-all uppercase tracking-wider text-sm" disabled={isLoading}>
+                    <Button type="button" variant="outline" onClick={() => setStep('email')} className="h-12 px-6 border-[#c5c5d3]/30 text-[#5a5b67] hover:bg-[#efeee9] rounded-none uppercase tracking-wider text-sm font-light">Retour</Button>
+                    <Button type="submit" className="flex-1 h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-light rounded-none transition-all uppercase tracking-wider text-sm" disabled={isLoading}>
                     {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Se connecter'}
                     </Button>
                 </div>
@@ -192,8 +192,8 @@ const Login = () => {
                         Un lien de connexion temporaire sera envoyé à <strong className="text-[#111111] font-bold">{email}</strong>.
                     </div>
                     <div className="flex gap-3">
-                        <Button type="button" variant="outline" onClick={() => setStep('password')} className="h-12 px-6 border-[#c5c5d3]/30 text-[#5a5b67] hover:bg-[#efeee9] rounded-none uppercase tracking-wider text-sm font-bold">Annuler</Button>
-                        <Button type="submit" className="flex-1 h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-bold rounded-none transition-all uppercase tracking-wider text-sm" disabled={isLoading}>
+                        <Button type="button" variant="outline" onClick={() => setStep('password')} className="h-12 px-6 border-[#c5c5d3]/30 text-[#5a5b67] hover:bg-[#efeee9] rounded-none uppercase tracking-wider text-sm font-light">Annuler</Button>
+                        <Button type="submit" className="flex-1 h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-light rounded-none transition-all uppercase tracking-wider text-sm" disabled={isLoading}>
                             {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Envoyer le lien'}
                         </Button>
                     </div>
