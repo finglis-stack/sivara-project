@@ -365,7 +365,7 @@ const Index = () => {
                 </div>
                 <button 
                   onClick={() => navigate('/about')} 
-                  className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block"
+                  className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block translate-y-[2px]"
                 >
                   {t('about.navLink')}
                 </button>
@@ -407,7 +407,7 @@ const Index = () => {
                   </div>
                   <button 
                     onClick={() => navigate('/about')} 
-                    className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block"
+                    className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block translate-y-[2px]"
                   >
                     {t('about.navLink')}
                   </button>

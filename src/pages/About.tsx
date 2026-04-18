@@ -32,7 +32,7 @@ const About = () => {
               </div>
               <button 
                 onClick={() => navigate('/about')} 
-                className="text-sm font-medium text-[#00236F] border-b-2 border-[#00236F] pb-1 hidden sm:block"
+                className="text-sm font-medium text-[#00236F] border-b-2 border-[#00236F] pb-1 hidden sm:block translate-y-[2px]"
               >
                 {t('about.navLink')}
               </button>
