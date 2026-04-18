@@ -390,7 +390,7 @@ const Index = () => {
                 {/* Brand */}
                 <div className="flex items-center gap-3 cursor-pointer transition-all active:scale-95">
                   <img src="/sivara-logo.png" alt="Sivara" className="w-8 h-8 object-contain" />
-                  <span className="text-xl font-bold tracking-tighter text-[#00236F]">Sivara</span>
+                  <span className="text-xl font-bold tracking-tighter text-[#111111]">Sivara</span>
                 </div>
 
                 {/* Trailing Actions */}
