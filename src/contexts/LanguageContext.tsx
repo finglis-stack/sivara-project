@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import Cookies from 'js-cookie';
+import i18n from '@/i18n/config';
 
 export type Language = 'fr-CA' | 'en-CA';
 
@@ -41,6 +42,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         sameSite: 'Lax',
         secure: window.location.hostname.includes('sivara.ca')
     });
+    i18n.changeLanguage(lang);
   };
 
   return (

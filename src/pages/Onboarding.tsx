@@ -12,6 +12,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { encryptionService } from '@/lib/encryption';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useTranslation } from 'react-i18next';
 import LanguageSelector from '@/components/LanguageSelector';
 import { showSuccess, showError } from '@/utils/toast';
 import { Building2, User, Loader2, ArrowRight, ArrowLeft, CheckCircle2, Shield, Copy, Key } from 'lucide-react';
@@ -36,6 +37,7 @@ const Onboarding = () => {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const { language } = useLanguage();
+  const { t } = useTranslation();
 
   const returnTo = searchParams.get('returnTo') || '/';
 
@@ -170,8 +172,8 @@ const Onboarding = () => {
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-4xl font-light tracking-tight text-[#111111]">Créer un compte</h1>
-              <p className="text-[#5a5b67] text-sm font-light">Rejoignez l'écosystème numérique souverain.</p>
+              <h1 className="text-4xl font-light tracking-tight text-[#111111]">{t('onboarding.title')}</h1>
+              <p className="text-[#5a5b67] text-sm font-light">{t('onboarding.subtitle')}</p>
             </div>
 
             {/* Stepper */}
@@ -188,17 +190,17 @@ const Onboarding = () => {
               <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Prénom</Label>
-                    <Input id="firstName" placeholder="Jean" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
+                    <Label htmlFor="firstName" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">{t('onboarding.firstNameLabel')}</Label>
+                    <Input id="firstName" placeholder={t('onboarding.firstNamePlaceholder')} value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Nom</Label>
-                    <Input id="lastName" placeholder="Dupont" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
+                    <Label htmlFor="lastName" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">{t('onboarding.lastNameLabel')}</Label>
+                    <Input id="lastName" placeholder={t('onboarding.lastNamePlaceholder')} value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="phone" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Téléphone</Label>
+                  <Label htmlFor="phone" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">{t('onboarding.phoneLabel')}</Label>
                   <div className="flex gap-2">
                     <Select value={formData.phoneCountryCode} onValueChange={(value) => setFormData({ ...formData, phoneCountryCode: value })}>
                       <SelectTrigger className="w-[110px] h-12 bg-white border-[#c5c5d3]/30 rounded-none shadow-sm text-[#111111]"><SelectValue /></SelectTrigger>
@@ -217,22 +219,22 @@ const Onboarding = () => {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input id="phone" type="tel" placeholder="514 123 4567" value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} className="flex-1 h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" />
+                    <Input id="phone" type="tel" placeholder={t('onboarding.phonePlaceholder')} value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} className="flex-1 h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" />
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Type de compte</Label>
+                  <Label className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">{t('onboarding.accountType')}</Label>
                   <RadioGroup value={formData.accountType} onValueChange={(value) => setFormData({ ...formData, accountType: value })} className="grid grid-cols-2 gap-4">
                     <Label htmlFor="individual" className={`flex flex-col items-center justify-center p-4 rounded-none border-2 cursor-pointer transition-all ${formData.accountType === 'individual' ? 'border-[#111111] bg-[#faf9f4] text-[#111111]' : 'border-[#c5c5d3]/30 bg-white text-[#5a5b67] hover:border-[#c5c5d3]'}`}>
                       <RadioGroupItem value="individual" id="individual" className="sr-only" />
                       <User className="h-6 w-6 mb-2" />
-                      <span className="text-sm font-light">Personnel</span>
+                      <span className="text-sm font-light">{t('onboarding.personal')}</span>
                     </Label>
                     <Label htmlFor="corporate" className={`flex flex-col items-center justify-center p-4 rounded-none border-2 cursor-pointer transition-all ${formData.accountType === 'corporate' ? 'border-[#111111] bg-[#faf9f4] text-[#111111]' : 'border-[#c5c5d3]/30 bg-white text-[#5a5b67] hover:border-[#c5c5d3]'}`}>
                       <RadioGroupItem value="corporate" id="corporate" className="sr-only" />
                       <Building2 className="h-6 w-6 mb-2" />
-                      <span className="text-sm font-light">Entreprise</span>
+                      <span className="text-sm font-light">{t('onboarding.corporate')}</span>
                     </Label>
                   </RadioGroup>
                 </div>
@@ -240,31 +242,31 @@ const Onboarding = () => {
                 <div className="flex items-start space-x-3 pt-2">
                   <Checkbox id="terms" checked={formData.termsAccepted} onCheckedChange={(checked) => setFormData({ ...formData, termsAccepted: checked as boolean })} className="mt-1 border-[#c5c5d3] data-[state=checked]:bg-[#111111] data-[state=checked]:border-[#111111]" />
                   <label htmlFor="terms" className="text-sm text-[#5a5b67] leading-relaxed cursor-pointer font-light">
-                    J'accepte les <a href="https://help.sivara.ca/article/conditions-dutilisation" className="text-[#111111] font-medium hover:underline">Conditions d'utilisation</a> et la <a href="https://help.sivara.ca/article/politique-de-confidentialit" className="text-[#111111] font-medium hover:underline">Politique de confidentialité</a>.
+                    {t('onboarding.acceptParts1')} <a href="https://help.sivara.ca/article/conditions-dutilisation" className="text-[#111111] font-medium hover:underline">{t('onboarding.acceptTerms')}</a>{t('onboarding.acceptAnd')}<a href="https://help.sivara.ca/article/politique-de-confidentialit" className="text-[#111111] font-medium hover:underline">{t('onboarding.acceptPrivacy')}</a>.
                   </label>
                 </div>
 
                 <Button type="button" onClick={handleNextStep} className="w-full h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-light rounded-none transition-all uppercase tracking-widest text-sm" disabled={!formData.termsAccepted}>
-                  Suivant
+                  {t('onboarding.nextBtn')}
                 </Button>
               </div>
             ) : (
               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Email de connexion</Label>
-                  <Input id="email" type="email" placeholder="jean@exemple.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
+                  <Label htmlFor="email" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">{t('onboarding.emailLabel')}</Label>
+                  <Input id="email" type="email" placeholder={t('onboarding.emailPlaceholder')} value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">Mot de passe</Label>
-                  <Input id="password" type="password" placeholder="Minimum 6 caractères" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
-                  <p className="text-xs text-[#5a5b67] font-light">Utilisez un mot de passe fort et unique.</p>
+                  <Label htmlFor="password" className="text-xs font-bold text-[#2c2d38] uppercase tracking-widest">{t('onboarding.passwordLabel')}</Label>
+                  <Input id="password" type="password" placeholder={t('onboarding.passwordPlaceholder')} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 bg-white border-[#c5c5d3]/30 focus:bg-white transition-all rounded-none shadow-sm focus:ring-[#111111] focus:border-[#111111] text-[#111111] font-light" required />
+                  <p className="text-xs text-[#5a5b67] font-light">{t('onboarding.passwordSub')}</p>
                 </div>
 
                 <div className="flex gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 px-6 border-[#c5c5d3]/30 text-[#5a5b67] hover:bg-[#efeee9] rounded-none uppercase tracking-wider text-sm font-light">Retour</Button>
+                  <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-12 px-6 border-[#c5c5d3]/30 text-[#5a5b67] hover:bg-[#efeee9] rounded-none uppercase tracking-wider text-sm font-light">{t('onboarding.backBtn')}</Button>
                   <Button type="submit" className="flex-1 h-12 bg-[#00236F] hover:bg-[#1e3a8a] text-white font-light rounded-none transition-all uppercase tracking-widest text-sm" disabled={isLoading}>
-                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Créer mon compte'}
+                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : t('onboarding.createBtn')}
                   </Button>
                 </div>
               </div>
@@ -273,9 +275,9 @@ const Onboarding = () => {
 
           <div className="text-center">
             <p className="text-sm text-[#5a5b67] font-light">
-              Déjà inscrit ?{' '}
+              {t('onboarding.alreadyAccount')}{' '}
               <a href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="text-[#111111] font-light hover:font-medium hover:underline transition-all">
-                Se connecter
+                {t('onboarding.loginBtn')}
               </a>
             </p>
           </div>
@@ -288,8 +290,8 @@ const Onboarding = () => {
           <Lottie animationData={animationData} loop={true} />
         </div>
         <div className="max-w-md space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-          <h3 className="text-xl font-light tracking-tight text-[#111111]">Bienvenue dans la résistance.</h3>
-          <p className="text-[#5a5b67] text-sm font-light">Promis, on ne vendra pas votre historique à des robots publicitaires. (Sauf s'ils demandent gentiment... non, on rigole).</p>
+          <h3 className="text-xl font-light tracking-tight text-[#111111]">{t('login.lottieTitle')}</h3>
+          <p className="text-[#5a5b67] text-sm font-light">{t('login.lottieSub')}</p>
         </div>
       </div>
 
@@ -300,10 +302,10 @@ const Onboarding = () => {
             <div className="mx-auto w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-2">
               <Key className="h-7 w-7 text-gray-900" />
             </div>
-            <DialogTitle className="text-center text-xl">Clé de récupération</DialogTitle>
+            <DialogTitle className="text-center text-xl">{t('onboarding.recoveryTitle')}</DialogTitle>
             <DialogDescription className="text-center">
-              Cette clé est le <strong>seul moyen</strong> de récupérer vos documents si vous oubliez votre mot de passe.
-              <br />Notez-la maintenant. Elle ne sera <strong>plus jamais affichée</strong>.
+              {t('onboarding.recoveryDesc1')}
+              <br />{t('onboarding.recoveryDesc2')}
             </DialogDescription>
           </DialogHeader>
 
@@ -315,30 +317,29 @@ const Onboarding = () => {
 
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={handleCopyRecoveryKey}>
-              <Copy className="mr-2 h-4 w-4" /> Copier
+              <Copy className="mr-2 h-4 w-4" /> {t('onboarding.copyBtn')}
             </Button>
             <Button variant="outline" className="flex-1" onClick={() => {
               if (recoveryKey) {
-                const blob = new Blob([`CLÉ DE RÉCUPÉRATION SIVARA\n\n${recoveryKey}\n\nGardez ce fichier en lieu sûr.\nSans cette clé, vos documents seront perdus si vous oubliez votre mot de passe.`], { type: 'text/plain' });
+                const blob = new Blob([`SIVARA RECOVERY KEY\n\n${recoveryKey}\n\nKeep this file safe.\nWithout this key, your documents will be lost if you forget your password.`], { type: 'text/plain' });
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
                 a.download = 'sivara-recovery-key.txt';
                 a.click();
-                showSuccess('Fichier téléchargé');
               }
             }}>
-              <ArrowRight className="mr-2 h-4 w-4" /> Télécharger .txt
+              <ArrowRight className="mr-2 h-4 w-4" /> {t('onboarding.downloadBtn')}
             </Button>
           </div>
 
           <div className="mt-4 space-y-3">
             <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
-              <p className="text-xs text-red-700 font-medium">Si vous perdez cette clé ET votre mot de passe, vos documents chiffrés seront définitivement inaccessibles. Personne ne peut les récupérer, même pas Sivara.</p>
+              <p className="text-xs text-red-700 font-medium">{t('onboarding.recoveryWarning')}</p>
             </div>
             <div className="space-y-2">
-              <Label className="text-xs text-gray-500">Tapez les 4 premiers caractères de votre clé pour confirmer :</Label>
+              <Label className="text-xs text-gray-500">{t('onboarding.recoveryInput')}</Label>
               <Input
-                placeholder="Ex: A1B2"
+                placeholder={t('onboarding.recoveryPlaceholder')}
                 value={recoveryTypedConfirm}
                 onChange={(e) => setRecoveryTypedConfirm(e.target.value.toUpperCase())}
                 className="h-11 text-center font-mono tracking-widest text-lg"
@@ -354,7 +355,7 @@ const Onboarding = () => {
               onClick={handleRecoveryAcknowledge}
             >
               <CheckCircle2 className="mr-2 h-4 w-4" />
-              J'ai sauvegardé ma clé
+              {t('onboarding.recoverySaveBtn')}
             </Button>
           </DialogFooter>
         </DialogContent>

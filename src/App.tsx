@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from '@capacitor/app';
 import { supabase } from '@/integrations/supabase/client';
+import '@/i18n/config';
 
 // Apps
 import Index from "./pages/Index";

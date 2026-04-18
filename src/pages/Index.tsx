@@ -21,6 +21,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 interface SearchResultType {
   id: string;
@@ -60,6 +61,7 @@ const ICON_MAP: any = {
 
 const Index = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [results, setResults] = useState<SearchResultType[]>([]);
@@ -320,22 +322,22 @@ const Index = () => {
 
   const quickCategories = [
     {
-      label: 'Technologie',
+      label: t('index.tech'),
       imageSrc: '/landing-tags/valencia-2154438_1280.jpg',
       query: 'Technologie',
     },
     {
-      label: 'Science',
+      label: t('index.science'),
       imageSrc: '/landing-tags/landscape-10071292_1280.jpg',
       query: 'Science',
     },
     {
-      label: 'Design',
+      label: t('index.design'),
       imageSrc: '/landing-tags/tulip-3502171_1920.jpg',
       query: 'Design',
     },
     {
-      label: 'Actualité',
+      label: t('index.news'),
       imageSrc: '/landing-tags/ganges-10021683_1280.jpg',
       query: 'Actualité',
     },
@@ -399,7 +401,7 @@ const Index = () => {
                 <div className="flex items-center gap-4 lg:gap-6">
                   <LanguageSelector />
                   {isStaff && (
-                    <button onClick={() => setShowManage(true)} className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block">Contribution</button>
+                    <button onClick={() => setShowManage(true)} className="text-sm font-medium text-[#5a5b67] hover:text-[#00236F] transition-colors hidden sm:block">{t('index.contribution')}</button>
                   )}
                   <UserMenu />
                 </div>
@@ -415,16 +417,16 @@ const Index = () => {
                   
                   <div>
                     <h1 className="text-5xl md:text-6xl font-light tracking-[-0.02em] text-[#111111] leading-tight flex flex-col gap-2">
-                        <span>Recherchez le web.</span>
-                        <span className="text-[#00236F]">Sans surveillance.</span>
+                        <span>{t('index.heroLine1')}</span>
+                        <span className="text-[#00236F]">{t('index.heroLine2')}</span>
                     </h1>
                     <p className="text-[13px] font-light text-[#5a5b67] mt-4 italic">
-                        Conceptualisé par Félix I. et Léa C., École secondaire Marie-Anne
+                        {t('index.designedBy')}
                     </p>
                   </div>
                   
                   <p className="text-lg md:text-xl font-light text-[#2c2d38] max-w-2xl">
-                    Sivara vous aide à trouver l'information rapidement, dans une expérience claire, immersive et sans publicité.
+                    {t('index.heroSubTitle')}
                   </p>
                   
                   <form onSubmit={(e) => { e.preventDefault(); if(searchQuery.trim()) handleSearch(searchQuery.trim()); }} className="w-full mt-4 relative">
@@ -435,12 +437,12 @@ const Index = () => {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         aria-label="Rechercher sur Sivara..." 
                         className="w-full bg-transparent border-none focus:ring-0 text-[#111111] text-lg py-4 pl-4 pr-32 font-medium placeholder:text-[#5a5b67] outline-none" 
-                        placeholder="Saisir une requête..." 
+                        placeholder={t('index.searchPlaceholder')}
                         type="text"
                       />
                       <button type="submit" disabled={isSearching} className="absolute right-2 top-2 bottom-2 bg-[#00236F] hover:bg-[#1e3a8a] text-white px-6 rounded font-bold transition-colors text-sm uppercase tracking-wider flex items-center gap-2">
                         {isSearching ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : null}
-                        Rechercher
+                        {t('index.searchButton')}
                       </button>
                     </div>
                   </form>
@@ -453,8 +455,8 @@ const Index = () => {
                 <div className="md:col-span-12 bg-[#f5f4ef] rounded-xl p-8 outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15 flex flex-col gap-6">
                   <div className="flex items-end justify-between border-b border-[#c5c5d3]/30 pb-4">
                     <div>
-                      <h2 className="text-2xl font-medium tracking-tight text-[#111111]">Explorer les catégories</h2>
-                      <p className="text-base font-medium text-[#2c2d38] mt-1">Découvrez des résultats de recherche organisés par thématiques.</p>
+                      <h2 className="text-2xl font-medium tracking-tight text-[#111111]">{t('index.categoriesTitle')}</h2>
+                      <p className="text-base font-medium text-[#2c2d38] mt-1">{t('index.categoriesSubTitle')}</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-start gap-4">
@@ -473,8 +475,8 @@ const Index = () => {
                 <div className="md:col-span-12 bg-white rounded-xl p-8 flex flex-col gap-6 relative overflow-hidden outline outline-1 outline-[#c5c5d3]/30 shadow-sm border border-[#c5c5d3]/15">
                   <div className="flex justify-between items-start z-10">
                     <div>
-                      <h2 className="text-2xl font-medium tracking-tight text-[#111111]">L'information accessible</h2>
-                      <p className="text-base font-medium text-[#2c2d38] mt-1">Sivara rassemble l'information du monde entier pour vous la présenter simplement.</p>
+                      <h2 className="text-2xl font-medium tracking-tight text-[#111111]">{t('index.accessibleTitle')}</h2>
+                      <p className="text-base font-medium text-[#2c2d38] mt-1">{t('index.accessibleSubTitle')}</p>
                     </div>
                     <div className="p-2 bg-[#00236F]/5 rounded text-[#00236F]">
                       <Globe className="h-6 w-6" />
@@ -487,9 +489,9 @@ const Index = () => {
                       src="/help-hero.jpg"
                     />
                     <div className="absolute bottom-4 left-4 bg-[#faf9f4]/90 backdrop-blur-md px-3 py-2 rounded border border-[#c5c5d3]/30 flex flex-col gap-1">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#2c2d38]">Contenus indexés</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#2c2d38]">{t('index.indexedContent')}</span>
                       <span className="text-xl font-medium text-[#00236F] flex items-center gap-2">
-                        <Activity className="h-4 w-4" /> En temps réel
+                        <Activity className="h-4 w-4" /> {t('index.realTime')}
                       </span>
                     </div>
                   </div>
@@ -510,7 +512,7 @@ const Index = () => {
                   <div className="mb-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
                       <div className="flex items-center justify-between mb-4 px-2">
                           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                              <FileText className="h-4 w-4" /> Vos Documents
+                              <FileText className="h-4 w-4" /> {t('index.yourDocs')}
                           </h2>
                       </div>
                       
@@ -539,7 +541,7 @@ const Index = () => {
                                               </div>
                                               <div>
                                                   <h3 className="font-thin text-lg text-white group-hover:underline decoration-white/50 underline-offset-4 transition-all">{doc.title}</h3>
-                                                  <p className="text-xs text-white/60 mt-0.5 font-light">Dossier sécurisé</p>
+                                                  <p className="text-xs text-white/60 mt-0.5 font-light">{t('index.secureFolder')}</p>
                                               </div>
                                           </div>
                                           <ArrowRight className="h-4 w-4 text-white/50 group-hover:text-white transform group-hover:translate-x-1 transition-all" />
@@ -580,12 +582,12 @@ const Index = () => {
               {isSearching ? (
                 <div className="text-center py-20 animate-in fade-in duration-500">
                   <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500"></div>
-                  <p className="mt-6 text-lg text-gray-500 font-light">Exploration en cours...</p>
+                  <p className="mt-6 text-lg text-gray-500 font-light">{t('index.exploring')}</p>
                 </div>
               ) : groupedResults.length > 0 ? (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <p className="text-sm text-gray-400 mb-6 px-2 font-medium tracking-wide uppercase">
-                    {totalResults} résultat{totalResults > 1 ? 's' : ''} trouvé{totalResults > 1 ? 's' : ''}
+                    {totalResults} {totalResults > 1 ? t('index.results') : t('index.result')} {totalResults > 1 ? t('index.founds') : t('index.found')}
                   </p>
                   <div className="space-y-6">
                     {groupedResults.map((group, index) => (
@@ -613,8 +615,8 @@ const Index = () => {
                   <div className="h-24 w-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
                     <Globe className="h-10 w-10 text-gray-300" />
                   </div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Aucun résultat web</h3>
-                  <p className="text-gray-500 max-w-md mx-auto">Nous n'avons rien trouvé sur le web public. Essayez d'autres mots-clés.</p>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">{t('index.noWebResult')}</h3>
+                  <p className="text-gray-500 max-w-md mx-auto">{t('index.noWebResultSub')}</p>
                 </div>
               )}
             </div>
