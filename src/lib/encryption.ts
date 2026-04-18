@@ -27,6 +27,7 @@ export interface ProfileCrypto {
 export class EncryptionService {
   private static instance: EncryptionService;
   private masterKey: CryptoKey | null = null;
+  private documentKey: CryptoKey | null = null;
 
   private constructor() {}
 
@@ -43,7 +44,7 @@ export class EncryptionService {
     return crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   }
 
-  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+  arrayBufferToBase64(buffer: ArrayBuffer): string {
     const bytes = new Uint8Array(buffer);
     let binary = '';
     for (let i = 0; i < bytes.byteLength; i++) {
@@ -52,13 +53,22 @@ export class EncryptionService {
     return btoa(binary);
   }
 
-  private base64ToArrayBuffer(base64: string): Uint8Array {
+  base64ToArrayBuffer(base64: string): Uint8Array {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
     }
     return bytes;
+  }
+
+  /**
+   * Returns the active encryption key: documentKey (share) if set, else masterKey (DEK).
+   */
+  private getActiveKey(): CryptoKey {
+    const key = this.documentKey || this.masterKey;
+    if (!key) throw new Error('Encryption service not initialized');
+    return key;
   }
 
   // ─── KEK DERIVATION ───
@@ -146,6 +156,74 @@ export class EncryptionService {
    */
   isReady(): boolean {
     return this.masterKey !== null || sessionStorage.getItem(SESSION_KEY) !== null;
+  }
+
+  // ─── DOCUMENT SHARE KEY ───
+
+  /**
+   * Generate a cryptographically random URL-safe share secret (256-bit).
+   */
+  generateShareSecret(): string {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    return this.arrayBufferToBase64(bytes)
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+
+  /**
+   * Derive and cache a per-document share key from a share secret.
+   * Uses fast SHA-256 (not PBKDF2) because the secret is random 256-bit (high entropy).
+   * This sets `documentKey` without touching `masterKey` (DEK).
+   */
+  async setDocumentShareKey(secret: string): Promise<void> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(`sivara-doc-share-v1:${secret}`);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    this.documentKey = await crypto.subtle.importKey(
+      'raw', new Uint8Array(hash), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']
+    );
+  }
+
+  /**
+   * Clear the per-document share key (call when navigating away from a shared doc).
+   * After this, encrypt/decrypt will fall back to masterKey (DEK).
+   */
+  clearDocumentKey(): void {
+    this.documentKey = null;
+  }
+
+  /**
+   * Encrypt using the owner's DEK explicitly (ignores documentKey).
+   * Used to wrap share secrets or to save the DEK-version of shared doc content.
+   */
+  async encryptWithMasterKey(plaintext: string): Promise<{ encrypted: string; iv: string }> {
+    if (!this.masterKey) throw new Error('DEK not initialized');
+    const data = new TextEncoder().encode(plaintext);
+    const iv = this.generateIV();
+    const encryptedData = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv, tagLength: 128 },
+      this.masterKey,
+      data
+    );
+    return {
+      encrypted: this.arrayBufferToBase64(encryptedData),
+      iv: this.arrayBufferToBase64(iv),
+    };
+  }
+
+  /**
+   * Decrypt using the owner's DEK explicitly (ignores documentKey).
+   * Used to unwrap share secrets.
+   */
+  async decryptWithMasterKey(encrypted: string, ivBase64: string): Promise<string> {
+    if (!this.masterKey) throw new Error('DEK not initialized');
+    const encryptedData = this.base64ToArrayBuffer(encrypted);
+    const iv = this.base64ToArrayBuffer(ivBase64);
+    const decryptedData = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv, tagLength: 128 },
+      this.masterKey,
+      encryptedData
+    );
+    return new TextDecoder().decode(decryptedData);
   }
 
   /**
@@ -322,6 +400,9 @@ export class EncryptionService {
   async initializeDirect(secret: string, saltString?: string): Promise<void> {
     const encoder = new TextEncoder();
 
+    // Clear documentKey so .sivara export uses the derived key, not a stale share key
+    this.documentKey = null;
+
     let finalSalt: Uint8Array;
     if (saltString) {
       finalSalt = encoder.encode(saltString);
@@ -349,6 +430,7 @@ export class EncryptionService {
    */
   logout(): void {
     this.masterKey = null;
+    this.documentKey = null;
     try { sessionStorage.removeItem(SESSION_KEY); } catch (_) {}
   }
 
@@ -357,19 +439,20 @@ export class EncryptionService {
    */
   invalidateCache(): void {
     this.masterKey = null;
+    // Note: documentKey is NOT cleared here — it is managed separately by the editor
   }
 
   // ─── ENCRYPT / DECRYPT ───
 
   async encrypt(plaintext: string): Promise<{ encrypted: string; iv: string }> {
-    if (!this.masterKey) throw new Error('Encryption service not initialized');
+    const key = this.getActiveKey();
 
     const data = new TextEncoder().encode(plaintext);
     const iv = this.generateIV();
 
     const encryptedData = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv, tagLength: 128 },
-      this.masterKey,
+      key,
       data
     );
 
@@ -380,7 +463,7 @@ export class EncryptionService {
   }
 
   async decrypt(encrypted: string, ivBase64: string): Promise<string> {
-    if (!this.masterKey) throw new Error('Encryption service not initialized');
+    const key = this.getActiveKey();
 
     const encryptedData = this.base64ToArrayBuffer(encrypted);
     const iv = this.base64ToArrayBuffer(ivBase64);
@@ -388,7 +471,7 @@ export class EncryptionService {
     try {
       const decryptedData = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv, tagLength: 128 },
-        this.masterKey,
+        key,
         encryptedData
       );
       return new TextDecoder().decode(decryptedData);

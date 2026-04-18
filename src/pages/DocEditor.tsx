@@ -146,6 +146,8 @@ interface Document {
   color?: string;
   visibility: 'private' | 'limited' | 'public';
   public_permission: 'read' | 'write';
+  share_secret_encrypted?: string | null;
+  share_secret_iv?: string | null;
 }
 
 interface AccessEntry {
@@ -291,6 +293,7 @@ const DocEditor = () => {
   const contentRef = useRef('');
   const myColorRef = useRef(CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)]);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const shareSecretRef = useRef<string | null>(null);
   
   // --- FIX: PREVENT RELOAD ON TAB SWITCH ---
   const isLoadedRef = useRef(false);
@@ -496,7 +499,12 @@ const DocEditor = () => {
     };
     init();
     
-    return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      // Clear per-document share key when leaving the editor
+      encryptionService.clearDocumentKey();
+      shareSecretRef.current = null;
+    };
   }, [id, user, editor, authLoading]); // On garde les dépendances mais on bloque avec la ref
 
   useEffect(() => { return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } }; }, [id]);
@@ -614,19 +622,40 @@ const DocEditor = () => {
         throw new Error("Document inaccessible");
       }
 
-      // --- IMPORTANT ---
-      // Gestion robuste de la clé de partage via le hash:
-      // - Supporte #key=XXXX
-      // - Ignore les autres hashes (ex: tokens d'auth)
+      // --- SHARE KEY RESOLUTION ---
+      // 1. Check URL fragment for #key=XXXX (collaborator with share link)
+      // 2. If owner and doc is shared: unwrap share secret from DB using DEK
+      // 3. Otherwise: private doc, use DEK directly
       const hash = window.location.hash || '';
       const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
-      const shareKey = params.get('key');
-      // If there's a share key, use direct derivation (not KEK/DEK)
-      if (shareKey && shareKey !== 'share') {
-        await encryptionService.initializeDirect(shareKey);
-      } else {
-        // Owner or authorized viewer: DEK from session
+      const urlShareKey = params.get('key');
+
+      if (urlShareKey && urlShareKey.length > 8) {
+        // Collaborator with share link: derive share key from URL secret
+        shareSecretRef.current = urlShareKey;
+        await encryptionService.setDocumentShareKey(urlShareKey);
+        // Also load DEK if authenticated (needed for some operations)
+        if (user) {
+          try { await encryptionService.ensureReady(); } catch (_) {}
+        }
+      } else if (doc.share_secret_encrypted && doc.share_secret_iv && user) {
+        // Owner or authenticated user on a shared doc: unwrap share secret with DEK
         await encryptionService.ensureReady();
+        try {
+          const shareSecret = await encryptionService.decryptWithMasterKey(
+            doc.share_secret_encrypted, doc.share_secret_iv
+          );
+          shareSecretRef.current = shareSecret;
+          await encryptionService.setDocumentShareKey(shareSecret);
+        } catch (e) {
+          // If unwrapping fails, try DEK directly (backward compat for old docs)
+          console.warn('Share secret unwrap failed, falling back to DEK', e);
+        }
+      } else {
+        // Private doc or no share secret: use DEK
+        if (user) {
+          await encryptionService.ensureReady();
+        }
       }
 
       const isDocOwner = user?.id === doc.owner_id;
@@ -658,6 +687,7 @@ const DocEditor = () => {
         else if (doc.visibility === 'public' && doc.public_permission === 'write') userPermission = 'write';
         else if (explicitPermission === 'read') userPermission = 'read';
         else if (doc.visibility === 'public') userPermission = 'read';
+        else if (urlShareKey && urlShareKey.length > 8) userPermission = 'read';
         else throw new Error("Document inaccessible");
       }
 
@@ -671,14 +701,23 @@ const DocEditor = () => {
         decryptedTitle = await encryptionService.decrypt(doc.title, titleIv);
         decryptedContent = await encryptionService.decrypt(doc.content, contentIv);
       } catch (e: any) {
-        // Fallback: try DEK from session (owner viewing own doc)
-        try {
-          encryptionService.invalidateCache();
-          await encryptionService.ensureReady();
-          const { titleIv: tIv2, contentIv: cIv2 } = parseDocumentIVs(doc.encryption_iv);
-          decryptedTitle = await encryptionService.decrypt(doc.title, tIv2);
-          decryptedContent = await encryptionService.decrypt(doc.content, cIv2);
-        } catch {
+        // Fallback: try with DEK directly (backward compat for old private docs)
+        if (user) {
+          try {
+            encryptionService.clearDocumentKey();
+            encryptionService.invalidateCache();
+            await encryptionService.ensureReady();
+            const { titleIv: tIv2, contentIv: cIv2 } = parseDocumentIVs(doc.encryption_iv);
+            decryptedTitle = await encryptionService.decrypt(doc.title, tIv2);
+            decryptedContent = await encryptionService.decrypt(doc.content, cIv2);
+            // If DEK fallback worked, this is an old private doc — clear shareSecretRef
+            shareSecretRef.current = null;
+          } catch {
+            setDecryptionError(true);
+            decryptedTitle = "Document sécurisé";
+            decryptedContent = "";
+          }
+        } else {
           setDecryptionError(true);
           decryptedTitle = "Document sécurisé";
           decryptedContent = "";
@@ -708,11 +747,119 @@ const DocEditor = () => {
 
   const fetchAccessList = async () => { const { data } = await supabase.from('document_access').select('*').eq('document_id', id); setAccessList(data || []); };
   
-  const handleSave = async (key: string, value: string) => { if (!id || permission !== 'write') return; try { setIsSaving(true); const { encrypted: encTitle, iv: titleIv } = await encryptionService.encrypt(titleRef.current); const { encrypted: encContent, iv: contentIv } = await encryptionService.encrypt(editor?.getHTML() || ''); await supabase.from('documents').update({ title: encTitle, content: encContent, encryption_iv: JSON.stringify({ t: titleIv, c: contentIv }), updated_at: new Date().toISOString(), ...((key === 'icon') ? { icon: value } : {}), ...((key === 'color') ? { color: value } : {}) }).eq('id', id); } catch(e) { console.error(e); } finally { setIsSaving(false); } };
+  const handleSave = async (key: string, value: string) => {
+    if (!id || permission !== 'write') return;
+    try {
+      setIsSaving(true);
+      const currentTitle = titleRef.current;
+      const currentContent = editor?.getHTML() || '';
+
+      // Encrypt with active key (share key if shared, DEK if private)
+      const { encrypted: encTitle, iv: titleIv } = await encryptionService.encrypt(currentTitle);
+      const { encrypted: encContent, iv: contentIv } = await encryptionService.encrypt(currentContent);
+
+      await supabase.from('documents').update({
+        title: encTitle,
+        content: encContent,
+        encryption_iv: JSON.stringify({ t: titleIv, c: contentIv }),
+        updated_at: new Date().toISOString(),
+        ...((key === 'icon') ? { icon: value } : {}),
+        ...((key === 'color') ? { color: value } : {}),
+      }).eq('id', id);
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
   
   const handleContentChange = (content: string) => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = setTimeout(() => handleSave('content', content), 500); };
   
-  const updateVisibility = async (visibility: 'private' | 'limited' | 'public') => { if (!document) return; await supabase.from('documents').update({ visibility }).eq('id', id); setDocument({ ...document, visibility }); showSuccess(`Visibilité changée`); };
+  const updateVisibility = async (visibility: 'private' | 'limited' | 'public') => {
+    if (!document || !user) return;
+    const wasPrivate = document.visibility === 'private';
+    const goingPrivate = visibility === 'private';
+
+    try {
+      if (wasPrivate && !goingPrivate) {
+        // --- TRANSITION: PRIVATE → SHARED ---
+        // 1. Generate share secret
+        const shareSecret = encryptionService.generateShareSecret();
+        shareSecretRef.current = shareSecret;
+
+        // 2. Wrap share secret with DEK
+        const { encrypted: ssEnc, iv: ssIv } = await encryptionService.encryptWithMasterKey(shareSecret);
+
+        // 3. Decrypt current content with DEK
+        const { titleIv, contentIv } = parseDocumentIVs(document.encryption_iv);
+        const plainTitle = await encryptionService.decrypt(document.title, titleIv);
+        const plainContent = await encryptionService.decrypt(document.content, contentIv);
+
+        // 4. Switch to share key
+        await encryptionService.setDocumentShareKey(shareSecret);
+
+        // 5. Re-encrypt with share key
+        const { encrypted: encTitle, iv: newTitleIv } = await encryptionService.encrypt(plainTitle);
+        const { encrypted: encContent, iv: newContentIv } = await encryptionService.encrypt(plainContent);
+
+        // 6. Save everything
+        await supabase.from('documents').update({
+          visibility,
+          title: encTitle,
+          content: encContent,
+          encryption_iv: JSON.stringify({ t: newTitleIv, c: newContentIv }),
+          share_secret_encrypted: ssEnc,
+          share_secret_iv: ssIv,
+          updated_at: new Date().toISOString(),
+        }).eq('id', id);
+
+        setDocument({ ...document, visibility, title: encTitle, content: encContent,
+          encryption_iv: JSON.stringify({ t: newTitleIv, c: newContentIv }),
+          share_secret_encrypted: ssEnc, share_secret_iv: ssIv });
+        showSuccess('Document partagé et rechiffré');
+
+      } else if (!wasPrivate && goingPrivate) {
+        // --- TRANSITION: SHARED → PRIVATE ---
+        // 1. Decrypt with current share key
+        const { titleIv, contentIv } = parseDocumentIVs(document.encryption_iv);
+        const plainTitle = await encryptionService.decrypt(document.title, titleIv);
+        const plainContent = await encryptionService.decrypt(document.content, contentIv);
+
+        // 2. Switch back to DEK
+        encryptionService.clearDocumentKey();
+        shareSecretRef.current = null;
+
+        // 3. Re-encrypt with DEK
+        const { encrypted: encTitle, iv: newTitleIv } = await encryptionService.encrypt(plainTitle);
+        const { encrypted: encContent, iv: newContentIv } = await encryptionService.encrypt(plainContent);
+
+        // 4. Save and clear share columns
+        await supabase.from('documents').update({
+          visibility,
+          title: encTitle,
+          content: encContent,
+          encryption_iv: JSON.stringify({ t: newTitleIv, c: newContentIv }),
+          share_secret_encrypted: null,
+          share_secret_iv: null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', id);
+
+        setDocument({ ...document, visibility, title: encTitle, content: encContent,
+          encryption_iv: JSON.stringify({ t: newTitleIv, c: newContentIv }),
+          share_secret_encrypted: null, share_secret_iv: null });
+        showSuccess('Document redevenu privé et rechiffré');
+
+      } else {
+        // Same sharing state: just update visibility (limited ↔ public)
+        await supabase.from('documents').update({ visibility }).eq('id', id);
+        setDocument({ ...document, visibility });
+        showSuccess('Visibilité changée');
+      }
+    } catch (e: any) {
+      console.error('Visibility change error:', e);
+      showError('Erreur lors du changement de visibilité');
+    }
+  };
   
   const inviteUser = async () => { 
       if (!newInviteEmail) return; 
@@ -727,10 +874,40 @@ const DocEditor = () => {
   
   const removeAccess = async (accessId: string) => { await supabase.from('document_access').delete().eq('id', accessId); fetchAccessList(); };
   
-  const copyShareLink = () => { 
-    const link = `https://docs.sivara.ca/${id}`; 
-    navigator.clipboard.writeText(link); 
-    showSuccess("Lien copié : " + link); 
+  const copyShareLink = async () => {
+    if (!document || !user) return;
+    try {
+      let shareSecret = shareSecretRef.current;
+
+      // If no share secret yet (doc was private), transition to shared
+      if (!shareSecret) {
+        if (document.visibility === 'private') {
+          // Auto-transition to limited visibility
+          await updateVisibility('limited');
+        }
+        shareSecret = shareSecretRef.current;
+      }
+
+      if (!shareSecret && document.share_secret_encrypted && document.share_secret_iv) {
+        // Recover from DB
+        await encryptionService.ensureReady();
+        shareSecret = await encryptionService.decryptWithMasterKey(
+          document.share_secret_encrypted, document.share_secret_iv
+        );
+        shareSecretRef.current = shareSecret;
+      }
+
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const baseUrl = isLocal
+        ? `${window.location.origin}/${id}?app=docs`
+        : `https://docs.sivara.ca/${id}`;
+      const link = shareSecret ? `${baseUrl}#key=${shareSecret}` : baseUrl;
+      navigator.clipboard.writeText(link);
+      showSuccess('Lien sécurisé copié !');
+    } catch (e) {
+      console.error('Copy share link error:', e);
+      showError('Erreur lors de la copie du lien');
+    }
   };
   const handleLogin = () => { 
     const currentUrl = window.location.href; 
@@ -830,6 +1007,10 @@ const DocEditor = () => {
         if (user) {
             encryptionService.invalidateCache();
             await encryptionService.ensureReady();
+            // Restore document share key if we were on a shared doc
+            if (shareSecretRef.current) {
+              await encryptionService.setDocumentShareKey(shareSecretRef.current);
+            }
         }
     }
   };

@@ -283,6 +283,8 @@ const Docs = () => {
 
     try {
       // IMPORTANT: S'assurer que l'instance crypto est bien sur l'utilisateur courant avant de fetch
+      // Also clear any stale document key from a previous editor session
+      encryptionService.clearDocumentKey();
       await encryptionService.ensureReady();
 
       let query = supabase.from('documents').select('*').eq('owner_id', user.id);
@@ -300,6 +302,19 @@ const Docs = () => {
       const decryptedDocs = await Promise.all(
         (data || []).map(async (doc) => {
           try {
+            // If doc has a share secret, decrypt with share key instead of DEK
+            if (doc.share_secret_encrypted && doc.share_secret_iv) {
+              const shareSecret = await encryptionService.decryptWithMasterKey(
+                doc.share_secret_encrypted, doc.share_secret_iv
+              );
+              await encryptionService.setDocumentShareKey(shareSecret);
+              const decryptedTitle = await encryptionService.decrypt(doc.title, parseDocumentIVs(doc.encryption_iv).titleIv);
+              const decryptedContent = doc.type !== 'folder' ? await encryptionService.decrypt(doc.content, parseDocumentIVs(doc.encryption_iv).contentIv) : '';
+              encryptionService.clearDocumentKey(); // Reset for next doc
+              return { ...doc, decryptedTitle, decryptedContent };
+            }
+
+            // Private doc: decrypt directly with DEK
             const decryptedTitle = await encryptionService.decrypt(doc.title, parseDocumentIVs(doc.encryption_iv).titleIv);
             const decryptedContent = doc.type !== 'folder' ? await encryptionService.decrypt(doc.content, parseDocumentIVs(doc.encryption_iv).contentIv) : '';
             return { ...doc, decryptedTitle, decryptedContent };
