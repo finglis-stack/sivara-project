@@ -415,6 +415,7 @@ serve(async (req) => {
              const encryptedLink = await cryptoService.encrypt(link);
              const { error } = await supabase.from('crawl_queue').insert({
                 url: encryptedLink,
+                display_url: link,
                 priority: 0, 
                 status: 'pending',
                 added_at: new Date().toISOString()
@@ -440,17 +441,25 @@ serve(async (req) => {
     const finalDescription = geminiResult.betterDescription || metadata.description;
     await logToDb(queueId, `Gemini Score: ${geminiResult.score}/100`, 'GEMINI', 'success');
 
-    // Auto-create entity if Gemini recommended it
+    // Auto-create entity if Gemini recommended it (with robust deduplication)
     if (geminiResult.entity) {
       try {
-        // Check if entity already exists by name
-        const { data: existingEntity } = await supabase
+        const entityDomain = urlObj.hostname.replace('www.', '');
+        // Check by exact name
+        const { data: byName } = await supabase
           .from('search_entities')
           .select('id')
           .ilike('name', geminiResult.entity.name)
-          .single();
+          .maybeSingle();
 
-        if (!existingEntity) {
+        // Check by domain (catches "Sony" vs "Sony Interactive Entertainment")
+        const { data: byDomain } = await supabase
+          .from('search_entities')
+          .select('id')
+          .ilike('website_url', `%${entityDomain}%`)
+          .maybeSingle();
+
+        if (!byName && !byDomain) {
           const { error: entityError } = await supabase
             .from('search_entities')
             .insert({
@@ -467,6 +476,8 @@ serve(async (req) => {
           if (!entityError) {
             await logToDb(queueId, `Entity created: ${geminiResult.entity.name} (pending review)`, 'GEMINI', 'success');
           }
+        } else {
+          await logToDb(queueId, `Entity "${geminiResult.entity.name}" already exists, skipping.`, 'GEMINI', 'info');
         }
       } catch (entityErr) {
         console.warn('[ENTITY CREATE]', entityErr);

@@ -79,6 +79,7 @@ serve(async (req) => {
       .from('crawl_queue')
       .insert({
         url: encryptedUrl,
+        display_url: url,
         priority: priority,
         status: 'pending',
         added_at: new Date().toISOString()
