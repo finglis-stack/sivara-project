@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Trash2, Plus, Edit2, CheckCircle2, X } from 'lucide-react';
+import { Trash2, Plus, Edit2, CheckCircle2, X, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 
 export interface SearchEntity {
   id: string;
@@ -18,6 +19,9 @@ export interface SearchEntity {
   wikipedia_url: string | null;
   keywords: string[];
   priority: number;
+  is_public?: boolean;
+  source?: string;
+  created_at?: string;
 }
 
 const EntitiesManager = () => {
@@ -48,8 +52,7 @@ const EntitiesManager = () => {
       const { data, error } = await supabase
         .from('search_entities')
         .select('*')
-        .order('priority', { ascending: false })
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
       setEntities(data || []);
@@ -100,6 +103,27 @@ const EntitiesManager = () => {
       const { error } = await supabase.from('search_entities').delete().eq('id', id);
       if (error) throw error;
       toast.success("Entité supprimée");
+      fetchEntities();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleTogglePublic = async (entity: SearchEntity) => {
+    // If making public, enforce logo and cover
+    if (!entity.is_public) {
+      if (!entity.logo_url || !entity.cover_url) {
+        toast.error('Vous devez ajouter un logo ET une image de couverture avant de rendre cette entité publique.');
+        return;
+      }
+    }
+    try {
+      const { error } = await supabase
+        .from('search_entities')
+        .update({ is_public: !entity.is_public })
+        .eq('id', entity.id);
+      if (error) throw error;
+      toast.success(entity.is_public ? 'Entité rendue privée' : 'Entité rendue publique !');
       fetchEntities();
     } catch (error: any) {
       toast.error(error.message);
@@ -197,6 +221,7 @@ const EntitiesManager = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entité</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mots-clés</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
@@ -219,6 +244,18 @@ const EntitiesManager = () => {
                     </div>
                   </div>
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex flex-col gap-1.5">
+                    {entity.is_public ? (
+                      <Badge className="bg-green-100 text-green-800 hover:bg-green-100 w-fit"><Eye className="h-3 w-3 mr-1" /> Public</Badge>
+                    ) : (
+                      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 w-fit"><EyeOff className="h-3 w-3 mr-1" /> Privé</Badge>
+                    )}
+                    {entity.source === 'gemini' && (
+                      <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 w-fit"><Sparkles className="h-3 w-3 mr-1" /> Gemini</Badge>
+                    )}
+                  </div>
+                </td>
                 <td className="px-6 py-4">
                   <div className="flex flex-wrap gap-1">
                     {entity.keywords.map((kw, i) => (
@@ -230,6 +267,15 @@ const EntitiesManager = () => {
                   <div className="text-xs text-gray-400 mt-1">Prio: {entity.priority}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleTogglePublic(entity)}
+                    className={entity.is_public ? 'text-green-600 hover:text-green-900' : 'text-amber-600 hover:text-amber-900'}
+                    title={entity.is_public ? 'Rendre privé' : 'Rendre public'}
+                  >
+                    {entity.is_public ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => startEdit(entity)} className="text-blue-600 hover:text-blue-900">
                     <Edit2 className="h-4 w-4" />
                   </Button>
@@ -241,7 +287,7 @@ const EntitiesManager = () => {
             ))}
             {entities.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-6 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={4} className="px-6 py-8 text-center text-gray-500 text-sm">
                   Aucune entité configurée pour l'instant.
                 </td>
               </tr>

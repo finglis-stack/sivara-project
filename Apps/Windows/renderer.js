@@ -265,47 +265,57 @@ class SivaraBrowser {
     }
   }
 
-  // ---- Auto-login from Webview (Continuous Session Polling) ----
-
   async checkWebviewSessionState(webview) {
     try {
       const result = await webview.executeJavaScript(`
         (function() {
+          // Sivara uses js-cookie storage with key 'sivara-auth-token'
+          function getCookie(name) {
+            const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+            return match ? decodeURIComponent(match[2]) : null;
+          }
+          
+          const raw = getCookie('sivara-auth-token');
+          console.log('[SessionSync] Cookie sivara-auth-token:', raw ? 'FOUND (' + raw.length + ' chars)' : 'NOT FOUND');
+          
+          if (raw) {
+            try {
+              const val = JSON.parse(raw);
+              if (val && val.access_token) return JSON.stringify(val);
+              // Supabase v2 nested format
+              if (val && val.session && val.session.access_token) return JSON.stringify(val.session);
+            } catch(e) {
+              console.log('[SessionSync] Cookie parse error:', e.message);
+            }
+          }
+          
+          // Fallback: also check localStorage in case storage method changes
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key.startsWith('sb-') && key.includes('auth')) {
+            if (key && (key.includes('sivara-auth') || key.startsWith('sb-'))) {
               try {
                 const val = JSON.parse(localStorage.getItem(key));
                 if (val && val.access_token) return JSON.stringify(val);
+                if (val && val.session && val.session.access_token) return JSON.stringify(val.session);
               } catch(e) {}
             }
           }
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.includes('auth-token')) {
-              try {
-                const val = JSON.parse(localStorage.getItem(key));
-                if (val && val.access_token) return JSON.stringify(val);
-              } catch(e) {}
-            }
-          }
+          
           return null;
         })()
       `);
 
+      console.log('[SessionSync] Poll result:', result ? 'TOKEN FOUND' : 'NO TOKEN');
+
       if (result) {
-        // There IS a session in the webview
         const session = JSON.parse(result);
         if (!session.access_token) return;
 
-        // If we are NOT logged in natively, or token differs => sync login
         if (!this.account || this.account.access_token !== session.access_token) {
           console.log('[SessionSync] New session detected, syncing...');
           await this.syncFromWebSession(session);
         }
       } else {
-        // There is NO session in the webview
-        // If we ARE logged in natively => user logged out on the web => sync logout
         if (this.account) {
           console.log('[SessionSync] Session gone from web, syncing logout...');
           await this.handleLogout();
@@ -313,7 +323,6 @@ class SivaraBrowser {
         }
       }
     } catch (err) {
-      // Silently fail
       console.log('[SessionSync] Poll error:', err.message);
     }
   }
@@ -781,6 +790,18 @@ class SivaraBrowser {
       if (this.activeTabId === tab.id) {
         this.updateUrlBar(e.url);
         this.updateNavButtons(webview);
+      }
+      // SPA navigations (React Router) - check for session changes
+      if (e.url.includes('sivara.ca')) {
+        setTimeout(() => this.checkWebviewSessionState(webview), 1500);
+      }
+    });
+
+    // Also check when page finishes loading (most reliable for SPA)
+    webview.addEventListener('did-stop-loading', () => {
+      const currentUrl = webview.getURL();
+      if (currentUrl.includes('sivara.ca')) {
+        setTimeout(() => this.checkWebviewSessionState(webview), 1500);
       }
     });
 

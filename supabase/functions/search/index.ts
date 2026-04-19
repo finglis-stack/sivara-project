@@ -209,6 +209,11 @@ serve(async (req) => {
 
         if (matchesDetails.exact > 0) score *= 1.5;
 
+        // Gemini AI boost: gemini_score (0-100) adds a multiplier from 1.0 to 2.0
+        const geminiScore = page.gemini_score || 0;
+        const geminiMultiplier = 1 + (geminiScore / 100);
+        score = Math.round(score * geminiMultiplier);
+
         results.push({
           id: page.id,
           url: decryptedUrl,
@@ -231,7 +236,7 @@ serve(async (req) => {
         results: paginatedResults,
         total: count || results.length,
         page,
-        algorithm: 'Sivara-Titanium-Pro-Libs',
+        algorithm: 'Sivara-Titanium-Gemini',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

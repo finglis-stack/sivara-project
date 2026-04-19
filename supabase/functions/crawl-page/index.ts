@@ -6,6 +6,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { removeStopwords, fra, eng } from 'https://esm.sh/stopword@3.0.1'
 // @ts-ignore: Deno types
 import { decode } from 'https://esm.sh/html-entities@2.5.2'
+// @ts-ignore: Deno types
+import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.13.0'
 
 // --- FIX IMPORTS NATURAL (Default Exports) ---
 // @ts-ignore: Deno types
@@ -195,6 +197,65 @@ function extractLinks(html: string, baseUrl: string): string[] {
   return Array.from(links);
 }
 
+// --- GEMINI AI ANALYSIS ---
+async function analyzeWithGemini(title: string, description: string, content: string, domain: string): Promise<{ score: number, betterDescription: string, entity: any | null }> {
+  // @ts-ignore
+  const apiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!apiKey) {
+    console.warn('[GEMINI] No API key found, skipping AI analysis');
+    return { score: 0, betterDescription: description, entity: null };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    // @ts-ignore
+    const modelName = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
+    const model = genAI.getGenerativeModel({ model: modelName });
+
+    const truncatedContent = content.substring(0, 3000);
+
+    const prompt = `Tu es un analyste de sites web pour un moteur de recherche. Analyse cette page et retourne UNIQUEMENT un JSON valide, sans markdown, sans explication.
+
+Page crawlée:
+- Domaine: ${domain}
+- Titre: ${title}
+- Description actuelle: ${description}
+- Extrait du contenu: ${truncatedContent}
+
+Retourne ce JSON:
+{
+  "score": <nombre entier de 0 à 100 représentant l'importance/popularité estimée du site — 100 = site très connu et populaire mondialement comme Google ou Wikipedia, 50 = site moyen/régional, 10 = site personnel ou obscur>,
+  "betterDescription": "<résumé factuel en 1-2 phrases de ce que fait ce site/cette page, en français, maximum 300 caractères>",
+  "shouldCreateEntity": <true si le score >= 80 et le site est une entreprise/organisation connue, false sinon>,
+  "entity": <si shouldCreateEntity est true, un objet avec: {"name": "Nom officiel", "description": "Description courte de l'entreprise/entité", "website_url": "URL officiel du site", "keywords": ["mot1", "mot2", "mot3"]}. Sinon, null>
+}
+
+RÈGLES:
+- Le score doit refléter la notoriété RÉELLE du domaine (pas seulement le contenu de la page).
+- La description doit être neutre et factuelle.
+- Ne crée une entité QUE pour des organisations/entreprises/institutions reconnues.
+- Réponds UNIQUEMENT avec le JSON, aucun texte avant ou après.`;
+
+    const result = await model.generateContent(prompt);
+    let text = result.response.text().trim();
+    
+    // Nettoyage markdown éventuel
+    if (text.startsWith('```json')) text = text.replace(/^```json\n?/g, '').replace(/```$/g, '').trim();
+    if (text.startsWith('```')) text = text.replace(/^```\n?/g, '').replace(/```$/g, '').trim();
+
+    const parsed = JSON.parse(text);
+
+    return {
+      score: Math.min(100, Math.max(0, parseInt(parsed.score) || 0)),
+      betterDescription: (parsed.betterDescription || description).substring(0, 500),
+      entity: parsed.shouldCreateEntity && parsed.entity ? parsed.entity : null,
+    };
+  } catch (e) {
+    console.error('[GEMINI ERROR]', e);
+    return { score: 0, betterDescription: description, entity: null };
+  }
+}
+
 // @ts-ignore: Deno types
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -277,18 +338,63 @@ serve(async (req) => {
        }
     }
 
+    // 4. GEMINI AI ANALYSIS (Score, Reformulation, Entity)
+    await logToDb(queueId, 'Analyzing with Gemini AI...', 'GEMINI', 'info');
+    const geminiResult = await analyzeWithGemini(
+      metadata.title, 
+      metadata.description, 
+      metadata.content, 
+      urlObj.hostname
+    );
+
+    // Use Gemini's better description if available
+    const finalDescription = geminiResult.betterDescription || metadata.description;
+    await logToDb(queueId, `Gemini Score: ${geminiResult.score}/100`, 'GEMINI', 'success');
+
+    // Auto-create entity if Gemini recommended it
+    if (geminiResult.entity) {
+      try {
+        // Check if entity already exists by name
+        const { data: existingEntity } = await supabase
+          .from('search_entities')
+          .select('id')
+          .ilike('name', geminiResult.entity.name)
+          .single();
+
+        if (!existingEntity) {
+          const { error: entityError } = await supabase
+            .from('search_entities')
+            .insert({
+              name: geminiResult.entity.name,
+              description: geminiResult.entity.description,
+              website_url: geminiResult.entity.website_url || `https://${urlObj.hostname}`,
+              keywords: geminiResult.entity.keywords || [],
+              priority: Math.floor(geminiResult.score / 10),
+              is_public: false,
+              source: 'gemini',
+            });
+
+          if (!entityError) {
+            await logToDb(queueId, `Entity created: ${geminiResult.entity.name} (pending review)`, 'GEMINI', 'success');
+          }
+        }
+      } catch (entityErr) {
+        console.warn('[ENTITY CREATE]', entityErr);
+      }
+    }
+
     // 5. ENCRYPT & INDEX (Avec Natural Libs)
     await logToDb(queueId, 'Indexing with Natural NLP...', 'ENCRYPTION', 'info');
 
     const encryptedTitle = await cryptoService.encrypt(metadata.title)
-    const encryptedDescription = await cryptoService.encrypt(metadata.description)
+    const encryptedDescription = await cryptoService.encrypt(finalDescription)
     const encryptedContent = await cryptoService.encrypt(metadata.content)
     const encryptedUrl = await cryptoService.encrypt(url)
     const encryptedDomain = await cryptoService.encrypt(urlObj.hostname)
     
     const searchHash = await cryptoService.hash(url);
 
-    const textToIndex = `${metadata.title} ${metadata.description} ${metadata.content.substring(0, 2000)}`;
+    const textToIndex = `${metadata.title} ${finalDescription} ${metadata.content.substring(0, 2000)}`;
     const blindIndex = await cryptoService.generateBlindIndex(textToIndex);
 
     const { error } = await supabase
@@ -303,15 +409,16 @@ serve(async (req) => {
         status: 'success',
         search_hash: searchHash,
         blind_index: blindIndex,
+        gemini_score: geminiResult.score,
         updated_at: new Date().toISOString()
       }, { onConflict: 'search_hash' })
 
     if (error) throw error
 
-    await logToDb(queueId, `Indexed ${blindIndex.length} smart tokens`, 'COMPLETE', 'success');
+    await logToDb(queueId, `Indexed ${blindIndex.length} tokens | Gemini: ${geminiResult.score}/100`, 'COMPLETE', 'success');
     try { await supabase.rpc('increment_crawl_stats') } catch (e) {}
 
-    return new Response(JSON.stringify({ success: true, tokens: blindIndex.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ success: true, tokens: blindIndex.length, gemini_score: geminiResult.score }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (error) {
     console.error('[CRAWL ERROR]', error)

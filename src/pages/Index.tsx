@@ -181,11 +181,12 @@ const Index = () => {
           }
       }
 
-      // Recherche d'Entité Frontend Fast
+      // Recherche d'Entité Frontend Fast (only public entities)
       const lowerQuery = query.toLowerCase().trim();
       const entitySearchPromise = supabase
         .from('search_entities')
         .select('*')
+        .eq('is_public', true)
         .or(`name.ilike.%${query}%`) // Initial fast check
         .order('priority', { ascending: false })
         .limit(10)
