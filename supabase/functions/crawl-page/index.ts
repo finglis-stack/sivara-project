@@ -231,7 +231,7 @@ Retourne ce JSON:
     {
       "name": "Nom officiel",
       "phonetic": "Transcription phonétique (ex: /si.va.ʁa/ ou /ɡu.ɡœl/)",
-      "description": "Une description TRÈS COMPLÈTE, détaillée et encyclopédique de l'entreprise, marque ou entité (minimum 3 à 4 paragraphes si possible).",
+      "description": "Une description concise et factuelle de l'entreprise, marque ou entité (MAXIMUM 50 mots).",
       "website_url": "URL officiel du site",
       "keywords": ["mot1", "mot2", "mot3", ...] (Une liste TRÈS COMPLÈTE de tous les mots-clés, synonymes, acronymes et fautes de frappe courantes qui seraient utilisés pour rechercher cette entité)
     }>
@@ -240,7 +240,7 @@ Retourne ce JSON:
 RÈGLES:
 - Le score doit refléter la notoriété RÉELLE du domaine (pas seulement le contenu de la page).
 - La description de la page (betterDescription) doit être neutre et factuelle.
-- La description de l'entité (entity.description) doit être riche et complète.
+- La description de l'entité (entity.description) doit faire MAXIMUM 50 mots.
 - Ne crée une entité QUE pour des organisations/entreprises/institutions reconnues.
 - Réponds UNIQUEMENT avec le JSON, aucun texte avant ou après.`;
 
