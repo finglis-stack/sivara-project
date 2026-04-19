@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,8 +20,8 @@ import DocEditor from "./pages/DocEditor";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import Profile from "./pages/Profile";
-import Monitor from "./pages/Monitor";
-import Contribute from "./pages/Contribute";
+const Monitor = lazy(() => import("./pages/Monitor"));
+const Contribute = lazy(() => import("./pages/Contribute"));
 import NotFound from "./pages/NotFound";
 import DevPortal from "./pages/DevPortal";
 import Pricing from "./pages/Pricing";
@@ -204,12 +204,16 @@ const AppRoutes = () => {
           <Route path="/about" element={<About />} />
           <Route path="/contribute" element={
             <ProtectedRoute>
-              <Contribute />
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Chargement...</div>}>
+                <Contribute />
+              </Suspense>
             </ProtectedRoute>
           } />
           <Route path="/monitor" element={
             <ProtectedRoute>
-              <Monitor />
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Chargement...</div>}>
+                <Monitor />
+              </Suspense>
             </ProtectedRoute>
           } />
           <Route path="*" element={Capacitor.isNativePlatform() ? <Navigate to="/?app=mobile" /> : <NotFound />} />
