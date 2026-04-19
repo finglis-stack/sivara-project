@@ -295,7 +295,7 @@ serve(async (req) => {
 
     if (!url) throw new Error('URL is required')
 
-    // 1. FETCH (Browser-realistic headers to bypass Cloudflare/WAF)
+    // 1. FETCH — Multi-fallback chain: Direct → Google Cache → Wayback Machine
     await logToDb(queueId, `Crawling: ${url}`, 'INIT', 'info');
     const browserHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -314,20 +314,76 @@ serve(async (req) => {
       'Upgrade-Insecure-Requests': '1',
     };
 
+    let rawHtml = '';
+    let httpStatus = 200;
+
+    // --- ATTEMPT 1: Direct fetch ---
     let response = await fetch(url, { headers: browserHeaders, redirect: 'follow' });
 
-    // Retry once on 403 with a Referer (some WAFs allow referred traffic)
-    if (response.status === 403) {
-      await logToDb(queueId, 'Got 403, retrying with Referer...', 'INIT', 'warning');
-      const urlObj2 = new URL(url);
-      response = await fetch(url, { 
-        headers: { ...browserHeaders, 'Referer': `https://${urlObj2.hostname}/`, 'Sec-Fetch-Site': 'same-origin' },
-        redirect: 'follow'
-      });
+    if (response.ok) {
+      rawHtml = await response.text();
+      httpStatus = response.status;
     }
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const rawHtml = await response.text();
+    // --- ATTEMPT 2: Google Cache (bypasses Cloudflare JS challenges) ---
+    if (!rawHtml || response.status === 403 || response.status === 503) {
+      await logToDb(queueId, `Direct blocked (${response.status}), trying Google Cache...`, 'INIT', 'warning');
+      try {
+        const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}&hl=fr&gl=ca`;
+        const cacheResponse = await fetch(cacheUrl, {
+          headers: { ...browserHeaders, 'Referer': 'https://www.google.com/' },
+          redirect: 'follow'
+        });
+        if (cacheResponse.ok) {
+          let cacheHtml = await cacheResponse.text();
+          // Remove Google's cache banner/header if present
+          const bodyStart = cacheHtml.indexOf('</div></div>');
+          if (bodyStart > 0 && bodyStart < 2000) {
+            cacheHtml = cacheHtml.substring(bodyStart + 12);
+          }
+          rawHtml = cacheHtml;
+          httpStatus = 200;
+          await logToDb(queueId, 'Google Cache hit ✓', 'INIT', 'success');
+        }
+      } catch (cacheErr) {
+        console.warn('[CACHE FALLBACK]', cacheErr);
+      }
+    }
+
+    // --- ATTEMPT 3: Wayback Machine (Internet Archive snapshot) ---
+    if (!rawHtml) {
+      await logToDb(queueId, 'Google Cache miss, trying Wayback Machine...', 'INIT', 'warning');
+      try {
+        // First, find the latest snapshot URL
+        const availabilityUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`;
+        const availResp = await fetch(availabilityUrl);
+        if (availResp.ok) {
+          const availData = await availResp.json();
+          const snapshot = availData?.archived_snapshots?.closest;
+          if (snapshot && snapshot.available && snapshot.url) {
+            // Fetch the raw snapshot (id_ = raw content without toolbar)
+            const rawSnapshotUrl = snapshot.url.replace('/web/', '/web/id_/');
+            await logToDb(queueId, `Wayback snapshot: ${snapshot.timestamp}`, 'INIT', 'info');
+            const wbResponse = await fetch(rawSnapshotUrl, {
+              headers: browserHeaders,
+              redirect: 'follow'
+            });
+            if (wbResponse.ok) {
+              rawHtml = await wbResponse.text();
+              httpStatus = 200;
+              await logToDb(queueId, 'Wayback Machine hit ✓', 'INIT', 'success');
+            }
+          }
+        }
+      } catch (wbErr) {
+        console.warn('[WAYBACK FALLBACK]', wbErr);
+      }
+    }
+
+    // All 3 attempts failed
+    if (!rawHtml) {
+      throw new Error(`HTTP ${response.status} — All fallbacks failed (Direct + Google Cache + Wayback)`);
+    }
 
     if (!isAllowedLanguage(rawHtml)) throw new Error('Language not supported');
 
@@ -439,7 +495,7 @@ serve(async (req) => {
         description: encryptedDescription,
         content: encryptedContent,
         domain: encryptedDomain,
-        http_status: response.status,
+        http_status: httpStatus,
         status: 'success',
         search_hash: searchHash,
         blind_index: blindIndex,
