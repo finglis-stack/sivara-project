@@ -11,7 +11,7 @@ import { showError } from '@/utils/toast';
 import {
   Settings, Globe, FileText, ArrowRight, Folder,
   Briefcase, FolderOpen, BookOpen, Lightbulb, Target, TrendingUp, Users as UsersIcon,
-  Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart,
+  Calendar, CheckSquare, MessageSquare, Mail, Heart, Award, BarChart, Activity,
   Presentation, Shield, Lock, Search
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
