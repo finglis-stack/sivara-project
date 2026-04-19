@@ -99,6 +99,13 @@ const EntitiesManager = () => {
   };
 
   const updateQuickUrl = (id: string, field: 'logo' | 'cover', value: string) => {
+    setQuickUrls(prev => ({
+      ...prev,
+      [id]: { ...(prev[id] || { logo: '', cover: '' }), [field]: value }
+    }));
+  };
+
+  const handleSave = async () => {
     try {
       const payload = {
         ...formData,
