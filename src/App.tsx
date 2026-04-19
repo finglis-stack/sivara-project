@@ -21,6 +21,7 @@ import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import Profile from "./pages/Profile";
 import Monitor from "./pages/Monitor";
+import Contribute from "./pages/Contribute";
 import NotFound from "./pages/NotFound";
 import DevPortal from "./pages/DevPortal";
 import Pricing from "./pages/Pricing";
@@ -201,6 +202,11 @@ const AppRoutes = () => {
           <Route path="/" element={<Index />} />
           <Route path="/search" element={<Index />} />
           <Route path="/about" element={<About />} />
+          <Route path="/contribute" element={
+            <ProtectedRoute>
+              <Contribute />
+            </ProtectedRoute>
+          } />
           <Route path="/monitor" element={
             <ProtectedRoute>
               <Monitor />
