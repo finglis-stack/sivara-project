@@ -226,13 +226,21 @@ Retourne ce JSON:
 {
   "score": <nombre entier de 0 à 100 représentant l'importance/popularité estimée du site — 100 = site très connu et populaire mondialement comme Google ou Wikipedia, 50 = site moyen/régional, 10 = site personnel ou obscur>,
   "betterDescription": "<résumé factuel en 1-2 phrases de ce que fait ce site/cette page, en français, maximum 300 caractères>",
-  "shouldCreateEntity": <true si le score >= 80 et le site est une entreprise/organisation connue, false sinon>,
-  "entity": <si shouldCreateEntity est true, un objet avec: {"name": "Nom officiel", "description": "Description courte de l'entreprise/entité", "website_url": "URL officiel du site", "keywords": ["mot1", "mot2", "mot3"]}. Sinon, null>
+  "shouldCreateEntity": <true si le score >= 80 et le site est une entreprise/organisation connue/marque reconnue, false sinon>,
+  "entity": <si shouldCreateEntity est true, un objet avec les détails suivants, sinon null:
+    {
+      "name": "Nom officiel",
+      "phonetic": "Transcription phonétique (ex: /si.va.ʁa/ ou /ɡu.ɡœl/)",
+      "description": "Une description TRÈS COMPLÈTE, détaillée et encyclopédique de l'entreprise, marque ou entité (minimum 3 à 4 paragraphes si possible).",
+      "website_url": "URL officiel du site",
+      "keywords": ["mot1", "mot2", "mot3", ...] (Une liste TRÈS COMPLÈTE de tous les mots-clés, synonymes, acronymes et fautes de frappe courantes qui seraient utilisés pour rechercher cette entité)
+    }>
 }
 
 RÈGLES:
 - Le score doit refléter la notoriété RÉELLE du domaine (pas seulement le contenu de la page).
-- La description doit être neutre et factuelle.
+- La description de la page (betterDescription) doit être neutre et factuelle.
+- La description de l'entité (entity.description) doit être riche et complète.
 - Ne crée une entité QUE pour des organisations/entreprises/institutions reconnues.
 - Réponds UNIQUEMENT avec le JSON, aucun texte avant ou après.`;
 
@@ -366,6 +374,7 @@ serve(async (req) => {
             .from('search_entities')
             .insert({
               name: geminiResult.entity.name,
+              phonetic: geminiResult.entity.phonetic || null,
               description: geminiResult.entity.description,
               website_url: geminiResult.entity.website_url || `https://${urlObj.hostname}`,
               keywords: geminiResult.entity.keywords || [],

@@ -28,6 +28,10 @@ const EntitiesManager = () => {
   const [entities, setEntities] = useState<SearchEntity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'queue' | 'all'>('queue');
+  
+  // State for quick queue edits
+  const [quickUrls, setQuickUrls] = useState<Record<string, {logo: string, cover: string}>>({});
   
   // Form state
   const [formData, setFormData] = useState<Partial<SearchEntity>>({
@@ -63,7 +67,38 @@ const EntitiesManager = () => {
     }
   };
 
-  const handleSave = async () => {
+  const handleQuickPublish = async (entityId: string) => {
+    const urls = quickUrls[entityId] || { logo: '', cover: '' };
+    if (!urls.logo || !urls.cover) {
+      toast.error('Vous devez fournir le logo ET la couverture pour publier.');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('search_entities')
+        .update({ 
+          logo_url: urls.logo,
+          cover_url: urls.cover,
+          is_public: true 
+        })
+        .eq('id', entityId);
+      
+      if (error) throw error;
+      toast.success('Entité publiée avec succès !');
+      // Clear quick inputs
+      setQuickUrls(prev => {
+        const next = { ...prev };
+        delete next[entityId];
+        return next;
+      });
+      fetchEntities();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  const updateQuickUrl = (id: string, field: 'logo' | 'cover', value: string) => {
     try {
       const payload = {
         ...formData,
@@ -151,11 +186,94 @@ const EntitiesManager = () => {
     <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-[#111111]">Gestion des Entités (Knowledge Panels)</h1>
-        <p className="text-gray-500 mt-2">Créez et modifiez les "cartes de savoir" qui s'affichent lors d'une recherche exacte.</p>
+        <p className="text-gray-500 mt-2">Validez les fiches générées par Gemini ou créez manuellement vos cartes de savoir.</p>
       </div>
 
-      {/* Formulaire */}
-      <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('queue')}
+          className={`py-2 px-4 font-medium text-sm flex items-center transition-colors ${
+            activeTab === 'queue'
+              ? 'border-b-2 border-[#00236F] text-[#00236F]'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Sparkles className="mr-2 h-4 w-4" />
+          File d'attente IA (À valider)
+        </button>
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`py-2 px-4 font-medium text-sm transition-colors ${
+            activeTab === 'all'
+              ? 'border-b-2 border-[#00236F] text-[#00236F]'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Toutes les Entités (Outil Expert)
+        </button>
+      </div>
+
+      {activeTab === 'queue' ? (
+        <div className="space-y-6">
+          {entities.filter(e => e.source === 'gemini' && !e.is_public).length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200 border-dashed">
+              <Sparkles className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+              <p className="text-gray-500">Aucune entité IA en attente de validation.</p>
+            </div>
+          ) : (
+            entities.filter(e => e.source === 'gemini' && !e.is_public).map(entity => (
+              <div key={entity.id} className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold text-[#111111]">{entity.name}</h3>
+                    <p className="text-sm text-gray-500 italic mt-1">{entity.phonetic || 'Aucune prononciation'}</p>
+                    <p className="mt-3 text-sm text-gray-700 max-w-3xl line-clamp-3">{entity.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-3">
+                      {entity.keywords.slice(0, 8).map((kw, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200">{kw}</span>
+                      ))}
+                      {entity.keywords.length > 8 && <span className="px-2 py-0.5 text-xs text-gray-400">+{entity.keywords.length - 8}</span>}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-400 text-right whitespace-nowrap ml-4">
+                    Généré le<br/>
+                    {new Date(entity.created_at || '').toLocaleDateString('fr-CA')}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 pt-4 border-t border-gray-100">
+                  <div className="space-y-2">
+                    <Label>URL Logo (Carré)</Label>
+                    <Input 
+                      placeholder="https://..." 
+                      value={quickUrls[entity.id]?.logo || ''} 
+                      onChange={e => updateQuickUrl(entity.id, 'logo', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>URL Fond (Paysage)</Label>
+                    <Input 
+                      placeholder="https://..." 
+                      value={quickUrls[entity.id]?.cover || ''} 
+                      onChange={e => updateQuickUrl(entity.id, 'cover', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button onClick={() => handleQuickPublish(entity.id)} className="bg-green-600 hover:bg-green-700 text-white">
+                    <CheckCircle2 className="mr-2 h-4 w-4" /> Publier public
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {/* Formulaire */}
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
         <h2 className="text-xl font-semibold">{isEditing ? 'Modifier une entité' : 'Ajouter une entité'}</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -295,6 +413,8 @@ const EntitiesManager = () => {
           </tbody>
         </table>
       </div>
+        </div>
+      )}
     </div>
   );
 };
