@@ -123,7 +123,13 @@ serve(async (req) => {
     // 5. PROCESS
     const results = await Promise.all(queueItems.map(async (item: any) => {
       try {
-        const decryptedUrl = await cryptoService.decrypt(item.url)
+        // Use plaintext display_url if available, fall back to decryption for old entries
+        let decryptedUrl: string;
+        if (item.display_url) {
+          decryptedUrl = item.display_url;
+        } else {
+          decryptedUrl = await cryptoService.decrypt(item.url);
+        }
         
         const crawlResponse = await fetch(`${supabaseUrl}/functions/v1/crawl-page`, {
           method: 'POST',
