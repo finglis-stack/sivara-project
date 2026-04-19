@@ -295,11 +295,36 @@ serve(async (req) => {
 
     if (!url) throw new Error('URL is required')
 
-    // 1. FETCH
+    // 1. FETCH (Browser-realistic headers to bypass Cloudflare/WAF)
     await logToDb(queueId, `Crawling: ${url}`, 'INIT', 'info');
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'SivaraBot/2.0 (Pro-Edition; +http://sivara.search)' }
-    })
+    const browserHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'fr-CA,fr;q=0.9,en-CA;q=0.8,en-US;q=0.7,en;q=0.6',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
+    };
+
+    let response = await fetch(url, { headers: browserHeaders, redirect: 'follow' });
+
+    // Retry once on 403 with a Referer (some WAFs allow referred traffic)
+    if (response.status === 403) {
+      await logToDb(queueId, 'Got 403, retrying with Referer...', 'INIT', 'warning');
+      const urlObj2 = new URL(url);
+      response = await fetch(url, { 
+        headers: { ...browserHeaders, 'Referer': `https://${urlObj2.hostname}/`, 'Sec-Fetch-Site': 'same-origin' },
+        redirect: 'follow'
+      });
+    }
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const rawHtml = await response.text();
