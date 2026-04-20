@@ -51,6 +51,25 @@ class TitaniumTokenizer {
   }
 }
 
+// Levenshtein distance for typo tolerance
+function levenshtein(a: string, b: string): number {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix: number[][] = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b[i - 1] === a[j - 1]) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
 // @ts-ignore
 const encoder = new TextEncoder();
 // @ts-ignore
@@ -207,19 +226,28 @@ serve(async (req) => {
         const decryptedUrl = await cryptoService.decrypt(page.url);
         const decryptedDomain = await cryptoService.decrypt(page.domain);
 
-        // --- RELEVANCE GATE: Filter out false positives ---
+        // --- RELEVANCE GATE: Filter out false positives (with typo tolerance) ---
         const queryLower = query.toLowerCase().trim();
-        const queryWords = queryLower.split(/\s+/);
+        const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
         const titleLower = decryptedTitle.toLowerCase();
         const descLower = decryptedDesc.toLowerCase();
         const domainLower = decryptedDomain.toLowerCase();
         const allText = `${titleLower} ${descLower} ${domainLower}`;
+        const allTextWords = allText.split(/[\s\-_.,:;!?/|()]+/).filter(w => w.length > 2);
         
-        // Check if ANY query word appears in the actual text
-        const hasTextMatch = queryWords.some(w => w.length > 2 && allText.includes(w));
+        // Check exact text match
+        const hasTextMatch = queryWords.some(w => allText.includes(w));
         
-        // If no exact token match AND no text match → irrelevant, skip it
-        if (matchesDetails.exact === 0 && !hasTextMatch) continue;
+        // Check fuzzy match (typo tolerance: max 2 edits for words 4+ chars, max 1 for shorter)
+        const hasFuzzyMatch = !hasTextMatch && queryWords.some(qw => {
+          const maxDist = qw.length >= 5 ? 2 : 1;
+          return allTextWords.some(tw => levenshtein(qw, tw) <= maxDist);
+        });
+        
+        // Pass gate if: has exact tokens, OR literal text match, OR fuzzy match
+        // Also let through if there are stem+phonetic matches (indicates real similarity)
+        const hasStrongTokenMatch = matchesDetails.stem > 0 && matchesDetails.phone > 0;
+        if (matchesDetails.exact === 0 && !hasTextMatch && !hasFuzzyMatch && !hasStrongTokenMatch) continue;
 
         if (matchesDetails.exact > 0) score *= 1.5;
 
