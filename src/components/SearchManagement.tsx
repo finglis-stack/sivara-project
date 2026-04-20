@@ -1,28 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
-import { 
-  Card, CardContent, CardDescription, CardHeader, CardTitle 
-} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { 
   Dialog, DialogContent, DialogDescription, DialogFooter, 
-  DialogHeader, DialogTitle, DialogTrigger 
+  DialogHeader, DialogTitle 
 } from '@/components/ui/dialog';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '@/components/ui/table';
-import { 
-  Collapsible, CollapsibleContent, CollapsibleTrigger 
-} from '@/components/ui/collapsible';
 import { 
   Plus, Edit, Trash2, Search as SearchIcon, ExternalLink, 
   Loader2, RefreshCw, Globe, FileText, Calendar, CheckCircle, XCircle,
-  ChevronLeft, ChevronRight, ChevronDown, FolderOpen
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Save, X, Star,
+  ArrowUpDown
 } from 'lucide-react';
 import { showSuccess, showError, showConfirm } from '@/utils/toast';
 import { Badge } from '@/components/ui/badge';
+
+const API_URL = 'https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management';
+const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs';
 
 interface CrawledPage {
   id: string;
@@ -34,388 +29,145 @@ interface CrawledPage {
   crawled_at: string;
   updated_at: string;
   blind_index: string[];
-  tokensCount?: number;
+  gemini_score: number;
 }
 
-interface PaginatedResponse {
-  pages: CrawledPage[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-  error?: string;
-}
-
-interface DomainGroup {
-  domain: string;
-  pages: CrawledPage[];
-  total: number;
-}
+const apiCall = async (body: any) => {
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
+    throw new Error(err.error || 'Erreur');
+  }
+  return response.json();
+};
 
 const SearchManagement = () => {
   const [pages, setPages] = useState<CrawledPage[]>([]);
-  const [filteredPages, setFilteredPages] = useState<CrawledPage[]>([]);
-  const [domainGroups, setDomainGroups] = useState<DomainGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSearching, setIsSearching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingPage, setEditingPage] = useState<CrawledPage | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('grouped');
-  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
-  
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const itemsPerPage = 20;
-  
-  // Form state
-  const [formData, setFormData] = useState({
-    url: '',
-    title: '',
-    description: '',
-    domain: '',
-  });
+  const itemsPerPage = 25;
 
-  // Debounce pour la recherche
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<Partial<CrawledPage>>({});
+
+  // Dialog for new page
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [newPage, setNewPage] = useState({ url: '', title: '', description: '', domain: '', gemini_score: 50 });
+
+  // Detail panel
+  const [selectedPage, setSelectedPage] = useState<CrawledPage | null>(null);
+
+  const searchTimeout = useRef<any>(null);
+
+  useEffect(() => { fetchPages(1); }, []);
+
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchTerm.trim()) {
-        setCurrentPage(1);
-        handleSearch(searchTerm, 1);
-      } else {
-        fetchPages(1);
-      }
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      setCurrentPage(1);
+      if (searchTerm.trim()) handleSearch(searchTerm, 1);
+      else fetchPages(1);
+    }, 400);
+    return () => clearTimeout(searchTimeout.current);
   }, [searchTerm]);
 
-  // Charger les pages quand la page change (mais pas au montage initial)
-  const isInitialMount = useRef(true);
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    
-    if (searchTerm.trim()) {
-      handleSearch(searchTerm, currentPage);
-    } else {
-      fetchPages(currentPage);
-    }
-  }, [currentPage]);
-
-  useEffect(() => {
-    // Regrouper les pages par domaine
-    const groups: { [key: string]: CrawledPage[] } = {};
-    filteredPages.forEach(page => {
-      if (!groups[page.domain]) {
-        groups[page.domain] = [];
-      }
-      groups[page.domain].push(page);
-    });
-
-    const domainGroupsArray: DomainGroup[] = Object.entries(groups).map(([domain, domainPages]) => ({
-      domain,
-      pages: domainPages,
-      total: domainPages.length,
-    })).sort((a, b) => b.total - a.total);
-
-    setDomainGroups(domainGroupsArray);
-  }, [filteredPages]);
-
-  const toggleDomain = (domain: string) => {
-    setExpandedDomains(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(domain)) {
-        newSet.delete(domain);
-      } else {
-        newSet.add(domain);
-      }
-      return newSet;
-    });
-  };
-
-  const fetchPages = async (page: number = currentPage) => {
+  const fetchPages = async (page: number) => {
     try {
       setIsLoading(true);
-      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
-        },
-        body: JSON.stringify({
-          action: 'list',
-          page: page,
-          limit: itemsPerPage,
-        }),
-      });
-
-      // Vérifier d'abord si la réponse est OK avant de lire le body
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
-        throw new Error(errorData.error || 'Erreur lors du chargement');
-      }
-
-      const data = await response.json();
-
+      const data = await apiCall({ action: 'list', page, limit: itemsPerPage });
       setPages(data.pages || []);
-      setFilteredPages(data.pages || []);
       setTotalPages(data.totalPages || 1);
       setTotalItems(data.total || 0);
-    } catch (error) {
-      console.error('Error fetching pages:', error);
-      showError('Erreur lors du chargement des pages');
-    } finally {
-      setIsLoading(false);
-    }
+      setCurrentPage(page);
+    } catch (e: any) { showError(e.message); }
+    finally { setIsLoading(false); }
   };
 
-  const handleSearch = async (query: string, page: number = 1) => {
+  const handleSearch = async (query: string, page: number) => {
     try {
-      setIsSearching(true);
-      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
-        },
-        body: JSON.stringify({
-          action: 'search',
-          searchQuery: query,
-          page: page,
-          limit: itemsPerPage,
-        }),
-      });
-
-      // Vérifier d'abord si la réponse est OK avant de lire le body
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
-        throw new Error(errorData.error || 'Erreur lors de la recherche');
-      }
-
-      const data = await response.json();
-
+      setIsLoading(true);
+      const data = await apiCall({ action: 'search', searchQuery: query, page, limit: itemsPerPage });
       setPages(data.pages || []);
-      setFilteredPages(data.pages || []);
       setTotalPages(data.totalPages || 1);
       setTotalItems(data.total || 0);
-    } catch (error) {
-      console.error('Error searching pages:', error);
-      showError('Erreur lors de la recherche');
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const handleOpenDialog = (page?: CrawledPage) => {
-    if (page) {
-      setEditingPage(page);
-      setFormData({
-        url: page.url,
-        title: page.title,
-        description: page.description,
-        domain: page.domain,
-      });
-    } else {
-      setEditingPage(null);
-      setFormData({
-        url: '',
-        title: '',
-        description: '',
-        domain: '',
-      });
-    }
-    setIsDialogOpen(true);
-  };
-
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
-    setEditingPage(null);
-    setFormData({
-      url: '',
-      title: '',
-      description: '',
-      domain: '',
-    });
-  };
-
-  const handleSave = async () => {
-    if (!formData.url.trim()) {
-      showError('L\'URL est requise');
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-
-      const action = editingPage ? 'update' : 'create';
-      const body: any = {
-        action,
-        url: formData.url,
-        title: formData.title,
-        description: formData.description,
-        domain: formData.domain,
-      };
-
-      if (editingPage) {
-        body.id = editingPage.id;
-      }
-
-      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      // Vérifier d'abord si la réponse est OK avant de lire le body
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
-        throw new Error(errorData.error || 'Erreur lors de la sauvegarde');
-      }
-
-      const data = await response.json();
-
-      // Afficher le nombre de tokens NLP générés
-      const tokensCount = data.tokensCount || 0;
-      const message = editingPage 
-        ? `Page mise à jour avec succès (${tokensCount} tokens NLP générés)`
-        : `Page ajoutée avec succès (${tokensCount} tokens NLP générés)`;
-      
-      showSuccess(message);
-      handleCloseDialog();
-      
-      // Recharger en tenant compte du mode recherche
-      if (searchTerm.trim()) {
-        handleSearch(searchTerm, currentPage);
-      } else {
-        fetchPages();
-      }
-    } catch (error) {
-      console.error('Error saving page:', error);
-      showError('Erreur lors de la sauvegarde');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDelete = async (page: CrawledPage) => {
-    const confirmed = await showConfirm(
-      'Êtes-vous sûr de vouloir supprimer cette page ?',
-      'Cette action est irréversible.'
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const response = await fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
-        },
-        body: JSON.stringify({
-          action: 'delete',
-          id: page.id,
-        }),
-      });
-
-      // Vérifier d'abord si la réponse est OK avant de lire le body
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
-        throw new Error(errorData.error || 'Erreur lors de la suppression');
-      }
-
-      showSuccess('Page supprimée avec succès');
-      
-      // Recharger en tenant compte du mode recherche
-      if (searchTerm.trim()) {
-        if (filteredPages.length === 1 && currentPage > 1) {
-          setCurrentPage(currentPage - 1);
-          handleSearch(searchTerm, currentPage - 1);
-        } else {
-          handleSearch(searchTerm, currentPage);
-        }
-      } else {
-        if (filteredPages.length === 1 && currentPage > 1) {
-          setCurrentPage(currentPage - 1);
-        }
-        fetchPages();
-      }
-    } catch (error) {
-      console.error('Error deleting page:', error);
-      showError('Erreur lors de la suppression');
-    }
-  };
-
-  const handleDeleteDomain = async (domain: string) => {
-    const confirmed = await showConfirm(
-      `Êtes-vous sûr de vouloir supprimer toutes les pages du domaine "${domain}" ?`,
-      `${domainGroups.find(g => g.domain === domain)?.total || 0} page(s) seront supprimées. Cette action est irréversible.`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const group = domainGroups.find(g => g.domain === domain);
-      if (!group) return;
-
-      // Supprimer toutes les pages du domaine
-      await Promise.all(
-        group.pages.map(page =>
-          fetch('https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs`,
-            },
-            body: JSON.stringify({
-              action: 'delete',
-              id: page.id,
-            }),
-          })
-        )
-      );
-
-      showSuccess(`${group.total} page(s) supprimée(s) avec succès`);
-      
-      // Recharger en tenant compte du mode recherche
-      if (searchTerm.trim()) {
-        handleSearch(searchTerm, currentPage);
-      } else {
-        fetchPages();
-      }
-    } catch (error) {
-      console.error('Error deleting domain:', error);
-      showError('Erreur lors de la suppression');
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <Badge className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="h-3 w-3 mr-1" /> Succès</Badge>;
-      case 'failed':
-        return <Badge className="bg-red-100 text-red-700 border-red-200"><XCircle className="h-3 w-3 mr-1" /> Échec</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+      setCurrentPage(page);
+    } catch (e: any) { showError(e.message); }
+    finally { setIsLoading(false); }
   };
 
   const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      if (searchTerm.trim()) {
-        handleSearch(searchTerm, newPage);
-      }
-    }
+    if (newPage < 1 || newPage > totalPages) return;
+    if (searchTerm.trim()) handleSearch(searchTerm, newPage);
+    else fetchPages(newPage);
+  };
+
+  const startEdit = (page: CrawledPage) => {
+    setEditingId(page.id);
+    setEditData({ ...page });
+    setSelectedPage(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditData({});
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    try {
+      setIsSaving(true);
+      await apiCall({
+        action: 'update', id: editingId,
+        url: editData.url, title: editData.title,
+        description: editData.description, domain: editData.domain,
+        gemini_score: editData.gemini_score,
+      });
+      showSuccess('Page mise à jour');
+      setEditingId(null);
+      setEditData({});
+      if (searchTerm.trim()) handleSearch(searchTerm, currentPage);
+      else fetchPages(currentPage);
+    } catch (e: any) { showError(e.message); }
+    finally { setIsSaving(false); }
+  };
+
+  const handleCreate = async () => {
+    if (!newPage.url.trim()) { showError("L'URL est requise"); return; }
+    try {
+      setIsSaving(true);
+      const data = await apiCall({ action: 'create', ...newPage });
+      showSuccess(`Page créée (${data.tokensCount} tokens NLP)`);
+      setIsDialogOpen(false);
+      setNewPage({ url: '', title: '', description: '', domain: '', gemini_score: 50 });
+      fetchPages(1);
+    } catch (e: any) { showError(e.message); }
+    finally { setIsSaving(false); }
+  };
+
+  const handleDelete = async (page: CrawledPage) => {
+    const confirmed = await showConfirm('Supprimer cette page ?', 'Cette action est irréversible.');
+    if (!confirmed) return;
+    try {
+      await apiCall({ action: 'delete', id: page.id });
+      showSuccess('Page supprimée');
+      if (searchTerm.trim()) handleSearch(searchTerm, currentPage);
+      else fetchPages(currentPage);
+    } catch (e: any) { showError(e.message); }
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600 bg-green-50 border-green-200';
+    if (score >= 50) return 'text-amber-600 bg-amber-50 border-amber-200';
+    return 'text-red-600 bg-red-50 border-red-200';
   };
 
   return (
@@ -425,429 +177,260 @@ const SearchManagement = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Gestion des recherches</h1>
           <p className="text-gray-500 mt-1">
-            Gérez les pages indexées dans le moteur de recherche
+            {totalItems} pages indexées • Score Gemini, titres, URLs — tout est modifiable.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setViewMode(viewMode === 'flat' ? 'grouped' : 'flat')}
-          >
-            {viewMode === 'flat' ? <FolderOpen className="h-4 w-4 mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-            {viewMode === 'flat' ? 'Vue groupée' : 'Vue liste'}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setSearchTerm('');
-              fetchPages(1);
-            }}
-            disabled={isLoading}
-          >
+          <Button variant="outline" onClick={() => { setSearchTerm(''); fetchPages(1); }} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => handleOpenDialog()}>
-                <Plus className="h-4 w-4 mr-2" />
-                Ajouter une page
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingPage ? 'Modifier la page' : 'Ajouter une nouvelle page'}
-                </DialogTitle>
-                <DialogDescription>
-                  {editingPage 
-                    ? 'Modifiez les informations de cette page indexée. Les données seront ré-encryptées et les tokens NLP régénérés.'
-                    : 'Ajoutez une nouvelle page à l\'index de recherche. Les données seront encryptées et les tokens NLP générés automatiquement.'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="url">URL *</Label>
-                  <Input
-                    id="url"
-                    placeholder="https://example.com/page"
-                    value={formData.url}
-                    onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="title">Titre</Label>
-                  <Input
-                    id="title"
-                    placeholder="Titre de la page"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="domain">Domaine</Label>
-                  <Input
-                    id="domain"
-                    placeholder="example.com"
-                    value={formData.domain}
-                    onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Description de la page"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    rows={4}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={handleCloseDialog}>
-                  Annuler
-                </Button>
-                <Button onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Sauvegarde...
-                    </>
-                  ) : (
-                    editingPage ? 'Mettre à jour' : 'Ajouter'
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Ajouter
+          </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-500">Total pages</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalItems}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-500">Pages actives</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {pages.filter(p => p.status === 'success').length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-500">Pages en erreur</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {pages.filter(p => p.status === 'failed').length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-500">Domaines uniques</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {new Set(pages.map(p => p.domain)).size}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total pages', value: totalItems, color: 'text-gray-900' },
+          { label: 'Domaines', value: new Set(pages.map(p => p.domain)).size, color: 'text-blue-600' },
+          { label: 'Score moyen', value: pages.length ? Math.round(pages.reduce((s, p) => s + (p.gemini_score || 0), 0) / pages.length) : 0, color: 'text-amber-600' },
+          { label: 'En erreur', value: pages.filter(p => p.status === 'failed').length, color: 'text-red-600' },
+        ].map(stat => (
+          <div key={stat.label} className="bg-white rounded-lg border border-gray-200 p-4">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{stat.label}</p>
+            <p className={`text-2xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Search & Filter */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Rechercher phonétique (titre, URL, domaine)..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-            {isSearching && (
-              <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 animate-spin" />
-            )}
+      {/* Search */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="relative">
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Rechercher par titre, URL, domaine..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+          {isLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4 animate-spin" />}
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        {isLoading && pages.length === 0 ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
           </div>
-          {searchTerm && (
-            <p className="text-xs text-gray-500 mt-2">
-              Recherche phonétique activée - {totalItems} résultat{totalItems > 1 ? 's' : ''} trouvé{totalItems > 1 ? 's' : ''}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Pages Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pages indexées</CardTitle>
-          <CardDescription>
-            {searchTerm 
-              ? `${filteredPages.length} résultat${filteredPages.length > 1 ? 's' : ''} trouvé${filteredPages.length > 1 ? 's' : ''} pour "${searchTerm}" sur ${totalItems} au total`
-              : `${filteredPages.length} page${filteredPages.length > 1 ? 's' : ''} affichée${filteredPages.length > 1 ? 's' : ''} sur ${totalItems} au total`
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            </div>
-          ) : filteredPages.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">
-                {searchTerm ? 'Aucun résultat trouvé' : 'Aucune page indexée'}
-              </p>
-            </div>
-          ) : viewMode === 'grouped' ? (
-            // Vue groupée par domaine
-            <div className="space-y-4">
-              {domainGroups.map((group) => (
-                <Collapsible
-                  key={group.domain}
-                  open={expandedDomains.has(group.domain)}
-                  onOpenChange={() => toggleDomain(group.domain)}
-                >
-                  <Card className="border-2">
-                    <CollapsibleTrigger asChild>
-                      <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <Globe className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{group.domain}</h3>
-                            <p className="text-sm text-gray-500">{group.total} page{group.total > 1 ? 's' : ''}</p>
+        ) : pages.length === 0 ? (
+          <div className="text-center py-16">
+            <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">{searchTerm ? 'Aucun résultat' : 'Aucune page indexée'}</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-[300px]">Page</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Domaine</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">Score</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">Tokens</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-24">Statut</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-24">Date</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase w-28">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {pages.map(page => (
+                    editingId === page.id ? (
+                      // --- INLINE EDIT ROW ---
+                      <tr key={page.id} className="bg-blue-50/50">
+                        <td colSpan={7} className="px-4 py-4">
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Edit className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm font-semibold text-blue-600">Modification en cours</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-medium text-gray-600">URL</Label>
+                                <Input value={editData.url || ''} onChange={e => setEditData({...editData, url: e.target.value})} className="text-sm" />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-medium text-gray-600">Domaine</Label>
+                                <Input value={editData.domain || ''} onChange={e => setEditData({...editData, domain: e.target.value})} className="text-sm" />
+                              </div>
+                              <div className="space-y-1.5 md:col-span-2">
+                                <Label className="text-xs font-medium text-gray-600">Titre</Label>
+                                <Input value={editData.title || ''} onChange={e => setEditData({...editData, title: e.target.value})} className="text-sm" />
+                              </div>
+                              <div className="space-y-1.5 md:col-span-2">
+                                <Label className="text-xs font-medium text-gray-600">Description</Label>
+                                <Textarea value={editData.description || ''} onChange={e => setEditData({...editData, description: e.target.value})} rows={3} className="text-sm" />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-medium text-gray-600">Score Gemini (0-100)</Label>
+                                <div className="flex items-center gap-3">
+                                  <Input 
+                                    type="number" min={0} max={100}
+                                    value={editData.gemini_score ?? 0} 
+                                    onChange={e => setEditData({...editData, gemini_score: parseInt(e.target.value) || 0})} 
+                                    className="text-sm w-24" 
+                                  />
+                                  <input 
+                                    type="range" min={0} max={100} 
+                                    value={editData.gemini_score ?? 0}
+                                    onChange={e => setEditData({...editData, gemini_score: parseInt(e.target.value)})}
+                                    className="flex-1 h-2 accent-blue-600"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2 border-t border-blue-100">
+                              <Button variant="outline" size="sm" onClick={cancelEdit}><X className="h-3.5 w-3.5 mr-1" /> Annuler</Button>
+                              <Button size="sm" onClick={saveEdit} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700">
+                                {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                                Sauvegarder
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{group.total} pages</Badge>
-                          <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${expandedDomains.has(group.domain) ? 'rotate-180' : ''}`} />
-                        </div>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className="border-t p-4">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Titre</TableHead>
-                              <TableHead>URL</TableHead>
-                              <TableHead>Tokens NLP</TableHead>
-                              <TableHead>Statut</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {group.pages.map((page) => (
-                              <TableRow key={page.id}>
-                                <TableCell className="font-medium max-w-xs truncate">
-                                  {page.title || 'Sans titre'}
-                                </TableCell>
-                                <TableCell className="max-w-xs truncate">
-                                  <a
-                                    href={page.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:underline flex items-center gap-1"
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                    {page.url}
-                                  </a>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline">{page.blind_index?.length || 0} tokens</Badge>
-                                </TableCell>
-                                <TableCell>{getStatusBadge(page.status)}</TableCell>
-                                <TableCell>
-                                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                                    <Calendar className="h-4 w-4" />
-                                    {new Date(page.crawled_at).toLocaleDateString('fr-FR')}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleOpenDialog(page)}
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleDelete(page)}
-                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        <div className="mt-4 pt-4 border-t flex justify-end">
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteDomain(group.domain)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Supprimer tout le domaine
-                          </Button>
-                        </div>
-                      </div>
-                    </CollapsibleContent>
-                  </Card>
-                </Collapsible>
-              ))}
-            </div>
-          ) : (
-            // Vue liste plate
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Titre</TableHead>
-                      <TableHead>URL</TableHead>
-                      <TableHead>Domaine</TableHead>
-                      <TableHead>Tokens NLP</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredPages.map((page) => (
-                      <TableRow key={page.id}>
-                        <TableCell className="font-medium max-w-xs truncate">
-                          {page.title || 'Sans titre'}
-                        </TableCell>
-                        <TableCell className="max-w-xs truncate">
-                          <a
-                            href={page.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            {page.url}
-                          </a>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Globe className="h-4 w-4 text-gray-400" />
-                            {page.domain}
+                        </td>
+                      </tr>
+                    ) : (
+                      // --- NORMAL ROW ---
+                      <tr key={page.id} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-4 py-3">
+                          <div className="max-w-[300px]">
+                            <p className="text-sm font-medium text-gray-900 truncate">{page.title || 'Sans titre'}</p>
+                            <a href={page.url} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-blue-500 hover:underline truncate block mt-0.5 flex items-center gap-1">
+                              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate">{page.url}</span>
+                            </a>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          {page.tokensCount || 0}
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(page.status)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 text-sm text-gray-500">
-                            <Calendar className="h-4 w-4" />
-                            {new Date(page.crawled_at).toLocaleDateString('fr-FR')}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                            <Globe className="h-3.5 w-3.5 text-gray-400" />
+                            <span className="truncate max-w-[150px]">{page.domain}</span>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleOpenDialog(page)}
-                            >
-                              <Edit className="h-4 w-4" />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${getScoreColor(page.gemini_score || 0)}`}>
+                            <Star className="h-3 w-3 mr-0.5" />
+                            {page.gemini_score || 0}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-xs text-gray-500 font-mono">{page.blind_index?.length || 0}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {page.status === 'success' ? (
+                            <Badge className="bg-green-100 text-green-700 border-green-200 text-xs"><CheckCircle className="h-3 w-3 mr-1" />OK</Badge>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-700 border-red-200 text-xs"><XCircle className="h-3 w-3 mr-1" />Err</Badge>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-xs text-gray-500">{new Date(page.crawled_at).toLocaleDateString('fr-FR')}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEdit(page)} title="Modifier">
+                              <Edit className="h-3.5 w-3.5 text-blue-600" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(page)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(page)} title="Supprimer">
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                        </td>
+                      </tr>
+                    )
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6 pt-6 border-t">
-                  <p className="text-sm text-gray-500">
-                    Page {currentPage} sur {totalPages} ({totalItems} éléments au total)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        let pageNum;
-                        if (totalPages <= 5) {
-                          pageNum = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNum = i + 1;
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNum = totalPages - 4 + i;
-                        } else {
-                          pageNum = currentPage - 2 + i;
-                        }
-                        
-                        return (
-                          <Button
-                            key={pageNum}
-                            variant={currentPage === pageNum ? "default" : "outline"}
-                            size="icon"
-                            onClick={() => handlePageChange(pageNum)}
-                            className="w-9 h-9"
-                          >
-                            {pageNum}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50/50">
+                <p className="text-xs text-gray-500">
+                  Page {currentPage}/{totalPages} • {totalItems} éléments
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) pageNum = i + 1;
+                    else if (currentPage <= 3) pageNum = i + 1;
+                    else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                    else pageNum = currentPage - 2 + i;
+                    return (
+                      <Button key={pageNum} variant={currentPage === pageNum ? "default" : "outline"} size="icon"
+                        onClick={() => handlePageChange(pageNum)} className="h-8 w-8 text-xs">
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                  <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Create Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Ajouter une nouvelle page</DialogTitle>
+            <DialogDescription>Les données seront chiffrées et les tokens NLP générés automatiquement.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>URL *</Label>
+              <Input placeholder="https://example.com/page" value={newPage.url} onChange={e => setNewPage({...newPage, url: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <Label>Titre</Label>
+              <Input placeholder="Titre de la page" value={newPage.title} onChange={e => setNewPage({...newPage, title: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Domaine</Label>
+                <Input placeholder="example.com" value={newPage.domain} onChange={e => setNewPage({...newPage, domain: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Score Gemini (0-100)</Label>
+                <Input type="number" min={0} max={100} value={newPage.gemini_score} onChange={e => setNewPage({...newPage, gemini_score: parseInt(e.target.value) || 0})} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea placeholder="Description de la page" value={newPage.description} onChange={e => setNewPage({...newPage, description: e.target.value})} rows={4} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
+            <Button onClick={handleCreate} disabled={isSaving}>
+              {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+              Ajouter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

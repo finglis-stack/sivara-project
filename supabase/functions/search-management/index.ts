@@ -195,7 +195,7 @@ serve(async (req) => {
 
     // Lire le body UNE SEULE FOIS
     const requestBody = await req.json()
-    const { action, page = 1, limit = 20, id, url, title, description, domain, searchQuery } = requestBody
+    const { action, page = 1, limit = 20, id, url, title, description, domain, searchQuery, gemini_score } = requestBody
 
     if (action === 'search') {
       // Recherche phonétique dans toutes les pages
@@ -238,6 +238,7 @@ serve(async (req) => {
           crawled_at: page.crawled_at,
           updated_at: page.updated_at,
           blind_index: page.blind_index,
+          gemini_score: page.gemini_score || 0,
         }
       }))
 
@@ -277,6 +278,7 @@ serve(async (req) => {
           crawled_at: page.crawled_at,
           updated_at: page.updated_at,
           blind_index: page.blind_index,
+          gemini_score: page.gemini_score || 0,
         }
       }))
 
@@ -312,6 +314,7 @@ serve(async (req) => {
         crawled_at: data.crawled_at,
         updated_at: data.updated_at,
         blind_index: data.blind_index,
+        gemini_score: data.gemini_score || 0,
       }
 
       return new Response(
@@ -369,6 +372,11 @@ serve(async (req) => {
       // Mettre à jour une page avec encryption
       const updates: any = {
         updated_at: new Date().toISOString(),
+      }
+
+      // Update gemini_score if provided
+      if (gemini_score !== undefined) {
+        updates.gemini_score = Math.max(0, Math.min(100, parseInt(gemini_score) || 0));
       }
 
       // Récupérer la page actuelle pour décrypter les valeurs existantes

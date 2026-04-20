@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -172,10 +172,17 @@ const EntitiesManager = () => {
     }
   };
 
+  const formRef = useRef<HTMLDivElement>(null);
+
   const startEdit = (entity: SearchEntity) => {
     setIsEditing(entity.id);
     setFormData(entity);
     setKeywordsInput(entity.keywords.join(', '));
+    setActiveTab('all');
+    // Scroll to form after state update
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const resetForm = () => {
@@ -268,7 +275,15 @@ const EntitiesManager = () => {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-between items-center pt-2">
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => startEdit(entity)}>
+                      <Edit2 className="mr-1 h-3.5 w-3.5" /> Modifier
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleDelete(entity.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200">
+                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Supprimer
+                    </Button>
+                  </div>
                   <Button onClick={() => handleQuickPublish(entity.id)} className="bg-green-600 hover:bg-green-700 text-white">
                     <CheckCircle2 className="mr-2 h-4 w-4" /> Publier public
                   </Button>
@@ -280,7 +295,7 @@ const EntitiesManager = () => {
       ) : (
         <div className="space-y-8">
           {/* Formulaire */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
+          <div ref={formRef} className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
         <h2 className="text-xl font-semibold">{isEditing ? 'Modifier une entité' : 'Ajouter une entité'}</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
