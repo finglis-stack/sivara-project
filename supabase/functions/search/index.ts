@@ -207,24 +207,33 @@ serve(async (req) => {
         const decryptedUrl = await cryptoService.decrypt(page.url);
         const decryptedDomain = await cryptoService.decrypt(page.domain);
 
+        // --- RELEVANCE GATE: Filter out false positives ---
+        const queryLower = query.toLowerCase().trim();
+        const queryWords = queryLower.split(/\s+/);
+        const titleLower = decryptedTitle.toLowerCase();
+        const descLower = decryptedDesc.toLowerCase();
+        const domainLower = decryptedDomain.toLowerCase();
+        const allText = `${titleLower} ${descLower} ${domainLower}`;
+        
+        // Check if ANY query word appears in the actual text
+        const hasTextMatch = queryWords.some(w => w.length > 2 && allText.includes(w));
+        
+        // If no exact token match AND no text match → irrelevant, skip it
+        if (matchesDetails.exact === 0 && !hasTextMatch) continue;
+
         if (matchesDetails.exact > 0) score *= 1.5;
 
         // --- RELEVANCE BOOST: Direct text match in title/domain ---
-        const queryLower = query.toLowerCase().trim();
-        const titleLower = decryptedTitle.toLowerCase();
-        const domainLower = decryptedDomain.toLowerCase();
-        
         // Title contains exact query → massive boost (3x)
         if (titleLower.includes(queryLower)) {
           score *= 3;
         }
-        // Domain contains query → strong boost (2.5x) - e.g. "xbox" matches "xbox.com"
+        // Domain contains query → strong boost (2.5x)
         if (domainLower.includes(queryLower)) {
           score *= 2.5;
         }
 
         // Gemini AI boost: gemini_score (0-100) adds a multiplier from 1.0 to 1.5
-        // (Reduced from 2.0 to prevent high-gemini sites from outranking relevant results)
         const geminiScore = page.gemini_score || 0;
         const geminiMultiplier = 1 + (geminiScore / 200);
         score = Math.round(score * geminiMultiplier);
