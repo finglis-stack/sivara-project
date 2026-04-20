@@ -209,9 +209,24 @@ serve(async (req) => {
 
         if (matchesDetails.exact > 0) score *= 1.5;
 
-        // Gemini AI boost: gemini_score (0-100) adds a multiplier from 1.0 to 2.0
+        // --- RELEVANCE BOOST: Direct text match in title/domain ---
+        const queryLower = query.toLowerCase().trim();
+        const titleLower = decryptedTitle.toLowerCase();
+        const domainLower = decryptedDomain.toLowerCase();
+        
+        // Title contains exact query → massive boost (3x)
+        if (titleLower.includes(queryLower)) {
+          score *= 3;
+        }
+        // Domain contains query → strong boost (2.5x) - e.g. "xbox" matches "xbox.com"
+        if (domainLower.includes(queryLower)) {
+          score *= 2.5;
+        }
+
+        // Gemini AI boost: gemini_score (0-100) adds a multiplier from 1.0 to 1.5
+        // (Reduced from 2.0 to prevent high-gemini sites from outranking relevant results)
         const geminiScore = page.gemini_score || 0;
-        const geminiMultiplier = 1 + (geminiScore / 100);
+        const geminiMultiplier = 1 + (geminiScore / 200);
         score = Math.round(score * geminiMultiplier);
 
         results.push({
