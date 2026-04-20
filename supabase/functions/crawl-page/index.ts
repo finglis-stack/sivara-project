@@ -141,11 +141,46 @@ function isAllowedLanguage(html: string): boolean {
   return frCount > 2 || enCount > 2;
 }
 
+// Titres poison: Google Cache/proxy/Wayback qui ne sont pas le vrai titre
+const POISON_TITLE_PATTERNS = [
+  /^google\s*(search|cache|\-|–)?/i,
+  /^cache\s*[:\-]/i,
+  /^webcache\.googleusercontent/i,
+  /^wayback\s*machine/i,
+  /^internet\s*archive/i,
+  /^bing\s*cache/i,
+  /^cached\s*version/i,
+];
+
+function isPoisonTitle(title: string): boolean {
+  return POISON_TITLE_PATTERNS.some(p => p.test(title.trim()));
+}
+
 function extractMetadata(html: string, url: string): { title: string, description: string, content: string } {
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   let title = titleMatch ? titleMatch[1].trim() : 'Sans titre';
   const urlObj = new URL(url);
   const domainName = urlObj.hostname.replace('www.', '');
+
+  // --- GOOGLE CACHE FIX: Si le titre est un artefact de proxy, chercher un meilleur titre ---
+  if (isPoisonTitle(title)) {
+    // Essayer og:title
+    const ogTitle = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
+    if (ogTitle && ogTitle[1].trim().length > 3 && !isPoisonTitle(ogTitle[1])) {
+      title = ogTitle[1].trim();
+    } else {
+      // Essayer le premier <h1>
+      const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+      if (h1Match && h1Match[1].trim().length > 3 && !isPoisonTitle(h1Match[1])) {
+        title = h1Match[1].trim();
+      } else {
+        // Dernier recours: utiliser le nom de domaine
+        title = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+      }
+    }
+    console.log('[TITLE FIX] Replaced poison title with:', title);
+  }
+
   if (title.length < 5 || /home|accueil|index/i.test(title)) {
     title = `${title} - ${domainName}`;
   }
@@ -160,7 +195,7 @@ function extractMetadata(html: string, url: string): { title: string, descriptio
     .replace(/\s+/g, ' ')     
     .trim();
 
-  // --- CLEANING: Decode HTML Entities (Fix for special chars like ' or é) ---
+  // --- CLEANING: Decode HTML Entities ---
   title = decode(title);
   const cleanDescription = decode(description);
   content = decode(content);
