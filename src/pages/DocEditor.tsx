@@ -27,7 +27,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Heading3, Type, Check,
   Eye, LockKeyhole, Globe2, UserPlus, MousePointer2, Cloud, LogIn, FileKey, PenTool,
   MapPin, Laptop, KeyRound, ShieldCheck, Crosshair, BookType, Image as ImageIcon,
-  Maximize, Minimize, Wand2, RefreshCcw, Upload
+  Maximize, Minimize, Wand2, RefreshCcw, Upload, X
 } from 'lucide-react';
 
 import {
@@ -237,6 +237,13 @@ const DocEditor = () => {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  
+  // AI Review States
+  const [aiReviewMode, setAiReviewMode] = useState(false);
+  const [aiCorrections, setAiCorrections] = useState<{original: string; corrected: string; explanation: string; type: string; accepted: boolean | null}[]>([]);
+  const [aiOriginalText, setAiOriginalText] = useState('');
+  const [aiCorrectedText, setAiCorrectedText] = useState('');
+  const [aiSelectionRange, setAiSelectionRange] = useState<{from: number; to: number} | null>(null);
   
   // AI States
   const [summaryText, setSummaryText] = useState<string | null>(null);
@@ -1037,7 +1044,6 @@ const DocEditor = () => {
     if (!editor || !userProfile?.is_pro) return;
     setAiLoading(true);
     let text = '';
-    let instructions = '';
     
     if (action === 'revise') {
       const { from, to } = editor.state.selection;
@@ -1046,20 +1052,32 @@ const DocEditor = () => {
         setAiLoading(false);
         return showError("Veuillez sélectionner du texte à réviser.");
       }
+      // Lock the editor during AI review
+      editor.setEditable(false);
+      setAiSelectionRange({ from, to });
     } else if (action === 'summarize') {
       text = editor.getText();
     }
 
     try {
       const { data, error } = await supabase.functions.invoke('doc-ai', {
-        body: { action, text, instructions }
+        body: { action, text }
       });
 
       if (error || !data?.result) throw new Error(error?.message || "Erreur IA");
 
       if (action === 'revise') {
-        editor.commands.insertContent(data.result);
-        showSuccess("Texte révisé avec succès.");
+        if (data.corrections && data.corrections.length > 0) {
+          // Enter review mode with structured corrections
+          setAiCorrections(data.corrections.map((c: any) => ({ ...c, accepted: null })));
+          setAiOriginalText(data.original_text || text);
+          setAiCorrectedText(data.result);
+          setAiReviewMode(true);
+        } else {
+          // No corrections found
+          editor.setEditable(permission === 'write');
+          showSuccess("Aucune erreur détectée ! 🎉");
+        }
       } else if (action === 'summarize') {
         setSummaryText(data.result);
         setSummaryPos({ x: window.innerWidth / 2 - 200, y: 150 });
@@ -1068,9 +1086,66 @@ const DocEditor = () => {
     } catch (e: any) {
       console.error(e);
       showError("Échec de l'assistant IA.");
+      // Unlock editor on error
+      if (action === 'revise') {
+        editor.setEditable(permission === 'write');
+      }
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const handleAcceptCorrection = (index: number) => {
+    setAiCorrections(prev => prev.map((c, i) => i === index ? { ...c, accepted: true } : c));
+  };
+
+  const handleRejectCorrection = (index: number) => {
+    setAiCorrections(prev => prev.map((c, i) => i === index ? { ...c, accepted: false } : c));
+  };
+
+  const handleApplyReview = () => {
+    if (!editor || !aiSelectionRange) return;
+    
+    // Build the final text by applying only accepted corrections
+    let finalText = aiOriginalText;
+    // Sort corrections by position in text (reverse to maintain indices)
+    const acceptedCorrections = aiCorrections
+      .filter(c => c.accepted === true)
+      .reverse();
+    
+    for (const correction of acceptedCorrections) {
+      const idx = finalText.lastIndexOf(correction.original);
+      if (idx !== -1) {
+        finalText = finalText.substring(0, idx) + correction.corrected + finalText.substring(idx + correction.original.length);
+      }
+    }
+    
+    // Replace the selected text with corrected version
+    editor.chain()
+      .focus()
+      .deleteRange(aiSelectionRange)
+      .insertContent(finalText)
+      .run();
+    
+    // Exit review mode
+    setAiReviewMode(false);
+    setAiCorrections([]);
+    setAiOriginalText('');
+    setAiCorrectedText('');
+    setAiSelectionRange(null);
+    editor.setEditable(permission === 'write');
+    showSuccess("Corrections appliquées !");
+  };
+
+  const handleRejectAllReview = () => {
+    if (!editor) return;
+    // Cancel review mode — keep original text
+    setAiReviewMode(false);
+    setAiCorrections([]);
+    setAiOriginalText('');
+    setAiCorrectedText('');
+    setAiSelectionRange(null);
+    editor.setEditable(permission === 'write');
   };
   
   const CurrentIcon = AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || FileText;
@@ -1288,10 +1363,15 @@ const DocEditor = () => {
 
       <div 
         className="flex-1 relative overflow-y-auto cursor-text" 
-        onClick={() => permission === 'write' && editor?.commands.focus()}
+        onClick={() => permission === 'write' && !aiReviewMode && editor?.commands.focus()}
         onMouseMove={handleMouseMove}
         ref={editorRef}
       >
+        {/* AI Review Overlay - locks the editor visually */}
+        {aiReviewMode && (
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-40 pointer-events-none" />
+        )}
+
         {Object.values(cursors).map((cursor: RemoteCursor, i) => (
             <div key={i} className="absolute pointer-events-none z-30 transition-all duration-100 ease-linear flex flex-col items-start" style={{ left: cursor.x, top: cursor.y }}>
                 <MousePointer2 className="h-5 w-5 fill-current" style={{ color: cursor.color }} />
@@ -1300,7 +1380,7 @@ const DocEditor = () => {
         ))}
 
         <div className="max-w-[21cm] w-full mx-auto py-4 sm:py-8">
-          {editor && userProfile?.is_pro && permission === 'write' && (
+          {editor && userProfile?.is_pro && permission === 'write' && !aiReviewMode && (
             <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }} className="bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden flex items-center p-1">
               <Button 
                 variant="ghost" 
@@ -1327,6 +1407,115 @@ const DocEditor = () => {
           <EditorContent editor={editor} />
         </div>
       </div>
+
+      {/* AI Review Panel */}
+      {aiReviewMode && (
+        <div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="max-w-2xl mx-auto mb-4 px-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wand2 className="h-4 w-4 text-white" />
+                  <span className="text-sm font-semibold text-white">Révision IA</span>
+                  <span className="text-xs text-white/70 ml-1">{aiCorrections.length} correction{aiCorrections.length > 1 ? 's' : ''} trouvée{aiCorrections.length > 1 ? 's' : ''}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-white/60 mr-2 hidden sm:block">Éditeur verrouillé pendant la révision</span>
+                  <LockKeyhole className="h-3.5 w-3.5 text-white/70" />
+                </div>
+              </div>
+
+              {/* Corrections List */}
+              <div className="max-h-[40vh] overflow-y-auto divide-y divide-gray-100">
+                {aiCorrections.map((correction, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`px-5 py-3 transition-all duration-200 ${
+                      correction.accepted === true ? 'bg-emerald-50/50' : 
+                      correction.accepted === false ? 'bg-gray-50/50 opacity-50' : 
+                      'bg-white hover:bg-gray-50/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        {/* Type badge */}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            correction.type === 'orthographe' ? 'bg-red-100 text-red-700' :
+                            correction.type === 'grammaire' ? 'bg-amber-100 text-amber-700' :
+                            correction.type === 'conjugaison' ? 'bg-blue-100 text-blue-700' :
+                            correction.type === 'accent' ? 'bg-purple-100 text-purple-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {correction.type}
+                          </span>
+                          <span className="text-xs text-gray-400">{correction.explanation}</span>
+                        </div>
+                        {/* Diff display */}
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="line-through text-red-500 font-medium bg-red-50 px-1.5 py-0.5 rounded">{correction.original}</span>
+                          <svg className="h-3 w-3 text-gray-300 flex-shrink-0" viewBox="0 0 12 12"><path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                          <span className="text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">{correction.corrected}</span>
+                        </div>
+                      </div>
+                      {/* Accept/Reject buttons */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button 
+                          onClick={() => handleAcceptCorrection(idx)}
+                          className={`p-1.5 rounded-lg transition-all ${
+                            correction.accepted === true 
+                              ? 'bg-emerald-500 text-white shadow-sm' 
+                              : 'hover:bg-emerald-100 text-gray-400 hover:text-emerald-600'
+                          }`}
+                          title="Accepter"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleRejectCorrection(idx)}
+                          className={`p-1.5 rounded-lg transition-all ${
+                            correction.accepted === false 
+                              ? 'bg-red-500 text-white shadow-sm' 
+                              : 'hover:bg-red-100 text-gray-400 hover:text-red-600'
+                          }`}
+                          title="Refuser"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer Actions */}
+              <div className="border-t border-gray-200 px-5 py-3 flex items-center justify-between bg-gray-50/50">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleRejectAllReview}
+                  className="text-gray-500 hover:text-gray-700 text-xs h-8 gap-1"
+                >
+                  <X className="h-3 w-3" /> Tout annuler
+                </Button>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-400">
+                    {aiCorrections.filter(c => c.accepted === true).length} acceptée{aiCorrections.filter(c => c.accepted === true).length > 1 ? 's' : ''}
+                  </span>
+                  <Button 
+                    size="sm" 
+                    onClick={handleApplyReview}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-8 gap-1 px-4 shadow-sm"
+                  >
+                    <Check className="h-3 w-3" /> Appliquer
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Image Dialog */}
       <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>

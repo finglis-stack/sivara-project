@@ -33,20 +33,31 @@ serve(async (req) => {
 
     let prompt = '';
     if (action === 'revise') {
-      prompt = `Tu es un correcteur orthographique et grammatical. Ta SEULE tâche est de corriger les fautes d'orthographe, de grammaire, de conjugaison, d'accents et de ponctuation dans le texte suivant.
-
-RÈGLES ABSOLUES :
-- NE CHANGE JAMAIS les mots. Garde exactement les mêmes mots que l'utilisateur a écrits.
-- NE REFORMULE JAMAIS. Ne réécris pas les phrases différemment.
-- NE RAJOUTE PAS de mots, d'expressions ou de phrases.
-- NE SUPPRIME PAS de mots ou de phrases.
-- NE CHANGE PAS le style, le ton ou la structure des phrases.
-- Corrige UNIQUEMENT : les fautes d'orthographe, les accents manquants/incorrects, la conjugaison, les accords (genre/nombre), et la ponctuation.
-- NE RAJOUTE PAS DE FORMATTAGE MARKDOWN (pas de \`\`\`html ou autre).
-- Renvoie UNIQUEMENT le texte corrigé, rien d'autre.
-
-Texte à corriger :
-${text}`;
+      prompt = [
+        'Tu es un correcteur orthographique et grammatical expert. Analyse le texte suivant et identifie TOUTES les erreurs.',
+        '',
+        'REGLES ABSOLUES :',
+        '- NE CHANGE JAMAIS les mots ou le sens.',
+        '- NE REFORMULE JAMAIS.',
+        '- NE RAJOUTE PAS de mots.',
+        '- NE SUPPRIME PAS de mots.',
+        '- Corrige UNIQUEMENT : orthographe, accents, conjugaison, accords, ponctuation.',
+        '',
+        'Reponds UNIQUEMENT avec un objet JSON valide (pas de markdown, pas de backticks).',
+        'Format du JSON :',
+        '{',
+        '  "corrections": [',
+        '    {"original": "mot fautif", "corrected": "correction", "explanation": "explication courte", "type": "orthographe"}',
+        '  ],',
+        '  "corrected_text": "texte complet corrige"',
+        '}',
+        '',
+        'Types possibles: orthographe, grammaire, conjugaison, accent, ponctuation',
+        'Si aucune faute: {"corrections": [], "corrected_text": "texte original"}',
+        '',
+        'Texte a analyser :',
+        text
+      ].join('\n');
     } else if (action === 'summarize') {
       prompt = `Tu es un assistant d'analyse. Fais un résumé concis professionnel du document suivant. 
       N'utilise AUCUN formatage (pas de gras, pas de puces, pas de balises HTML). Renvoie uniquement du texte brut, en un seul paragraphe ou paragraphes séparés par des sauts de ligne réguliers.
@@ -63,11 +74,38 @@ ${text}`;
     // Nettoyage markdown éventuel
     if (outputText.startsWith('```html')) {
       outputText = outputText.replace(/^```html\n/g, '').replace(/```$/g, '');
+    } else if (outputText.startsWith('```json')) {
+      outputText = outputText.replace(/^```json\n?/g, '').replace(/\n?```$/g, '');
     } else if (outputText.startsWith('```')) {
       outputText = outputText.replace(/^```\n/g, '').replace(/```$/g, '');
     }
+    outputText = outputText.trim();
 
-    return new Response(JSON.stringify({ result: outputText.trim() }), {
+    if (action === 'revise') {
+      // Parse JSON response for revise action
+      try {
+        const parsed = JSON.parse(outputText);
+        return new Response(JSON.stringify({
+          result: parsed.corrected_text || text,
+          corrections: parsed.corrections || [],
+          original_text: text
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (parseError) {
+        // Fallback: if JSON parsing fails, return old format
+        console.error('JSON parse error, falling back:', parseError);
+        return new Response(JSON.stringify({
+          result: outputText,
+          corrections: [],
+          original_text: text
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({ result: outputText }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
