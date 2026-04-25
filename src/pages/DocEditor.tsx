@@ -244,6 +244,8 @@ const DocEditor = () => {
   const [aiOriginalText, setAiOriginalText] = useState('');
   const [aiCorrectedText, setAiCorrectedText] = useState('');
   const [aiSelectionRange, setAiSelectionRange] = useState<{from: number; to: number} | null>(null);
+  const [aiCorrectionPositions, setAiCorrectionPositions] = useState<{top: number; left: number; width: number}[]>([]);
+  const aiLoadingRef = useRef(false);
   
   // AI States
   const [summaryText, setSummaryText] = useState<string | null>(null);
@@ -1040,9 +1042,63 @@ const DocEditor = () => {
     }
   };
 
+  // Compute inline positions for correction tooltips
+  useEffect(() => {
+    if (!aiReviewMode || !editor || !editorRef.current || aiCorrections.length === 0) {
+      setAiCorrectionPositions([]);
+      return;
+    }
+    const computePositions = () => {
+      const scrollContainer = editorRef.current;
+      if (!scrollContainer) return;
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const positions: {top: number; left: number; width: number}[] = [];
+      const docText = editor.getText();
+      
+      for (const correction of aiCorrections) {
+        // Find the original word in the editor text
+        const textIndex = docText.indexOf(correction.original);
+        if (textIndex === -1) { positions.push({ top: 0, left: 0, width: 0 }); continue; }
+        // Convert text offset to ProseMirror position (add 1 for doc node offset)
+        let pmPos = 0;
+        let charCount = 0;
+        editor.state.doc.descendants((node, pos) => {
+          if (node.isText && pmPos === 0) {
+            const nodeText = node.text || '';
+            if (charCount + nodeText.length > textIndex) {
+              pmPos = pos + (textIndex - charCount);
+              return false;
+            }
+            charCount += nodeText.length;
+          } else if (node.isBlock && node.childCount === 0 && pmPos === 0) {
+            // empty block counts as nothing
+          }
+          return pmPos === 0;
+        });
+        if (pmPos === 0 && textIndex > 0) { positions.push({ top: 0, left: 0, width: 0 }); continue; }
+        try {
+          const startCoords = editor.view.coordsAtPos(pmPos);
+          const endCoords = editor.view.coordsAtPos(pmPos + correction.original.length);
+          positions.push({
+            top: startCoords.top - containerRect.top + scrollContainer.scrollTop - 80,
+            left: startCoords.left - containerRect.left,
+            width: Math.max(endCoords.right - startCoords.left, 40),
+          });
+        } catch {
+          positions.push({ top: 0, left: 0, width: 0 });
+        }
+      }
+      setAiCorrectionPositions(positions);
+    };
+    // Small delay to let editor render
+    const timer = setTimeout(computePositions, 100);
+    return () => clearTimeout(timer);
+  }, [aiReviewMode, aiCorrections, editor]);
+
   const handleAiAction = async (action: 'revise' | 'summarize') => {
-    if (!editor || !userProfile?.is_pro) return;
+    if (!editor || !userProfile?.is_pro || aiLoadingRef.current) return;
     setAiLoading(true);
+    aiLoadingRef.current = true;
     let text = '';
     
     if (action === 'revise') {
@@ -1050,6 +1106,7 @@ const DocEditor = () => {
       text = editor.state.doc.textBetween(from, to, ' ');
       if (!text) {
         setAiLoading(false);
+        aiLoadingRef.current = false;
         return showError("Veuillez sélectionner du texte à réviser.");
       }
       // Lock the editor during AI review
@@ -1068,13 +1125,11 @@ const DocEditor = () => {
 
       if (action === 'revise') {
         if (data.corrections && data.corrections.length > 0) {
-          // Enter review mode with structured corrections
           setAiCorrections(data.corrections.map((c: any) => ({ ...c, accepted: null })));
           setAiOriginalText(data.original_text || text);
           setAiCorrectedText(data.result);
           setAiReviewMode(true);
         } else {
-          // No corrections found
           editor.setEditable(permission === 'write');
           showSuccess("Aucune erreur détectée ! 🎉");
         }
@@ -1086,12 +1141,12 @@ const DocEditor = () => {
     } catch (e: any) {
       console.error(e);
       showError("Échec de l'assistant IA.");
-      // Unlock editor on error
       if (action === 'revise') {
         editor.setEditable(permission === 'write');
       }
     } finally {
       setAiLoading(false);
+      aiLoadingRef.current = false;
     }
   };
 
@@ -1363,14 +1418,75 @@ const DocEditor = () => {
 
       <div 
         className="flex-1 relative overflow-y-auto cursor-text" 
-        onClick={() => permission === 'write' && !aiReviewMode && editor?.commands.focus()}
+        onClick={(e) => {
+          if (aiLoading || aiReviewMode) { e.preventDefault(); e.stopPropagation(); return; }
+          if (permission === 'write') editor?.commands.focus();
+        }}
         onMouseMove={handleMouseMove}
         ref={editorRef}
       >
-        {/* AI Review Overlay - locks the editor visually */}
-        {aiReviewMode && (
-          <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-40 pointer-events-none" />
+        {/* AI Loading Overlay — blocks all interaction */}
+        {aiLoading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm" onClick={e => { e.preventDefault(); e.stopPropagation(); }}>
+            <div className="flex flex-col items-center gap-3 animate-in fade-in duration-300">
+              <div className="relative">
+                <div className="h-10 w-10 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin" />
+                <Wand2 className="h-4 w-4 text-indigo-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+              </div>
+              <span className="text-sm font-medium text-gray-500">Analyse en cours…</span>
+            </div>
+          </div>
         )}
+
+        {/* Inline correction tooltips — positioned above faulty words */}
+        {aiReviewMode && aiCorrectionPositions.length > 0 && aiCorrections.map((correction, idx) => {
+          const pos = aiCorrectionPositions[idx];
+          if (!pos || (pos.top === 0 && pos.left === 0)) return null;
+          return (
+            <div
+              key={idx}
+              className="absolute z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"
+              style={{ top: pos.top, left: pos.left, minWidth: 200 }}
+            >
+              <div className={`bg-white rounded-xl shadow-xl border overflow-hidden transition-all duration-200 ${
+                correction.accepted === true ? 'border-emerald-300 opacity-60 scale-95' :
+                correction.accepted === false ? 'border-gray-200 opacity-30 scale-95' :
+                'border-gray-200'
+              }`}>
+                <div className="px-3 py-2">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
+                      correction.type === 'orthographe' ? 'bg-red-100 text-red-700' :
+                      correction.type === 'grammaire' ? 'bg-amber-100 text-amber-700' :
+                      correction.type === 'conjugaison' ? 'bg-blue-100 text-blue-700' :
+                      correction.type === 'accent' ? 'bg-purple-100 text-purple-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>{correction.type}</span>
+                    <span className="text-[10px] text-gray-400 truncate">{correction.explanation}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <span className="line-through text-red-500 font-medium">{correction.original}</span>
+                    <span className="text-gray-300">→</span>
+                    <span className="text-emerald-600 font-semibold">{correction.corrected}</span>
+                  </div>
+                </div>
+                {correction.accepted === null && (
+                  <div className="flex border-t border-gray-100">
+                    <button onClick={() => handleAcceptCorrection(idx)} className="flex-1 py-1.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-50 flex items-center justify-center gap-1 transition-colors">
+                      <Check className="h-3 w-3" /> Accepter
+                    </button>
+                    <div className="w-px bg-gray-100" />
+                    <button onClick={() => handleRejectCorrection(idx)} className="flex-1 py-1.5 text-[11px] font-medium text-red-500 hover:bg-red-50 flex items-center justify-center gap-1 transition-colors">
+                      <X className="h-3 w-3" /> Refuser
+                    </button>
+                  </div>
+                )}
+              </div>
+              {/* Arrow pointing down to the word */}
+              <div className="ml-4 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.1))' }} />
+            </div>
+          );
+        })}
 
         {Object.values(cursors).map((cursor: RemoteCursor, i) => (
             <div key={i} className="absolute pointer-events-none z-30 transition-all duration-100 ease-linear flex flex-col items-start" style={{ left: cursor.x, top: cursor.y }}>
@@ -1380,7 +1496,7 @@ const DocEditor = () => {
         ))}
 
         <div className="max-w-[21cm] w-full mx-auto py-4 sm:py-8">
-          {editor && userProfile?.is_pro && permission === 'write' && !aiReviewMode && (
+          {editor && userProfile?.is_pro && permission === 'write' && !aiReviewMode && !aiLoading && (
             <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }} className="bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden flex items-center p-1">
               <Button 
                 variant="ghost" 
@@ -1408,111 +1524,23 @@ const DocEditor = () => {
         </div>
       </div>
 
-      {/* AI Review Panel */}
+      {/* Floating action bar during AI review */}
       {aiReviewMode && (
-        <div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom-4 duration-300">
-          <div className="max-w-2xl mx-auto mb-4 px-4">
-            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-              {/* Header */}
-              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wand2 className="h-4 w-4 text-white" />
-                  <span className="text-sm font-semibold text-white">Révision IA</span>
-                  <span className="text-xs text-white/70 ml-1">{aiCorrections.length} correction{aiCorrections.length > 1 ? 's' : ''} trouvée{aiCorrections.length > 1 ? 's' : ''}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-white/60 mr-2 hidden sm:block">Éditeur verrouillé pendant la révision</span>
-                  <LockKeyhole className="h-3.5 w-3.5 text-white/70" />
-                </div>
-              </div>
-
-              {/* Corrections List */}
-              <div className="max-h-[40vh] overflow-y-auto divide-y divide-gray-100">
-                {aiCorrections.map((correction, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`px-5 py-3 transition-all duration-200 ${
-                      correction.accepted === true ? 'bg-emerald-50/50' : 
-                      correction.accepted === false ? 'bg-gray-50/50 opacity-50' : 
-                      'bg-white hover:bg-gray-50/50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        {/* Type badge */}
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            correction.type === 'orthographe' ? 'bg-red-100 text-red-700' :
-                            correction.type === 'grammaire' ? 'bg-amber-100 text-amber-700' :
-                            correction.type === 'conjugaison' ? 'bg-blue-100 text-blue-700' :
-                            correction.type === 'accent' ? 'bg-purple-100 text-purple-700' :
-                            'bg-gray-100 text-gray-600'
-                          }`}>
-                            {correction.type}
-                          </span>
-                          <span className="text-xs text-gray-400">{correction.explanation}</span>
-                        </div>
-                        {/* Diff display */}
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="line-through text-red-500 font-medium bg-red-50 px-1.5 py-0.5 rounded">{correction.original}</span>
-                          <svg className="h-3 w-3 text-gray-300 flex-shrink-0" viewBox="0 0 12 12"><path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                          <span className="text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">{correction.corrected}</span>
-                        </div>
-                      </div>
-                      {/* Accept/Reject buttons */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button 
-                          onClick={() => handleAcceptCorrection(idx)}
-                          className={`p-1.5 rounded-lg transition-all ${
-                            correction.accepted === true 
-                              ? 'bg-emerald-500 text-white shadow-sm' 
-                              : 'hover:bg-emerald-100 text-gray-400 hover:text-emerald-600'
-                          }`}
-                          title="Accepter"
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleRejectCorrection(idx)}
-                          className={`p-1.5 rounded-lg transition-all ${
-                            correction.accepted === false 
-                              ? 'bg-red-500 text-white shadow-sm' 
-                              : 'hover:bg-red-100 text-gray-400 hover:text-red-600'
-                          }`}
-                          title="Refuser"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Footer Actions */}
-              <div className="border-t border-gray-200 px-5 py-3 flex items-center justify-between bg-gray-50/50">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleRejectAllReview}
-                  className="text-gray-500 hover:text-gray-700 text-xs h-8 gap-1"
-                >
-                  <X className="h-3 w-3" /> Tout annuler
-                </Button>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-gray-400">
-                    {aiCorrections.filter(c => c.accepted === true).length} acceptée{aiCorrections.filter(c => c.accepted === true).length > 1 ? 's' : ''}
-                  </span>
-                  <Button 
-                    size="sm" 
-                    onClick={handleApplyReview}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-8 gap-1 px-4 shadow-sm"
-                  >
-                    <Check className="h-3 w-3" /> Appliquer
-                  </Button>
-                </div>
-              </div>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-white/95 backdrop-blur-xl rounded-full shadow-2xl border border-gray-200 px-2 py-1.5 flex items-center gap-2">
+            <div className="flex items-center gap-1.5 pl-3">
+              <Wand2 className="h-3.5 w-3.5 text-indigo-600" />
+              <span className="text-xs font-medium text-gray-600">
+                {aiCorrections.filter(c => c.accepted === true).length}/{aiCorrections.length} acceptée{aiCorrections.filter(c => c.accepted === true).length !== 1 ? 's' : ''}
+              </span>
             </div>
+            <div className="w-px h-5 bg-gray-200" />
+            <Button variant="ghost" size="sm" onClick={handleRejectAllReview} className="text-xs h-7 px-3 text-gray-500 hover:text-gray-700 rounded-full">
+              Annuler
+            </Button>
+            <Button size="sm" onClick={handleApplyReview} className="text-xs h-7 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-sm">
+              <Check className="h-3 w-3 mr-1" /> Appliquer
+            </Button>
           </div>
         </div>
       )}
