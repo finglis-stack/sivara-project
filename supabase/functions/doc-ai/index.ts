@@ -26,44 +26,29 @@ serve(async (req) => {
     const { data: profile } = await supabaseClient.from('profiles').select('is_pro').eq('id', user.id).single();
     if (!profile?.is_pro) throw new Error('Nécessite un abonnement SIVARA PRO');
 
-    const { action, text, context, instructions } = await req.json();
+    const { action, text } = await req.json();
 
-    const modelName = Deno.env.get('GEMINI_MODEL') || 'gemini-3-flash-preview';
-    const model = genAI.getGenerativeModel({ model: modelName });
+    // Model from Supabase env — DO NOT hardcode
+    const modelName = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: {
+        temperature: 0,        // Deterministic = faster inference
+        maxOutputTokens: 2048, // Cap output for speed
+      },
+    });
 
     let prompt = '';
     if (action === 'revise') {
-      prompt = [
-        'Tu es un correcteur orthographique et grammatical expert. Analyse le texte suivant et identifie TOUTES les erreurs.',
-        '',
-        'REGLES ABSOLUES :',
-        '- NE CHANGE JAMAIS les mots ou le sens.',
-        '- NE REFORMULE JAMAIS.',
-        '- NE RAJOUTE PAS de mots.',
-        '- NE SUPPRIME PAS de mots.',
-        '- Corrige UNIQUEMENT : orthographe, accents, conjugaison, accords, ponctuation.',
-        '',
-        'Reponds UNIQUEMENT avec un objet JSON valide (pas de markdown, pas de backticks).',
-        'Format du JSON :',
-        '{',
-        '  "corrections": [',
-        '    {"original": "mot fautif", "corrected": "correction", "explanation": "explication courte", "type": "orthographe"}',
-        '  ],',
-        '  "corrected_text": "texte complet corrige"',
-        '}',
-        '',
-        'Types possibles: orthographe, grammaire, conjugaison, accent, ponctuation',
-        'Si aucune faute: {"corrections": [], "corrected_text": "texte original"}',
-        '',
-        'Texte a analyser :',
-        text
-      ].join('\n');
+      // Compact prompt — fewer tokens = faster response
+      prompt = `Correcteur français. Corrige UNIQUEMENT orthographe, accents, conjugaison, accords, ponctuation. Ne change PAS les mots, le sens, le style. Réponds en JSON brut sans backticks:
+{"corrections":[{"original":"fautif","corrected":"corrigé","explanation":"raison courte","type":"orthographe|grammaire|conjugaison|accent|ponctuation"}],"corrected_text":"texte corrigé"}
+Si aucune faute: {"corrections":[],"corrected_text":"texte original"}
+
+Texte:
+${text}`;
     } else if (action === 'summarize') {
-      prompt = `Tu es un assistant d'analyse. Fais un résumé concis professionnel du document suivant. 
-      N'utilise AUCUN formatage (pas de gras, pas de puces, pas de balises HTML). Renvoie uniquement du texte brut, en un seul paragraphe ou paragraphes séparés par des sauts de ligne réguliers.
-      
-      Document:
-      ${text}`;
+      prompt = `Résumé concis professionnel, texte brut sans formatage:\n\n${text}`;
     } else {
       throw new Error("Action non supportée");
     }
@@ -71,18 +56,15 @@ serve(async (req) => {
     const result = await model.generateContent(prompt);
     let outputText = result.response.text();
 
-    // Nettoyage markdown éventuel
-    if (outputText.startsWith('```html')) {
-      outputText = outputText.replace(/^```html\n/g, '').replace(/```$/g, '');
-    } else if (outputText.startsWith('```json')) {
-      outputText = outputText.replace(/^```json\n?/g, '').replace(/\n?```$/g, '');
-    } else if (outputText.startsWith('```')) {
-      outputText = outputText.replace(/^```\n/g, '').replace(/```$/g, '');
+    // Clean markdown fences
+    if (outputText.startsWith('```')) {
+      const firstNl = outputText.indexOf('\n');
+      if (firstNl > -1) outputText = outputText.substring(firstNl + 1);
+      if (outputText.endsWith('```')) outputText = outputText.slice(0, -3);
     }
     outputText = outputText.trim();
 
     if (action === 'revise') {
-      // Parse JSON response for revise action
       try {
         const parsed = JSON.parse(outputText);
         return new Response(JSON.stringify({
@@ -93,7 +75,6 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (parseError) {
-        // Fallback: if JSON parsing fails, return old format
         console.error('JSON parse error, falling back:', parseError);
         return new Response(JSON.stringify({
           result: outputText,

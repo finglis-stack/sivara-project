@@ -15,9 +15,7 @@ import {
 } from 'lucide-react';
 import { showSuccess, showError, showConfirm } from '@/utils/toast';
 import { Badge } from '@/components/ui/badge';
-
-const API_URL = 'https://asctcqyupjwjifxidegq.supabase.co/functions/v1/search-management';
-const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3RjcXl1cGp3amlmeGlkZWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjU1ODEsImV4cCI6MjA3ODc0MTU4MX0.JUAXZaLsixxqQ2-hNzgZhmViVvA8aiDbL-3IOquanrs';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CrawledPage {
   id: string;
@@ -33,16 +31,9 @@ interface CrawledPage {
 }
 
 const apiCall = async (body: any) => {
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
-    throw new Error(err.error || 'Erreur');
-  }
-  return response.json();
+  const { data, error } = await supabase.functions.invoke('search-management', { body });
+  if (error) throw new Error(error.message || 'Erreur');
+  return data;
 };
 
 const SearchManagement = () => {
