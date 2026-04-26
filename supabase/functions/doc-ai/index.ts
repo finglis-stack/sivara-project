@@ -33,26 +33,19 @@ serve(async (req) => {
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: {
-        temperature: 0,        // Deterministic = faster inference
-        maxOutputTokens: 81920, // Large enough for long texts with many corrections
+        temperature: 0,
+        maxOutputTokens: 8192,
       },
     });
 
     let prompt = '';
     if (action === 'revise') {
+      // Simple prompt — only ask for corrected text (no JSON, no corrections list)
+      // This cuts output tokens by 80%+, making pro models fast enough
       prompt = `Tu es un correcteur de français. Corrige UNIQUEMENT: orthographe, accents, conjugaison, accords grammaticaux, ponctuation.
-Ne change JAMAIS les mots, le sens, le style ou la structure des phrases.
+Ne change JAMAIS les mots, le sens, le style ou la structure des phrases. Conserve exactement la même structure.
 
-RÈGLES DE RÉPONSE:
-1. Réponds UNIQUEMENT en JSON brut (pas de backticks, pas de markdown)
-2. Le champ "corrected_text" doit TOUJOURS contenir le texte ENTIER corrigé, même s'il est long
-3. Le tableau "corrections" doit lister TOUTES les corrections trouvées, sans exception
-4. Chaque correction doit avoir: "original" (le mot/groupe fautif exact tel qu'il apparaît), "corrected", "explanation" (très courte), "type"
-
-Format:
-{"corrections":[{"original":"mot fautif","corrected":"mot corrigé","explanation":"raison","type":"orthographe|grammaire|conjugaison|accent|ponctuation"}],"corrected_text":"texte complet corrigé"}
-
-Si aucune faute: {"corrections":[],"corrected_text":"texte original"}
+Retourne UNIQUEMENT le texte corrigé, sans explication, sans formatage, sans JSON, sans guillemets. Juste le texte corrigé tel quel.
 
 Texte à corriger:
 ${text}`;
@@ -65,7 +58,7 @@ ${text}`;
     const result = await model.generateContent(prompt);
     let outputText = result.response.text();
 
-    // Clean markdown fences (```json ... ```)
+    // Clean markdown fences
     if (outputText.startsWith('```')) {
       const firstNl = outputText.indexOf('\n');
       if (firstNl > -1) outputText = outputText.substring(firstNl + 1);
@@ -74,31 +67,37 @@ ${text}`;
     outputText = outputText.trim();
 
     if (action === 'revise') {
-      try {
-        const parsed = JSON.parse(outputText);
-        return new Response(JSON.stringify({
-          result: parsed.corrected_text || text,
-          corrections: parsed.corrections || [],
-          original_text: text
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      } catch (parseError) {
-        console.error('JSON parse error, raw output:', outputText.substring(0, 500));
-        console.error('Parse error details:', parseError);
+      // Compute corrections by diffing original vs corrected text word-by-word
+      const originalWords = text.split(/(\s+)/);
+      const correctedWords = outputText.split(/(\s+)/);
+      const corrections: {original: string; corrected: string; explanation: string; type: string}[] = [];
 
-        // Try to salvage: extract corrected_text if JSON was truncated
-        const correctedMatch = outputText.match(/"corrected_text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-        const salvaged = correctedMatch ? correctedMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : null;
+      const len = Math.min(originalWords.length, correctedWords.length);
+      for (let i = 0; i < len; i++) {
+        const ow = originalWords[i];
+        const cw = correctedWords[i];
+        if (!ow.trim() || !cw.trim()) continue;
+        if (ow !== cw) {
+          let type = 'orthographe';
+          // Detect accent-only changes
+          const normalize = (s: string) => s.toLowerCase()
+            .replace(/[àâäáã]/g, 'a').replace(/[éèêë]/g, 'e')
+            .replace(/[îï]/g, 'i').replace(/[ôö]/g, 'o')
+            .replace(/[ùûü]/g, 'u').replace(/[ç]/g, 'c');
+          if (normalize(ow) === normalize(cw)) type = 'accent';
+          else if (ow.replace(/[.,;:!?]/g, '') === cw.replace(/[.,;:!?]/g, '')) type = 'ponctuation';
 
-        return new Response(JSON.stringify({
-          result: salvaged || text,
-          corrections: salvaged ? [{ original: '(texte complet)', corrected: '(corrigé)', explanation: 'Corrections multiples appliquées', type: 'orthographe' }] : [],
-          original_text: text
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+          corrections.push({ original: ow, corrected: cw, explanation: '', type });
+        }
       }
+
+      return new Response(JSON.stringify({
+        result: outputText,
+        corrections,
+        original_text: text
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     return new Response(JSON.stringify({ result: outputText }), {
