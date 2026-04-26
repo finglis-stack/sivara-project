@@ -1164,14 +1164,24 @@ const DocEditor = () => {
     // Build the final text by applying only accepted corrections
     let finalText = aiOriginalText;
     const acceptedCorrections = aiCorrections
-      .filter(c => c.accepted === true);
+      .filter(c => c.accepted !== false);
     
     // Apply corrections from end to start to preserve indices
     for (let i = acceptedCorrections.length - 1; i >= 0; i--) {
       const correction = acceptedCorrections[i];
-      const idx = finalText.lastIndexOf(correction.original);
+      let idx = finalText.lastIndexOf(correction.original);
+      
+      // Fallback: case-insensitive search if exact match fails
+      if (idx === -1) {
+         const lowerText = finalText.toLowerCase();
+         const lowerOriginal = correction.original.toLowerCase();
+         idx = lowerText.lastIndexOf(lowerOriginal);
+      }
+      
       if (idx !== -1) {
         finalText = finalText.substring(0, idx) + correction.corrected + finalText.substring(idx + correction.original.length);
+      } else {
+        console.warn("Sivara AI: Impossible de trouver le texte original à remplacer pour ->", correction.original);
       }
     }
     
@@ -1181,12 +1191,20 @@ const DocEditor = () => {
       
       const { from, to } = aiSelectionRange;
       
-      // Use TipTap's safe insertContentAt command which handles newlines, HTML, and schema automatically
-      // We convert newlines to HTML <br> tags so TipTap parses them correctly instead of ignoring them
+      // Use TipTap's chain to safely replace selection
       const contentToInsert = finalText.replace(/\n/g, '<br>');
       
-      editor.commands.insertContentAt({ from, to }, contentToInsert);
-      editor.commands.focus();
+      // Small delay to ensure editor editable state is synced
+      setTimeout(() => {
+        editor.chain()
+          .focus()
+          .setTextSelection({ from, to })
+          .insertContent(contentToInsert)
+          .run();
+          
+        showSuccess("Corrections appliquées !");
+      }, 50);
+      
     } catch (err) {
       console.error("Failed to apply corrections:", err);
       // Ensure editor becomes editable even if replacement fails
@@ -1200,7 +1218,6 @@ const DocEditor = () => {
     setAiCorrectedText('');
     setAiSelectionRange(null);
     setAiCorrectionPositions([]);
-    showSuccess("Corrections appliquées !");
   };
 
   const handleRejectAllReview = () => {
@@ -1542,7 +1559,7 @@ const DocEditor = () => {
             <div className="flex items-center gap-1.5 pl-3">
               <Wand2 className="h-3.5 w-3.5 text-indigo-600" />
               <span className="text-xs font-medium text-gray-600">
-                {aiCorrections.filter(c => c.accepted === true).length}/{aiCorrections.length} acceptée{aiCorrections.filter(c => c.accepted === true).length !== 1 ? 's' : ''}
+                {aiCorrections.filter(c => c.accepted !== false).length}/{aiCorrections.length} correction{aiCorrections.filter(c => c.accepted !== false).length !== 1 ? 's' : ''} à appliquer
               </span>
             </div>
             <div className="w-px h-5 bg-gray-200" />
