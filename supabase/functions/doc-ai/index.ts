@@ -46,7 +46,7 @@ Ne change JAMAIS les mots, le sens, le style ou la structure des phrases.
 RÈGLES DE RÉPONSE:
 1. Réponds UNIQUEMENT en JSON brut (pas de backticks, pas de markdown)
 2. Le champ "corrected_text" doit TOUJOURS contenir le texte ENTIER corrigé, même s'il est long
-3. Le tableau "corrections" doit lister au maximum 30 corrections (les plus importantes)
+3. Le tableau "corrections" doit lister TOUTES les corrections trouvées, sans exception
 4. Chaque correction doit avoir: "original" (le mot/groupe fautif exact tel qu'il apparaît), "corrected", "explanation" (très courte), "type"
 
 Format:

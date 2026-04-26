@@ -1162,29 +1162,9 @@ const DocEditor = () => {
     if (!editor || !aiSelectionRange) return;
     
     const { from, to } = aiSelectionRange;
-    const rejectedCorrections = aiCorrections.filter(c => c.accepted === false);
+    const acceptedCorrections = aiCorrections.filter(c => c.accepted !== false);
     
-    let finalText: string;
-    
-    if (rejectedCorrections.length === 0) {
-      // All corrections accepted — use the AI's corrected text directly (most reliable)
-      finalText = aiCorrectedText;
-    } else {
-      // Some corrections rejected — start from AI corrected text, undo rejected ones
-      finalText = aiCorrectedText;
-      for (const correction of rejectedCorrections) {
-        // In the corrected text, find the corrected word and put the original back
-        const idx = finalText.indexOf(correction.corrected);
-        if (idx !== -1) {
-          finalText = finalText.substring(0, idx) + correction.original + finalText.substring(idx + correction.corrected.length);
-        }
-      }
-    }
-    
-    console.log('[Sivara AI] Applying review:', { from, to, originalText: aiOriginalText, finalText, rejected: rejectedCorrections.length });
-    
-    // Skip if nothing actually changed
-    if (finalText === aiOriginalText) {
+    if (acceptedCorrections.length === 0) {
       setAiReviewMode(false);
       setAiCorrections([]);
       setAiOriginalText('');
@@ -1197,16 +1177,46 @@ const DocEditor = () => {
     }
     
     try {
-      // Re-enable editing BEFORE modifying content
       editor.setEditable(true);
       
-      // Use ProseMirror transaction directly — most reliable method for text replacement
+      // Find the exact ProseMirror position of each correction word
+      // by searching through text nodes — this preserves all formatting (bold, italic, font, etc.)
+      const replacements: {from: number; to: number; text: string}[] = [];
+      
+      for (const correction of acceptedCorrections) {
+        let found = false;
+        editor.state.doc.nodesBetween(from, to, (node, pos) => {
+          if (found || !node.isText) return;
+          const nodeText = node.text || '';
+          const idx = nodeText.indexOf(correction.original);
+          if (idx !== -1) {
+            replacements.push({
+              from: pos + idx,
+              to: pos + idx + correction.original.length,
+              text: correction.corrected,
+            });
+            found = true;
+            return false;
+          }
+        });
+        if (!found) {
+          console.warn('[Sivara AI] Could not find word in document:', correction.original);
+        }
+      }
+      
+      // Sort by position descending so earlier positions aren't shifted by later replacements
+      replacements.sort((a, b) => b.from - a.from);
+      
+      // Apply all replacements in a single transaction — each insertText only touches the word,
+      // so surrounding marks (bold, italic, underline, font, size...) are fully preserved
       const { tr } = editor.state;
-      tr.insertText(finalText, from, to);
+      for (const rep of replacements) {
+        tr.insertText(rep.text, rep.from, rep.to);
+      }
       editor.view.dispatch(tr);
       
-      console.log('[Sivara AI] Transaction dispatched successfully');
-      showSuccess("Corrections appliquées !");
+      console.log(`[Sivara AI] Applied ${replacements.length}/${acceptedCorrections.length} corrections`);
+      showSuccess(`${replacements.length} correction${replacements.length > 1 ? 's' : ''} appliquée${replacements.length > 1 ? 's' : ''} !`);
     } catch (err) {
       console.error("[Sivara AI] Failed to apply corrections:", err);
       showError("Erreur lors de l'application des corrections.");
