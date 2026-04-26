@@ -34,18 +34,27 @@ serve(async (req) => {
       model: modelName,
       generationConfig: {
         temperature: 0,        // Deterministic = faster inference
-        maxOutputTokens: 2048, // Cap output for speed
+        maxOutputTokens: 81920, // Large enough for long texts with many corrections
       },
     });
 
     let prompt = '';
     if (action === 'revise') {
-      // Compact prompt — fewer tokens = faster response
-      prompt = `Correcteur français. Corrige UNIQUEMENT orthographe, accents, conjugaison, accords, ponctuation. Ne change PAS les mots, le sens, le style. Réponds en JSON brut sans backticks:
-{"corrections":[{"original":"fautif","corrected":"corrigé","explanation":"raison courte","type":"orthographe|grammaire|conjugaison|accent|ponctuation"}],"corrected_text":"texte corrigé"}
+      prompt = `Tu es un correcteur de français. Corrige UNIQUEMENT: orthographe, accents, conjugaison, accords grammaticaux, ponctuation.
+Ne change JAMAIS les mots, le sens, le style ou la structure des phrases.
+
+RÈGLES DE RÉPONSE:
+1. Réponds UNIQUEMENT en JSON brut (pas de backticks, pas de markdown)
+2. Le champ "corrected_text" doit TOUJOURS contenir le texte ENTIER corrigé, même s'il est long
+3. Le tableau "corrections" doit lister au maximum 30 corrections (les plus importantes)
+4. Chaque correction doit avoir: "original" (le mot/groupe fautif exact tel qu'il apparaît), "corrected", "explanation" (très courte), "type"
+
+Format:
+{"corrections":[{"original":"mot fautif","corrected":"mot corrigé","explanation":"raison","type":"orthographe|grammaire|conjugaison|accent|ponctuation"}],"corrected_text":"texte complet corrigé"}
+
 Si aucune faute: {"corrections":[],"corrected_text":"texte original"}
 
-Texte:
+Texte à corriger:
 ${text}`;
     } else if (action === 'summarize') {
       prompt = `Résumé concis professionnel, texte brut sans formatage:\n\n${text}`;
@@ -56,7 +65,7 @@ ${text}`;
     const result = await model.generateContent(prompt);
     let outputText = result.response.text();
 
-    // Clean markdown fences
+    // Clean markdown fences (```json ... ```)
     if (outputText.startsWith('```')) {
       const firstNl = outputText.indexOf('\n');
       if (firstNl > -1) outputText = outputText.substring(firstNl + 1);
@@ -75,10 +84,16 @@ ${text}`;
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (parseError) {
-        console.error('JSON parse error, falling back:', parseError);
+        console.error('JSON parse error, raw output:', outputText.substring(0, 500));
+        console.error('Parse error details:', parseError);
+
+        // Try to salvage: extract corrected_text if JSON was truncated
+        const correctedMatch = outputText.match(/"corrected_text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        const salvaged = correctedMatch ? correctedMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : null;
+
         return new Response(JSON.stringify({
-          result: outputText,
-          corrections: [],
+          result: salvaged || text,
+          corrections: salvaged ? [{ original: '(texte complet)', corrected: '(corrigé)', explanation: 'Corrections multiples appliquées', type: 'orthographe' }] : [],
           original_text: text
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
