@@ -1161,53 +1161,55 @@ const DocEditor = () => {
   const handleApplyReview = () => {
     if (!editor || !aiSelectionRange) return;
     
-    // Build the final text by applying only accepted corrections
-    let finalText = aiOriginalText;
-    const acceptedCorrections = aiCorrections
-      .filter(c => c.accepted !== false);
+    const { from, to } = aiSelectionRange;
+    const rejectedCorrections = aiCorrections.filter(c => c.accepted === false);
     
-    // Apply corrections from end to start to preserve indices
-    for (let i = acceptedCorrections.length - 1; i >= 0; i--) {
-      const correction = acceptedCorrections[i];
-      let idx = finalText.lastIndexOf(correction.original);
-      
-      // Fallback: case-insensitive search if exact match fails
-      if (idx === -1) {
-         const lowerText = finalText.toLowerCase();
-         const lowerOriginal = correction.original.toLowerCase();
-         idx = lowerText.lastIndexOf(lowerOriginal);
+    let finalText: string;
+    
+    if (rejectedCorrections.length === 0) {
+      // All corrections accepted — use the AI's corrected text directly (most reliable)
+      finalText = aiCorrectedText;
+    } else {
+      // Some corrections rejected — start from AI corrected text, undo rejected ones
+      finalText = aiCorrectedText;
+      for (const correction of rejectedCorrections) {
+        // In the corrected text, find the corrected word and put the original back
+        const idx = finalText.indexOf(correction.corrected);
+        if (idx !== -1) {
+          finalText = finalText.substring(0, idx) + correction.original + finalText.substring(idx + correction.corrected.length);
+        }
       }
-      
-      if (idx !== -1) {
-        finalText = finalText.substring(0, idx) + correction.corrected + finalText.substring(idx + correction.original.length);
-      } else {
-        console.warn("Sivara AI: Impossible de trouver le texte original à remplacer pour ->", correction.original);
-      }
+    }
+    
+    console.log('[Sivara AI] Applying review:', { from, to, originalText: aiOriginalText, finalText, rejected: rejectedCorrections.length });
+    
+    // Skip if nothing actually changed
+    if (finalText === aiOriginalText) {
+      setAiReviewMode(false);
+      setAiCorrections([]);
+      setAiOriginalText('');
+      setAiCorrectedText('');
+      setAiSelectionRange(null);
+      setAiCorrectionPositions([]);
+      editor.setEditable(permission === 'write');
+      showSuccess("Aucune modification à appliquer.");
+      return;
     }
     
     try {
       // Re-enable editing BEFORE modifying content
       editor.setEditable(true);
       
-      const { from, to } = aiSelectionRange;
+      // Use ProseMirror transaction directly — most reliable method for text replacement
+      const { tr } = editor.state;
+      tr.insertText(finalText, from, to);
+      editor.view.dispatch(tr);
       
-      // Use TipTap's chain to safely replace selection
-      const contentToInsert = finalText.replace(/\n/g, '<br>');
-      
-      // Small delay to ensure editor editable state is synced
-      setTimeout(() => {
-        editor.chain()
-          .focus()
-          .setTextSelection({ from, to })
-          .insertContent(contentToInsert)
-          .run();
-          
-        showSuccess("Corrections appliquées !");
-      }, 50);
-      
+      console.log('[Sivara AI] Transaction dispatched successfully');
+      showSuccess("Corrections appliquées !");
     } catch (err) {
-      console.error("Failed to apply corrections:", err);
-      // Ensure editor becomes editable even if replacement fails
+      console.error("[Sivara AI] Failed to apply corrections:", err);
+      showError("Erreur lors de l'application des corrections.");
       editor.setEditable(permission === 'write');
     }
     
