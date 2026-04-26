@@ -1175,17 +1175,17 @@ const DocEditor = () => {
       }
     }
     
-    // IMPORTANT: Re-enable editing BEFORE modifying content (read-only blocks all commands)
+    // Re-enable editing BEFORE modifying content
     editor.setEditable(true);
     
-    // Replace the selected range with corrected text
     const { from, to } = aiSelectionRange;
-    editor.chain()
-      .focus()
-      .setTextSelection({ from, to })
-      .deleteSelection()
-      .insertContent(finalText)
-      .run();
+    
+    // Use direct ProseMirror transaction — most reliable method
+    const { tr } = editor.view.state;
+    const textNode = editor.view.state.schema.text(finalText);
+    tr.replaceWith(from, to, textNode);
+    editor.view.dispatch(tr);
+    editor.commands.focus();
     
     // Exit review mode
     setAiReviewMode(false);
