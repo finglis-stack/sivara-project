@@ -1175,17 +1175,23 @@ const DocEditor = () => {
       }
     }
     
-    // Re-enable editing BEFORE modifying content
-    editor.setEditable(true);
-    
-    const { from, to } = aiSelectionRange;
-    
-    // Use direct ProseMirror transaction — most reliable method
-    const { tr } = editor.view.state;
-    const textNode = editor.view.state.schema.text(finalText);
-    tr.replaceWith(from, to, textNode);
-    editor.view.dispatch(tr);
-    editor.commands.focus();
+    try {
+      // Re-enable editing BEFORE modifying content
+      editor.setEditable(true);
+      
+      const { from, to } = aiSelectionRange;
+      
+      // Use TipTap's safe insertContentAt command which handles newlines, HTML, and schema automatically
+      // We convert newlines to HTML <br> tags so TipTap parses them correctly instead of ignoring them
+      const contentToInsert = finalText.replace(/\n/g, '<br>');
+      
+      editor.commands.insertContentAt({ from, to }, contentToInsert);
+      editor.commands.focus();
+    } catch (err) {
+      console.error("Failed to apply corrections:", err);
+      // Ensure editor becomes editable even if replacement fails
+      editor.setEditable(permission === 'write');
+    }
     
     // Exit review mode
     setAiReviewMode(false);
