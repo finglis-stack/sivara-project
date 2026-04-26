@@ -1163,22 +1163,27 @@ const DocEditor = () => {
     
     // Build the final text by applying only accepted corrections
     let finalText = aiOriginalText;
-    // Sort corrections by position in text (reverse to maintain indices)
     const acceptedCorrections = aiCorrections
-      .filter(c => c.accepted === true)
-      .reverse();
+      .filter(c => c.accepted === true);
     
-    for (const correction of acceptedCorrections) {
+    // Apply corrections from end to start to preserve indices
+    for (let i = acceptedCorrections.length - 1; i >= 0; i--) {
+      const correction = acceptedCorrections[i];
       const idx = finalText.lastIndexOf(correction.original);
       if (idx !== -1) {
         finalText = finalText.substring(0, idx) + correction.corrected + finalText.substring(idx + correction.original.length);
       }
     }
     
-    // Replace the selected text with corrected version
+    // IMPORTANT: Re-enable editing BEFORE modifying content (read-only blocks all commands)
+    editor.setEditable(true);
+    
+    // Replace the selected range with corrected text
+    const { from, to } = aiSelectionRange;
     editor.chain()
       .focus()
-      .deleteRange(aiSelectionRange)
+      .setTextSelection({ from, to })
+      .deleteSelection()
       .insertContent(finalText)
       .run();
     
@@ -1188,7 +1193,7 @@ const DocEditor = () => {
     setAiOriginalText('');
     setAiCorrectedText('');
     setAiSelectionRange(null);
-    editor.setEditable(permission === 'write');
+    setAiCorrectionPositions([]);
     showSuccess("Corrections appliquées !");
   };
 
